@@ -558,7 +558,7 @@ textarea.champ.petit-texte { font-size: 12px; margin-top: 3px; }
 .infos-seance .pre-ok { color: #2E6B0E; } .infos-seance .pre-ko { color: var(--rouge); font-weight: 700; }
 
 /* ------------------------------------------------------------------ cellules automatiques (calculées ou reprises) : grisées */
-:root { --auto: #D3D7D6; --auto-fonce: #BCC2C0; }
+:root { --auto: #DEE2E1; --auto-fonce: #CBD1CF; }
 /* fiches : informations et rubriques reprises du séquençage */
 .grille-infos .val, .grille-infos .valeur { background: var(--auto); align-self: stretch; display: flex; align-items: center; }
 .rubrique > p, .rubrique > .codes-fiche, .rubrique > .gris { background: var(--auto) !important; }
