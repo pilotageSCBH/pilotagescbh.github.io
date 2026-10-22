@@ -5,8 +5,14 @@ import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
 
-const PHASES = ['1. Lancement (contexte, objectifs)', '2. Découverte / recherche', '3. Structuration (synthèse)',
-  '4. Application / entraînement', '5. Évaluation et bilan'];
+// anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
+const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
+const NB_PHASES = 5;
+const COLS_PHASES = [['phase', 'Phase'], ['temporalite', 'Temporalité'], ['activite', 'Activité proposée'], ['enseignant', 'Activités de l’enseignant'],
+  ['eleves', 'Activités des élèves'], ['duree', 'Durée']];
+const phaseVide = () => ({ phase: '', temporalite: '', activite: '', enseignant: '', eleves: '', duree: '' });
+// intitulé saisi sans son numéro (« 2. Découverte » → « Découverte ») ; intitulés par défaut d'avant effacés
+const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
 export async function pageFiches(zone, arg, ctx) {
   const [sid, onglet = 'preparation'] = String(arg || '').split(':');
@@ -102,13 +108,16 @@ export async function pageFiches(zone, arg, ctx) {
   async function seance(x) {
     const f = (await db.lire('fiches_seance', `seance_id=eq.${x.id}`))[0] || {};
     const maj = (col) => (v) => db.enregistrer('fiches_seance', [{ seance_id: x.id, [col]: v }], 'seance_id');
-    let phases = Array.isArray(f.phases) && f.phases.length ? f.phases : PHASES.map((p) => ({ phase: p, activite: '', enseignant: '', eleves: '', duree: '' }));
+    let phases = Array.isArray(f.phases) && f.phases.length ? f.phases.map((p) => ({ ...phaseVide(), ...p, phase: sansNumero(p.phase) }))
+      : Array.from({ length: NB_PHASES }, phaseVide);
     const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
     const tablePhases = h('tbody', {});
     const dessinerPhases = () => {
       vider(tablePhases, phases.map((p, i) => h('tr', {},
-        ['phase', 'activite', 'enseignant', 'eleves', 'duree'].map((k) => h('td', { class: k === 'phase' ? 'phase' : k === 'duree' ? 'duree' : '' },
-          champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); }, { multi: k !== 'duree', lecture: !modif }))),
+        h('td', { class: 'num-phase' }, i + 1),
+        COLS_PHASES.map(([k]) => h('td', { class: k },
+          champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
+            { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase', temporalite: 'ex. 8 h 00 → 8 h 20' }[k] || '' : '' }))),
         modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
           phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null)));
       ajusterTout(tablePhases);
@@ -137,10 +146,10 @@ export async function pageFiches(zone, arg, ctx) {
         lignesPre.length ? h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis (séquençage)'), h('p', { class: 'pre' }, lignesPre.join('\n'))) : null,
         h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
-          h('table', { class: 'table-fiche phases' }, h('thead', {}, h('tr', {}, ['Phase', 'Activité proposée', 'Activités de l’enseignant', 'Activités des élèves', 'Durée'].map((t) => h('th', {}, t)),
+          h('table', { class: 'table-fiche phases' }, h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), COLS_PHASES.map(([, t]) => h('th', {}, t)),
             modif ? h('th', { class: 'ecran' }) : null)), tablePhases),
           modif ? h('button', { class: 'lien petit ecran', onclick: async () => {
-            phases.push({ phase: `${phases.length + 1}. `, activite: '', enseignant: '', eleves: '', duree: '' });
+            phases.push(phaseVide());
             try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '＋ ajouter une phase') : null),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
