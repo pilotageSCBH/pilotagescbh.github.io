@@ -132,5 +132,8 @@ export const db = {
     const r = await appel(`/rest/v1/${table}?${cle}=eq.${enc(id)}`, { method: 'DELETE', headers: AVEC_RETOUR });
     if (Array.isArray(r) && r.length === 0) throw new Error("Suppression refusée : vous n'avez pas le droit de supprimer cette donnée.");
   },
+  // ajoute ou remplace des lignes (clé = colonnes de « conflit », ex. 'promotion_id,matiere_id,semaine')
+  enregistrer: (table, lignes, conflit) => appel(`/rest/v1/${table}?on_conflict=${conflit}`,
+    { method: 'POST', body: lignes, headers: { Prefer: 'resolution=merge-duplicates,return=representation' } }),
   rpc: (fonction, args = {}) => appel(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: args }),
 };

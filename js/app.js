@@ -9,6 +9,7 @@ import { pageReferentiel } from './pages/referentiel.js';
 import { pageSequencage } from './pages/sequencage.js';
 import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
+import { pageProgression } from './pages/progression.js';
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';
@@ -59,7 +60,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -113,6 +114,8 @@ function menu(route) {
     h('div', { class: 'titre-menu' }, 'Promotion'),
     lien('#/equipe', 'Matières et équipe', page === 'equipe'),
     lien('#/eleves', 'Élèves', page === 'eleves'),
+    h('div', { class: 'titre-menu' }, 'Suivi'),
+    lien('#/progression', 'Progression', page === 'progression'),
     h('div', { class: 'titre-menu' }, 'Séquençages'),
     ctx.matieres.map((m) => { const a = lien('#/sequencage/' + m.id, m.nom, page === 'sequencage' && String(arg) === String(m.id),
       { style: { '--pastille': m.couleur } }); a.classList.add('matiere'); return a; }),
@@ -121,7 +124,7 @@ function menu(route) {
     lien('#/referentiel/savoirs', 'Savoirs associés', page === 'referentiel' && arg === 'savoirs'),
     lien('#/referentiel/taches', 'Activités et tâches', page === 'referentiel' && arg === 'taches'),
     h('div', { class: 'titre-menu' }, 'Bientôt'),
-    ['Progression', 'Fiches de préparation', 'Validation des compétences', 'Impressions'].map((t) => h('span', { class: 'lien-menu inactif' }, t)),
+    ['Fiches de préparation', 'Validation des compétences', 'Impressions'].map((t) => h('span', { class: 'lien-menu inactif' }, t)),
     h('div', { class: 'bas-menu' },
       ctx.estAdmin() ? lien('#/admin', '⚙  Administration', page === 'admin') : null,
       lien('#/compte', '👤  ' + (ctx.profil?.nom || emailConnecte()), page === 'compte'),

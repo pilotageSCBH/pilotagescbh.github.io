@@ -1,0 +1,322 @@
+// Progression : calendrier des deux années de la promotion (90 semaines).
+// Par semaine : vacances / autres, apprentis ; par jour : évènement ; par matière : séance (ou texte libre) et note.
+// Les séances se déplacent par glisser-déposer : les autres séances de la matière se décalent (semaines de cours seulement).
+import { db } from '../api.js';
+import { h, vider, toast, erreur, fenetre } from '../ui.js';
+
+const SEM_AN = 45;
+const VACANCES = ['Vacances', 'Epreuves', 'Stage'];
+const APPRENTIS = ['Présents', 'PFMP'];
+const EVENEMENTS = ['Férié / pont', 'Sortie scolaire', 'Épreuve'];
+const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const CLE_AN = 'pilotage-scbh-progression-annee', CLE_MAT = 'pilotage-scbh-progression-matiere';
+const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const ecrire = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
+
+export async function pageProgression(zone, arg, ctx) {
+  const P = ctx.promo, Y = P.annee_debut;
+  const ref = await ctx.referentiel();
+  let annee = Number(lire(CLE_AN, '0')) === 1 ? 1 : 0;
+  let filtre = arg && ctx.matieres.some((m) => String(m.id) === String(arg)) ? String(arg) : lire(CLE_MAT, 'toutes');
+  if (filtre !== 'toutes' && !ctx.matieres.some((m) => String(m.id) === filtre)) filtre = 'toutes';
+  const calendrierModifiable = true;                            // tout compte actif (règle de la base)
+
+  // ------------------------------------------------------------------------------------- données
+  let semaines, jours, cases, seances, sequences;
+  async function charger() {
+    const [s, j, c, sq] = await Promise.all([
+      db.lire('progression_semaines', `promotion_id=eq.${P.id}`), db.lire('progression_jours', `promotion_id=eq.${P.id}`),
+      db.lire('progression_cases', `promotion_id=eq.${P.id}`), db.lire('sequences', `promotion_id=eq.${P.id}&order=matiere_id,numero`)]);
+    const se = sq.length ? await db.lire('seances', `sequence_id=in.(${sq.map((x) => x.id).join(',')})&order=numero`) : [];
+    semaines = new Map(s.map((x) => [x.semaine, x]));
+    jours = new Map(j.map((x) => [x.jour, x.evenement]));
+    cases = new Map(c.map((x) => [`${x.matiere_id}:${x.semaine}`, x]));
+    sequences = new Map(sq.map((x) => [x.id, x]));
+    seances = new Map(se.map((x) => [x.id, { ...x, seq: sequences.get(x.sequence_id) }]));
+  }
+  const seancesDe = (m) => [...seances.values()].filter((x) => x.seq.matiere_id === m.id)
+    .sort((a, b) => a.seq.numero - b.seq.numero || a.numero - b.numero);
+  const num = (x) => `${x.seq.numero}.${x.numero}`;
+  const enCours = (w) => !(semaines.get(w)?.vacances);
+  const caseDe = (m, w) => cases.get(`${m.id}:${w}`);
+  const seanceDe = (m, w) => { const c = caseDe(m, w); return c?.seance_id ? seances.get(c.seance_id) : null; };
+  const cleDe = (m, w) => { const c = caseDe(m, w); if (!c) return ''; if (c.seance_id && seances.has(c.seance_id)) return 's' + c.seance_id; return c.texte ? 't' + c.texte : ''; };
+
+  // ------------------------------------------------------------------------------------- dates
+  function lundi(w) {
+    const d = new Date(Y + Math.floor(w / SEM_AN), 8, 1);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (w % SEM_AN));
+    return d;
+  }
+  const jourDe = (w, k) => { const d = lundi(w); d.setDate(d.getDate() + k); return d; };
+  const jj = (d) => String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+  function semaineIso(d0) {
+    const d = new Date(Date.UTC(d0.getFullYear(), d0.getMonth(), d0.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    return Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+  }
+  const libSemaine = (w) => `S${semaineIso(lundi(w))} (${jj(lundi(w))} → ${jj(jourDe(w, 4))})`;
+
+  // ------------------------------------------------------------------------------------- enregistrements
+  async function enregistrerCases(m, lignes) {
+    if (!lignes.length) return;
+    const r = await db.enregistrer('progression_cases', lignes.map((l) => ({ promotion_id: P.id, matiere_id: m.id, ...l })), 'promotion_id,matiere_id,semaine');
+    for (const x of r || []) cases.set(`${x.matiere_id}:${x.semaine}`, x);
+  }
+  async function majSemaine(w, champ, v) {
+    const r = await db.enregistrer('progression_semaines', [{ promotion_id: P.id, semaine: w, [champ]: v }], 'promotion_id,semaine');
+    semaines.set(w, r[0]);
+  }
+  async function majJour(j, v) {
+    await db.enregistrer('progression_jours', [{ promotion_id: P.id, jour: j, evenement: v }], 'promotion_id,jour');
+    jours.set(j, v);
+  }
+
+  // valeurs des semaines de cours d'une matière, puis réécriture des seules semaines qui changent
+  function semainesCours() { const t = []; for (let w = 0; w < 2 * SEM_AN; w++) if (enCours(w)) t.push(w); return t; }
+  const contenu = (cle) => (cle.startsWith('s') ? { seance_id: Number(cle.slice(1)), texte: '' } : { seance_id: null, texte: cle ? cle.slice(1) : '' });
+  async function appliquer(m, T, avant, apres, message) {
+    const lignes = [];
+    T.forEach((w, i) => { if (avant[i] !== apres[i]) lignes.push({ semaine: w, ...contenu(apres[i]) }); });
+    try { await enregistrerCases(m, lignes); toast(message); } catch (e) { erreur(e); }
+    dessiner();
+  }
+
+  // déplacer la séance (toutes ses semaines consécutives) de la semaine « de » pour qu'elle commence à la semaine « vers »
+  async function deplacer(m, de, vers) {
+    const T = semainesCours(), v = T.map((w) => cleDe(m, w));
+    const i = T.indexOf(de), p = T.indexOf(vers);
+    if (i < 0 || p < 0 || !v[i]) return;
+    let i0 = i, i1 = i;
+    while (i0 > 0 && v[i0 - 1] === v[i]) i0--;
+    while (i1 < v.length - 1 && v[i1 + 1] === v[i]) i1++;
+    if (p >= i0 && p <= i1) return;
+    const bloc = v.slice(i0, i1 + 1), reste = v.slice(0, i0).concat(v.slice(i1 + 1));
+    const q = Math.min(p, reste.length);
+    const apres = reste.slice(0, q).concat(bloc, reste.slice(q));
+    await appliquer(m, T, v, apres, 'Séance déplacée : les suivantes se sont décalées');
+  }
+  // placer une séance (ou un texte) à la semaine w ; si elle est occupée, les suivantes descendent jusqu'à la 1re semaine libre
+  async function inserer(m, w, cle, message = 'Séance placée') {
+    const T = semainesCours(), v = T.map((x) => cleDe(m, x)), p = T.indexOf(w);
+    if (p < 0) return erreur(new Error('Semaine de vacances / stage / épreuves : choisissez une semaine de cours.'));
+    const apres = v.slice();
+    if (apres[p]) {
+      const e = apres.findIndex((x, k) => k > p && !x);
+      if (e < 0) return erreur(new Error('Plus aucune semaine libre après celle-ci dans cette matière.'));
+      for (let k = e; k > p; k--) apres[k] = apres[k - 1];
+    }
+    apres[p] = cle;
+    await appliquer(m, T, v, apres, apres[p + 1] && v[p] ? message + ' : les suivantes se sont décalées' : message);
+  }
+
+  // ------------------------------------------------------------------------------------- dessin
+  let glisse = null;
+  const garde = { x: 0, y: 0 };
+  function dessiner() {
+    const conteneur = zone.querySelector('.tableau-progression');
+    if (conteneur) { garde.x = conteneur.scrollLeft; garde.y = window.scrollY; }
+    const mats = filtre === 'toutes' ? ctx.matieres : ctx.matieres.filter((m) => String(m.id) === filtre);
+    const detail = mats.length === 1;
+    const w0 = annee * SEM_AN, w1 = w0 + SEM_AN;
+
+    const entete = h('header', { class: 'entete-page' },
+      h('div', {}, h('h1', {}, 'Progression'),
+        h('p', { class: 'sous-titre' }, `Promotion ${P.libelle}  ·  ${annee === 0 ? '1re' : '2e'} année ${Y + annee}-${Y + annee + 1}`)),
+      h('div', { class: 'actions-page' },
+        h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
+          onclick: () => { annee = a; ecrire(CLE_AN, String(a)); dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
+        h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
+          h('option', { value: 'toutes', selected: filtre === 'toutes' }, 'Toutes les matières'),
+          ctx.matieres.map((m) => h('option', { value: m.id, selected: String(m.id) === filtre }, m.nom)))));
+
+    const legende = h('div', { class: 'legende' },
+      VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
+      h('span', { class: 'leg' }, '● Présents   ● PFMP (apprentis)'),
+      EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
+      h('span', { class: 'aide' }, detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
+        : 'Glisser une séance pour la déplacer ; cliquer une case pour choisir la séance. Choisir une seule matière pour voir le détail et les séances à placer.'));
+
+    const tete = h('tr', {}, h('th', { class: 'col-sem' }, 'Semaine'), h('th', { class: 'col-jours' }, 'Évènements du jour'),
+      h('th', { class: 'col-app' }, 'Apprentis'), h('th', { class: 'col-vac' }, 'Vacances / autres'),
+      mats.map((m) => {
+        const toutes = seancesDe(m), placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+        return h('th', { class: 'col-mat', style: { '--couleur': m.couleur } }, h('div', { class: 'nom-mat' }, m.nom),
+          h('div', { class: 'compte' }, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
+      }));
+
+    const corps = [];
+    let moisPrec = -1;
+    const prec = new Map(mats.map((m) => [m.id, '']));
+    for (let w = 0; w < w1; w++) {
+      // séquence / séance de la semaine de cours précédente (pour les bandeaux de séquence et les « suite »)
+      if (w < w0) { if (enCours(w)) mats.forEach((m) => prec.set(m.id, cleDe(m, w))); continue; }
+      const mer = jourDe(w, 2);
+      if (mer.getMonth() !== moisPrec) {
+        moisPrec = mer.getMonth();
+        corps.push(h('tr', { class: 'ligne-mois' }, h('td', { colspan: 4 + mats.length }, MOIS[moisPrec] + ' ' + mer.getFullYear())));
+      }
+      const sem = semaines.get(w) || {};
+      const vac = sem.vacances || '';
+      const tr = h('tr', { class: 'semaine' + (vac ? ' vac-' + cls(vac) : '') },
+        h('td', { class: 'col-sem' }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, `${jj(lundi(w))} → ${jj(jourDe(w, 4))}`)),
+        h('td', { class: 'col-jours' }, h('div', { class: 'jours' }, JOURS.map((l, k) => {
+          const j = w * 7 + k, ev = jours.get(j) || '';
+          return h('button', { class: 'jour' + (k >= 5 ? ' we' : '') + (ev ? ' ev-' + cls(ev) : ''), type: 'button', title: ev ? `${jj(jourDe(w, k))} : ${ev}` : jj(jourDe(w, k)),
+            onclick: () => choisirEvenement(w, k) }, h('i', {}, l), h('span', {}, jourDe(w, k).getDate()));
+        }))),
+        h('td', { class: 'col-app' }, selection(sem.apprentis || '', APPRENTIS, (v) => majSemaine(w, 'apprentis', v), 'app')),
+        h('td', { class: 'col-vac' }, selection(vac, VACANCES, async (v) => { await majSemaine(w, 'vacances', v); dessiner(); }, 'vac')),
+        mats.map((m) => cellule(m, w, prec, detail, vac)));
+      if (enCours(w)) mats.forEach((m) => prec.set(m.id, cleDe(m, w)));
+      corps.push(tr);
+    }
+    const tableau = h('div', { class: 'tableau-progression' }, h('table', { class: 'progression' + (detail ? ' detail' : '') },
+      h('thead', {}, tete), h('tbody', {}, corps)));
+    vider(zone, entete, legende, detail ? aPlacer(mats[0]) : null, tableau);
+    tableau.scrollLeft = garde.x;
+    window.scrollTo(0, garde.y);
+  }
+
+  const cls = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]+/g, '-');
+
+  function selection(valeur, options, enregistrer, type) {
+    const s = h('select', { class: 'mini ' + type, disabled: !calendrierModifiable },
+      h('option', { value: '' }, '—'), options.map((o) => h('option', { value: o, selected: o === valeur }, o)),
+      valeur && !options.includes(valeur) ? h('option', { value: valeur, selected: true }, valeur) : null);
+    s.addEventListener('change', async () => { try { await enregistrer(s.value); toast('Enregistré'); } catch (e) { erreur(e); } });
+    return s;
+  }
+
+  function cellule(m, w, prec, detail, vac) {
+    const modif = ctx.peutMatiere(m.id);
+    const c = caseDe(m, w), se = seanceDe(m, w), cle = cleDe(m, w);
+    const td = h('td', { class: 'col-mat' + (vac ? ' hors-cours' : ''), style: { '--couleur': m.couleur } });
+    if (se) {
+      const suite = enCours(w) && prec.get(m.id) === cle;
+      const precSe = prec.get(m.id)?.startsWith('s') ? seances.get(Number(prec.get(m.id).slice(1))) : null;
+      if (!suite && (!precSe || precSe.seq.id !== se.seq.id)) td.append(h('div', { class: 'bande-seq' }, `Séquence ${se.seq.numero}`, se.seq.intitule ? ' · ' + se.seq.intitule : ''));
+      const puce = h('div', { class: 'puce' + (suite ? ' suite' : ''), draggable: modif && !vac ? 'true' : null,
+        title: se.objectifs_ops ? 'Objectifs opérationnels :\n' + se.objectifs_ops : (se.objectif_inter || '') },
+        h('b', {}, num(se)), ' ', suite ? h('span', { class: 'gris' }, '(suite)') : h('span', {}, se.titre || 'Séance sans titre'));
+      if (detail && !suite) {
+        if (se.objectif_inter) puce.append(h('div', { class: 'obj' }, se.objectif_inter));
+        const codes = [...(se.competences || []), ...(se.savoirs || [])];
+        if (codes.length) puce.append(h('div', { class: 'codes-prog' }, codes.map((x) => h('span', { title: ref.comp[x]?.libelle || ref.sav[x]?.libelle || '' }, x))));
+      }
+      if (modif && !vac) glisserDepuis(puce, m, w);
+      td.append(puce);
+    } else if (c?.texte) {
+      const puce = h('div', { class: 'puce libre', draggable: modif && !vac ? 'true' : null }, c.texte);
+      if (modif && !vac) glisserDepuis(puce, m, w);
+      td.append(puce);
+    } else if (c?.seance_id) {
+      td.append(h('div', { class: 'puce libre' }, 'Séance supprimée du séquençage'));
+    }
+    if (c?.note) td.append(h('div', { class: 'note' }, c.note));
+    if (modif && !vac && !cle && !c?.note) td.append(h('span', { class: 'ajout' }, '＋'));
+    td.addEventListener('click', () => ouvrirCase(m, w));
+    if (modif && !vac) {
+      td.addEventListener('dragover', (e) => { if (glisse && glisse.m.id === m.id) { e.preventDefault(); td.classList.add('cible'); } });
+      td.addEventListener('dragleave', () => td.classList.remove('cible'));
+      td.addEventListener('drop', async (e) => {
+        e.preventDefault(); td.classList.remove('cible');
+        const g = glisse; glisse = null;
+        if (!g || g.m.id !== m.id) return;
+        if (g.nouvelle) await inserer(m, w, 's' + g.nouvelle);
+        else if (g.w !== w) await deplacer(m, g.w, w);
+      });
+    }
+    return td;
+  }
+
+  function glisserDepuis(el, m, w, nouvelle = null) {
+    el.addEventListener('dragstart', (e) => { glisse = { m, w, nouvelle }; el.classList.add('glisse'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'seance'); e.stopPropagation(); });
+    el.addEventListener('dragend', () => { el.classList.remove('glisse'); zone.querySelectorAll('.cible').forEach((x) => x.classList.remove('cible')); });
+    el.addEventListener('click', (e) => { if (el.classList.contains('glisse')) e.stopPropagation(); });
+  }
+
+  // séances de la matière pas encore placées (affichées quand une seule matière est choisie)
+  function aPlacer(m) {
+    const placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+    const liste = seancesDe(m).filter((x) => !placees.has(x.id));
+    const modif = ctx.peutMatiere(m.id);
+    return h('section', { class: 'a-placer', style: { '--couleur': m.couleur } },
+      h('h2', {}, `Séances à placer (${liste.length})`),
+      liste.length ? h('div', { class: 'puces' }, liste.map((x) => {
+        const p = h('div', { class: 'puce', draggable: modif ? 'true' : null, title: x.objectif_inter || '' }, h('b', {}, num(x)), ' ', x.titre || 'Séance sans titre');
+        if (modif) glisserDepuis(p, m, null, x.id);
+        return p;
+      })) : h('p', { class: 'aide' }, 'Toutes les séances du séquençage sont placées.'));
+  }
+
+  // ------------------------------------------------------------------------------------- fenêtres
+  async function ouvrirCase(m, w) {
+    const modif = ctx.peutMatiere(m.id);
+    const c = caseDe(m, w) || {};
+    const vac = semaines.get(w)?.vacances;
+    const liste = seancesDe(m);
+    const ou = new Map();
+    for (const x of cases.values()) if (x.matiere_id === m.id && x.seance_id) ou.set(x.seance_id, (ou.get(x.seance_id) || []).concat('S' + semaineIso(lundi(x.semaine))));
+    const choix = h('select', { class: 'champ', disabled: !modif },
+      h('option', { value: '' }, '— aucune séance —'),
+      [...new Map(liste.map((x) => [x.seq.id, x.seq])).values()].map((sq) => h('optgroup', { label: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
+        liste.filter((x) => x.seq.id === sq.id).map((x) => h('option', { value: x.id, selected: x.id === c.seance_id },
+          `${num(x)} – ${x.titre || 'sans titre'}${ou.has(x.id) ? '   (placée : ' + ou.get(x.id).join(', ') + ')' : ''}`)))));
+    const libre = h('input', { class: 'champ', value: c.seance_id ? '' : (c.texte || ''), placeholder: 'ex. révisions, évaluation, intervenant…', readonly: !modif });
+    const note = h('textarea', { class: 'champ', rows: 3, placeholder: 'Note de la semaine (visible par tous)', readonly: !modif });
+    note.value = c.note || '';
+    const infos = h('div', { class: 'infos-seance' });
+    const montrer = () => {
+      const x = seances.get(Number(choix.value));
+      vider(infos, x ? [
+        h('p', {}, h('b', {}, `Séquence ${x.seq.numero} : `), x.seq.intitule || ''),
+        x.objectif_inter ? h('p', {}, h('b', {}, 'Objectif intermédiaire : '), x.objectif_inter) : null,
+        x.objectifs_ops ? h('div', { class: 'ops' }, h('b', {}, 'Objectifs opérationnels'), h('pre', {}, x.objectifs_ops)) : null,
+        (x.competences || []).length ? h('p', {}, h('b', {}, 'Compétences : '), x.competences.map((k) => `${k} ${ref.comp[k]?.libelle_court || ''}`).join(' · ')) : null,
+        (x.savoirs || []).length ? h('p', {}, h('b', {}, 'Savoirs : '), x.savoirs.map((k) => `${k} ${ref.sav[k]?.libelle_court || ''}`).join(' · ')) : null,
+      ] : []);
+    };
+    choix.addEventListener('change', () => { if (choix.value) libre.value = ''; montrer(); });
+    libre.addEventListener('input', () => { if (libre.value) { choix.value = ''; montrer(); } });
+    montrer();
+    const boutons = [];
+    if (modif && !vac) {
+      if (c.seance_id || c.texte) boutons.push({ texte: 'Prolonger d’une semaine', classe: 'gauche', action: async () => {
+        const T = semainesCours(); let i = T.indexOf(w);
+        while (i < T.length - 1 && cleDe(m, T[i + 1]) === cleDe(m, w)) i++;
+        if (i >= T.length - 1) throw new Error('Pas de semaine de cours après celle-ci.');
+        await inserer(m, T[i + 1], cleDe(m, w), 'Séance prolongée d’une semaine');
+        return true;
+      } });
+      boutons.push({ texte: 'Annuler', valeur: false });
+      boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
+        const nv = choix.value ? { seance_id: Number(choix.value), texte: '' } : { seance_id: null, texte: libre.value.trim() };
+        await enregistrerCases(m, [{ semaine: w, ...nv, note: note.value.trim() }]);
+        toast('Enregistré'); dessiner(); return true;
+      } });
+    } else boutons.push({ texte: 'Fermer', valeur: false });
+    await fenetre(`${m.nom} · ${libSemaine(w)}`, h('div', { class: 'formulaire etroit' },
+      vac ? h('p', { class: 'aide' }, `Semaine « ${vac} » : pas de séance.`) : null,
+      !modif ? h('p', { class: 'aide' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
+      vac ? null : h('label', {}, 'Séance', choix), vac ? null : h('label', {}, 'ou texte libre', libre),
+      h('label', {}, 'Note', note), infos), boutons, { large: true });
+  }
+
+  async function choisirEvenement(w, k) {
+    const j = w * 7 + k, actuel = jours.get(j) || '';
+    const autre = h('input', { class: 'champ', value: EVENEMENTS.includes(actuel) ? '' : actuel, placeholder: 'ex. Visite salon, journée intégration…' });
+    const r = await fenetre(`Évènement du ${jourDe(w, k).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`,
+      h('div', { class: 'formulaire etroit' }, h('p', { class: 'aide' }, 'Choisir un évènement en bas, ou en saisir un autre :'),
+        h('label', {}, 'Autre évènement (texte libre)', autre)),
+      [...EVENEMENTS.map((e) => ({ texte: e, classe: e === actuel ? 'principal' : '', valeur: e })),
+        actuel ? { texte: 'Effacer', classe: 'danger', valeur: '\u0000' } : null,
+        { texte: 'Enregistrer le texte', classe: 'principal', action: () => autre.value.trim() || '\u0000' }].filter(Boolean));
+    if (r === null || r === false || r === undefined) return;
+    try { await majJour(j, r === '\u0000' ? '' : r); toast('Enregistré'); dessiner(); } catch (e) { erreur(e); }
+  }
+
+  await charger();
+  dessiner();
+}
