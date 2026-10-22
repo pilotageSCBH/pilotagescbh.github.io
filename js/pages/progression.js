@@ -2,7 +2,8 @@
 // Par semaine : vacances / autres, apprentis ; par jour : évènement ; par matière : séance (ou texte libre) et note.
 // Les séances se déplacent par glisser-déposer : les autres séances de la matière se décalent (semaines de cours seulement).
 import { db } from '../api.js';
-import { h, vider, toast, erreur, fenetre, imprimer } from '../ui.js';
+import { boutonAnnuler } from '../annuler.js';
+import { h, vider, toast, erreur, fenetre, confirmer, imprimer } from '../ui.js';
 
 const SEM_AN = 45;
 const VACANCES = ['Vacances', 'Epreuves', 'Stage'];
@@ -20,15 +21,19 @@ export async function pageProgression(zone, arg, ctx) {
   let annee = Number(lire(CLE_AN, '0')) === 1 ? 1 : 0;
   let filtre = arg && ctx.matieres.some((m) => String(m.id) === String(arg)) ? String(arg) : lire(CLE_MAT, 'toutes');
   if (filtre !== 'toutes' && !ctx.matieres.some((m) => String(m.id) === filtre)) filtre = 'toutes';
-  const calendrierModifiable = true;                            // tout compte actif (règle de la base)
+  const calendrierModifiable = ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
 
   // ------------------------------------------------------------------------------------- données
-  let semaines, jours, cases, seances, sequences;
+  let semaines, jours, cases, seances, sequences, commentaires;
   async function charger() {
     const [s, j, c, sq] = await Promise.all([
       db.lire('progression_semaines', `promotion_id=eq.${P.id}`), db.lire('progression_jours', `promotion_id=eq.${P.id}`),
       db.lire('progression_cases', `promotion_id=eq.${P.id}`), db.lire('sequences', `promotion_id=eq.${P.id}&order=matiere_id,numero`)]);
-    const se = sq.length ? await db.lire('seances', `sequence_id=in.(${sq.map((x) => x.id).join(',')})&order=numero`) : [];
+    const [se, co] = await Promise.all([
+      sq.length ? db.lire('seances', `sequence_id=in.(${sq.map((x) => x.id).join(',')})&order=numero`) : [],
+      db.lire('commentaires', `promotion_id=eq.${P.id}&order=cree_le`).catch(() => [])]);
+    commentaires = new Map();
+    for (const x of co) commentaires.set(x.seance_id, (commentaires.get(x.seance_id) || []).concat(x));
     semaines = new Map(s.map((x) => [x.semaine, x]));
     jours = new Map(j.map((x) => [x.jour, x.evenement]));
     cases = new Map(c.map((x) => [`${x.matiere_id}:${x.semaine}`, x]));
@@ -127,6 +132,7 @@ export async function pageProgression(zone, arg, ctx) {
       h('div', { class: 'actions-page' },
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
+        boutonAnnuler(ctx, 'progression'),
         h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
           h('option', { value: 'toutes', selected: filtre === 'toutes' }, 'Toutes les matières'),
@@ -207,6 +213,8 @@ export async function pageProgression(zone, arg, ctx) {
         if (codes.length) puce.append(h('div', { class: 'codes-prog' }, codes.map((x) => h('span', { title: ref.comp[x]?.libelle || ref.sav[x]?.libelle || '' }, x))));
       }
       if (modif && !vac) glisserDepuis(puce, m, w);
+      const nbc = (commentaires.get(se.id) || []).length;
+      if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
       td.append(puce);
     } else if (c?.texte) {
       const puce = h('div', { class: 'puce libre', draggable: modif && !vac ? 'true' : null }, c.texte);
@@ -298,14 +306,67 @@ export async function pageProgression(zone, arg, ctx) {
         toast('Enregistré'); dessiner(); return true;
       } });
     } else boutons.push({ texte: 'Fermer', valeur: false });
+    const com = c.seance_id && seances.has(c.seance_id) ? blocCommentaires(seances.get(c.seance_id)) : null;
     await fenetre(`${m.nom} · ${libSemaine(w)}`, h('div', { class: 'formulaire etroit' },
       vac ? h('p', { class: 'aide' }, `Semaine « ${vac} » : pas de séance.`) : null,
       !modif ? h('p', { class: 'aide' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
       vac ? null : h('label', {}, 'Séance', choix), vac ? null : h('label', {}, 'ou texte libre', libre),
-      h('label', {}, 'Note', note), infos), boutons, { large: true });
+      h('label', {}, 'Note', note), infos, com?.el), boutons, { large: true });
+    if (com?.change()) dessiner();
+  }
+
+  // commentaires d'une séance : chaque enseignant peut en ajouter, visibles par tous ou par lui seul
+  function blocCommentaires(x) {
+    let change = false;
+    const el = h('section', { class: 'commentaires' });
+    const quand = (d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    function dessinerCom() {
+      const liste = commentaires.get(x.id) || [];
+      const texte = h('textarea', { class: 'champ', rows: 2, placeholder: 'Votre commentaire sur cette séance (déroulement, difficultés, à modifier l’an prochain…)' });
+      const prive = h('input', { type: 'checkbox' });
+      vider(el, h('h3', {}, `Commentaires sur la séance ${num(x)}`),
+        liste.length ? h('ul', { class: 'liste-com' }, liste.map((k) => {
+          const moi = k.auteur === ctx.profil.id;
+          return h('li', { class: k.prive ? 'prive' : '' },
+            h('div', { class: 'tete-com' }, h('b', {}, k.auteur_nom || '—'), ' · ', quand(k.cree_le),
+              k.prive ? h('span', { class: 'badge-prive', title: 'Visible par vous seul' }, '🔒 privé') : null,
+              moi ? h('button', { class: 'lien petit', type: 'button', onclick: () => modifier(k) }, 'modifier') : null,
+              moi || (ctx.estAdmin() && !k.prive) ? h('button', { class: 'icone petit', type: 'button', title: 'Supprimer le commentaire', onclick: () => supprimer(k) }, '✖') : null),
+            h('div', { class: 'texte-com' }, k.texte));
+        })) : h('p', { class: 'aide' }, 'Aucun commentaire pour cette séance.'),
+        ctx.peutEcrire() ? h('div', { class: 'ajout-com' }, texte,
+          h('div', { class: 'ligne-com' }, h('label', { class: 'interrupteur' }, prive, 'Visible par moi seul'),
+            h('button', { class: 'btn petit principal', type: 'button', onclick: async () => {
+              if (!texte.value.trim()) return erreur(new Error('Écrivez d’abord le commentaire.'));
+              try {
+                const k = await db.ajouter('commentaires', { promotion_id: P.id, seance_id: x.id, texte: texte.value.trim(), prive: prive.checked });
+                commentaires.set(x.id, (commentaires.get(x.id) || []).concat(k)); change = true; toast('Commentaire ajouté'); dessinerCom();
+              } catch (e) { erreur(e); }
+            } }, 'Ajouter le commentaire'))) : null);
+    }
+    async function modifier(k) {
+      const t = h('textarea', { class: 'champ', rows: 4 }); t.value = k.texte;
+      const p = h('input', { type: 'checkbox', checked: k.prive });
+      const r = await fenetre('Modifier le commentaire', h('div', { class: 'formulaire' }, t, h('label', { class: 'interrupteur' }, p, 'Visible par moi seul')),
+        [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', action: async () => {
+          if (!t.value.trim()) throw new Error('Le commentaire est vide (pour l’effacer : ✖).');
+          return db.modifier('commentaires', k.id, { texte: t.value.trim(), prive: p.checked });
+        } }]);
+      if (r) { Object.assign(k, r); change = true; dessinerCom(); }
+    }
+    async function supprimer(k) {
+      if (!(await confirmer('Supprimer le commentaire', 'Supprimer définitivement ce commentaire ?', 'Supprimer'))) return;
+      try {
+        await db.supprimer('commentaires', k.id);
+        commentaires.set(x.id, (commentaires.get(x.id) || []).filter((y) => y.id !== k.id)); change = true; dessinerCom();
+      } catch (e) { erreur(e); }
+    }
+    dessinerCom();
+    return { el, change: () => change };
   }
 
   async function choisirEvenement(w, k) {
+    if (!calendrierModifiable) return;
     const j = w * 7 + k, actuel = jours.get(j) || '';
     const autre = h('input', { class: 'champ', value: EVENEMENTS.includes(actuel) ? '' : actuel, placeholder: 'ex. Visite salon, journée intégration…' });
     const r = await fenetre(`Évènement du ${jourDe(w, k).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`,

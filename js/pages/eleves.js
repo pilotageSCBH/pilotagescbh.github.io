@@ -1,6 +1,7 @@
 // Élèves de la promotion : liste, effectifs ; ajout et modification par l'administrateur.
 import { db } from '../api.js';
-import { h, vider, toast, erreur, fenetre, confirmer, dateFr } from '../ui.js';
+import { boutonAnnuler } from '../annuler.js';
+import { h, vider, toast, erreur, fenetre, confirmer, dateFr, imprimer } from '../ui.js';
 
 const CHAMPS = [
   ['nom', 'NOM'], ['prenom', 'Prénom'], ['naissance', 'Né(e) le', 'date'], ['statut', 'Statut', ['Scolaire', 'Apprenti']],
@@ -22,7 +23,10 @@ export async function pageEleves(zone, _arg, ctx) {
     vider(zone,
       h('header', { class: 'entete-page' },
         h('div', {}, h('h1', {}, 'Élèves de la promotion'), h('p', { class: 'sous-titre' }, 'Promotion ' + ctx.promo.libelle)),
-        h('div', { class: 'actions-page' }, admin ? h('button', { class: 'btn principal', onclick: () => formulaire(null) }, '＋  Ajouter un élève') : null)),
+        h('div', { class: 'actions-page' },
+          admin ? boutonAnnuler(ctx, 'eleves') : null,
+          h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer la liste'),
+          admin ? h('button', { class: 'btn principal', onclick: () => formulaire(null) }, '＋  Ajouter un élève') : null)),
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, actifs.length), h('span', {}, 'en formation')),
         h('div', { class: 'tuile' }, h('strong', {}, app), h('span', {}, 'apprentis')),

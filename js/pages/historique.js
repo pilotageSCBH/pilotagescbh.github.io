@@ -9,13 +9,13 @@ const CHAMPS = {
   valeur: 'note', coefficient: 'coefficient', actif: 'critère retiré / remis', phases: 'déroulement', activites: 'activités et tâches',
   situation: 'situation professionnelle', prerequis: 'prérequis', modalites: 'modalités d’évaluation', ressources: 'ressources', bilan: 'bilan',
   salle: 'salle', materiel: 'matériel', evaluation: 'évaluation', differenciation: 'différenciation', date_eval: 'date', forme: 'forme',
-  lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
+  libelle: 'intitulé', bareme: 'noté sur', coef_resultat: 'coefficient (résultats)', lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
 };
 const TYPES = {
   tout: ['Tout', null], sequencage: ['Séquençages', ['sequences', 'seances']],
   progression: ['Progression et calendrier', ['progression_cases', 'progression_semaines', 'progression_jours']],
   fiches: ['Fiches et contrats', ['fiches_sequence', 'fiches_seance', 'contrats', 'criteres']], notes: ['Notes des élèves', ['notes']],
-  eleves: ['Élèves', ['eleves']], couverture: ['Couvertures', ['couverture']],
+  resultats: ['Résultats intermédiaires', ['evaluations', 'resultats']], eleves: ['Élèves', ['eleves']], couverture: ['Couvertures', ['couverture']],
 };
 const ACTIONS = { ajout: ['ajout', 'ajout'], modification: ['modification', 'modif'], suppression: ['suppression', 'suppr'] };
 

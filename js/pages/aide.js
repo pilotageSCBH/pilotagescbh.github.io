@@ -6,7 +6,8 @@ const SECTIONS = [
     ['Se connecter', "Identifiant = votre adresse académique, ou seulement « prenom.nom ». La première fois, cliquez sur « Première connexion ? Choisir mon code » : votre compte doit d'abord avoir été autorisé par l'administrateur."],
     ['Choisir la promotion', "Le menu « Promotion » (en haut du menu de gauche et sur le tableau de bord) change la promotion affichée dans toutes les pages. Chaque poste retient le dernier choix."],
     ['Rien à enregistrer', "Chaque case est enregistrée dès que vous la quittez (elle devient brièvement verte). Les collègues voient la même chose ; rechargez la page (F5) pour voir leurs dernières modifications."],
-    ['Qui peut modifier quoi ?', "Chaque enseignant modifie les matières cochées pour lui dans « Matières et équipe » (séquençage, progression, fiches, contrats, couvertures) et consulte tout le reste. Le calendrier commun (vacances, apprentis, évènements) est modifiable par tous. L'administrateur peut tout modifier."],
+    ['Qui peut modifier quoi ?', "Chaque enseignant modifie seulement les matières cochées pour lui dans « Matières et équipe » (séquençage, progression, fiches, contrats, résultats, couvertures) et consulte tout le reste. Le calendrier commun (vacances, apprentis, évènements) est modifiable par tous les enseignants. Seul l'administrateur ajoute, modifie ou supprime les élèves. Un compte « Lecture seule » (DDFPT…) consulte tout sans rien pouvoir modifier."],
+    ['Annuler', "Le bouton « ↶ Annuler » des pages à remplir défait votre dernière modification sur la page (survolez-le pour voir laquelle) ; cliquez de nouveau pour remonter plus loin. Un déplacement de séance ou une suppression de séquence comptent pour une seule opération. Seules vos propres modifications sont annulées, et une valeur changée depuis par un collègue n'est pas écrasée."],
     ['Mettre à jour l’affichage', "Après une mise à jour de l'application, faites Ctrl + F5 pour être sûr d'avoir la dernière version."],
   ]],
   ['sequencage', 'Séquençages', [
@@ -22,6 +23,7 @@ const SECTIONS = [
     ['Placer une séance', "Cliquez une case : choisissez la séance, ou écrivez un texte libre, et une note pour la semaine. Avec une seule matière affichée, faites glisser une séance du bandeau « Séances à placer » vers une semaine : si elle est occupée, les suivantes descendent."],
     ['Déplacer une séance', "Faites-la glisser vers une autre semaine : elle y commence (avec toutes ses semaines si elle en dure plusieurs) et les séances situées entre les deux se décalent, en sautant les semaines de vacances."],
     ['Une séance sur plusieurs semaines', "Dans la fenêtre de la case : « Prolonger d’une semaine »."],
+    ['Commentaires', "Cliquez une séance placée : en bas de la fenêtre, chaque enseignant peut écrire un commentaire sur la séance, visible par tous ou, en cochant « Visible par moi seul », par lui seul (🔒). Une bulle 💬 indique les séances commentées. Vous pouvez modifier ou supprimer vos commentaires."],
   ]],
   ['fiches', 'Fiches et contrats', [
     ['Ouvrir les fiches', "Bouton vert « ▶ Fiches » d'une séquence (séquençage), ou menu « Fiches et contrats ». Onglets : préparation de séquence, contrat sommatif, puis une page par séance (fiche de déroulement + contrat formatif)."],
@@ -34,6 +36,12 @@ const SECTIONS = [
   ['validation', 'Validation des compétences', [
     ['Le tableau', "Élèves × compétences, rempli à partir des contrats sommatifs de toutes les matières. Si une compétence est évaluée plusieurs fois, la meilleure évaluation est retenue (à égalité, la plus récente). Chaque case indique le niveau, la date du contrat et la matière."],
   ]],
+  ['resultats', 'Résultats et moyennes', [
+    ['Ce qui est automatique', "Chaque contrat sommatif donne une note / 20 par élève (moyenne des niveaux des compétences × 4), reprise automatiquement dans la colonne « Contrat séq. … » de la matière."],
+    ['Résultats intermédiaires', "Choisissez une matière, puis « ＋ Résultat intermédiaire » : intitulé, date, coefficient, « noté sur » (ramené sur 20). Saisissez les notes dans le tableau (Entrée : élève suivant) ; « abs » = absent, « ne » = non évalué : non comptés dans la moyenne. Cliquez l'intitulé pour le modifier ou le supprimer."],
+    ['Coefficients et moyennes', "La ligne jaune « Coefficient » règle le poids de chaque contrat ou résultat (0 = non compté). Moyenne de la matière = moyenne pondérée ; moyenne générale = moyenne des matières pondérée par leurs coefficients (réglés par l'administrateur dans la vue « Toutes les matières »). En bas : moyenne de la classe, notes la plus basse et la plus haute."],
+    ['Périodes', "Le menu choisit toute la formation, une année ou un semestre (septembre → janvier, février → juillet). Une évaluation sans date n'est comptée que dans « Toute la formation »."],
+  ]],
   ['couverture', 'Couvertures et synthèse', [
     ['Couvertures', "Pour chaque compétence (ou savoir) et chaque matière : cochez « Prévue » ; le nombre de séances qui la traitent est calculé d'après les séquençages. Vert = prévue et traitée, jaune = prévue sans séance, bleu = traitée sans être prévue. Le menu permet de n'afficher que les non couvertes."],
     ['Synthèse', "Toutes les séquences de toutes les matières sur une page, avec leurs séances et leur volume."],
@@ -45,6 +53,8 @@ const SECTIONS = [
   ['admin', 'Administration (administrateur)', [
     ['Autoriser un collègue', "Administration → « Autoriser un collègue » : identifiant, nom, enseignant de l'équipe correspondant. Envoyez-lui l'adresse du site : il choisit son code à sa première connexion."],
     ['Code oublié, départ', "« Nouveau code » donne un code provisoire. Décocher l'accès suspend immédiatement un compte."],
+    ['Compte en lecture seule', "Pour le DDFPT (ou une inspection) : autorisez le compte avec le rôle « Lecture seule ». Il voit toutes les pages et peut imprimer, mais ne peut rien modifier."],
+    ['Élèves', "Seul l'administrateur ajoute, modifie ou supprime les élèves (page Élèves) ; « Imprimer la liste » imprime la liste de la promotion."],
     ['Équipe et matières', "« Matières et équipe » : couleurs et noms des matières, enseignants et matières qu'ils peuvent modifier."],
     ['Reprendre une promotion', "Administration → « Reprendre une promotion » : recopie séquençages, calendrier, progression, fiches et contrats (sans les notes) d'une promotion vers une autre. Seules les parties encore vides sont remplies."],
   ]],

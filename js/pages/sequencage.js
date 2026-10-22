@@ -1,5 +1,6 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
+import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 export async function pageSequencage(zone, id, ctx) {
@@ -29,6 +30,7 @@ export async function pageSequencage(zone, id, ctx) {
           h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ` + (profs.length ? 'Enseignant : ' + profs.join(', ') : 'Enseignant à attribuer') +
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  ${heures(totH) || '0 h'}`)),
         h('div', { class: 'actions-page' },
+          modif ? boutonAnnuler(ctx, 'sequencage') : null,
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),

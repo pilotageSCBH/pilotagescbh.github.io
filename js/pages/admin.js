@@ -3,6 +3,10 @@ import { db, emailDe, identifiantDe } from '../api.js';
 import { DOMAINE } from '../../config.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
 
+// rôles des comptes : « lecture » = consultation seule (ex. DDFPT), aucune modification possible
+const ROLES = [['enseignant', 'Enseignant'], ['lecture', 'Lecture seule (DDFPT…)'], ['admin', 'Administrateur']];
+const nomRole = (r) => (ROLES.find((x) => x[0] === r) || ROLES[0])[1];
+
 export async function pageAdmin(zone, _arg, ctx) {
   async function dessiner() {
     await ctx.chargerBase();
@@ -12,12 +16,13 @@ export async function pageAdmin(zone, _arg, ctx) {
     vider(zone,
       h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Administration'), h('p', { class: 'sous-titre' }, 'Comptes de connexion de l’équipe'))),
       h('section', { class: 'bloc' }, h('h2', {}, 'Autoriser un collègue'),
-        h('p', { class: 'aide' }, `Ajoutez son identifiant (adresse académique, ou « prenom.nom » pour …@${DOMAINE}). Donnez-lui ensuite l’adresse du site : à sa première connexion, il clique sur « Première connexion » et choisit son code.`),
+        h('p', { class: 'aide' }, `Ajoutez son identifiant (adresse académique, ou « prenom.nom » pour …@${DOMAINE}). Donnez-lui ensuite l’adresse du site : à sa première connexion, il clique sur « Première connexion » et choisit son code. `
+          + 'Rôle « Lecture seule » : consulte toutes les pages sans rien pouvoir modifier (DDFPT, inspection…). Un enseignant ne modifie que les matières cochées pour lui dans « Matières et équipe ».'),
         formInvitation(libres)),
       invitations.length ? h('section', { class: 'bloc' }, h('h2', {}, 'En attente de première connexion'),
         h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Identifiant', 'Nom', 'Rôle', 'Enseignant lié', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, invitations.map((i) => h('tr', {},
-            h('td', {}, identifiantDe(i.email)), h('td', {}, i.nom), h('td', {}, i.role === 'admin' ? 'Administrateur' : 'Enseignant'),
+            h('td', {}, identifiantDe(i.email)), h('td', {}, i.nom), h('td', {}, nomRole(i.role)),
             h('td', {}, ctx.enseignants.find((e) => e.id === i.enseignant_id)?.nom || '—'),
             h('td', {}, h('button', { class: 'icone', title: 'Annuler l’autorisation', onclick: async () => {
               try { await db.supprimer('invitations', i.email, 'email'); toast('Autorisation annulée'); await dessiner(); } catch (e) { erreur(e); }
@@ -31,7 +36,7 @@ export async function pageAdmin(zone, _arg, ctx) {
               h('td', {}, identifiantDe(p.email), moi ? h('span', { class: 'badge scolaire' }, 'vous') : null),
               h('td', {}, h('input', { class: 'champ', value: p.nom, onchange: async (e) => { try { await db.modifier('profils', p.id, { nom: e.target.value }); toast('Enregistré'); } catch (x) { erreur(x); } } })),
               h('td', {}, h('select', { class: 'champ', disabled: moi, onchange: async (e) => { try { await db.modifier('profils', p.id, { role: e.target.value }); toast('Enregistré'); } catch (x) { erreur(x); } } },
-                h('option', { value: 'enseignant', selected: p.role === 'enseignant' }, 'Enseignant'), h('option', { value: 'admin', selected: p.role === 'admin' }, 'Administrateur'))),
+                ROLES.map(([v, t]) => h('option', { value: v, selected: p.role === v }, t)))),
               h('td', {}, h('select', { class: 'champ', onchange: async (e) => {
                 try {
                   if (lie) await db.modifier('enseignants', lie.id, { profil_id: null });
@@ -82,7 +87,7 @@ export async function pageAdmin(zone, _arg, ctx) {
   function formInvitation(libres) {
     const ident = h('input', { class: 'champ', placeholder: 'prenom.nom' });
     const nom = h('input', { class: 'champ', placeholder: 'Prénom Nom' });
-    const role = h('select', { class: 'champ' }, h('option', { value: 'enseignant' }, 'Enseignant'), h('option', { value: 'admin' }, 'Administrateur'));
+    const role = h('select', { class: 'champ' }, ROLES.map(([v, t]) => h('option', { value: v }, t)));
     const lien = h('select', { class: 'champ' }, h('option', { value: '' }, '— aucun —'), libres.map((e) => h('option', { value: e.id }, e.nom)));
     lien.onchange = () => { if (!nom.value) nom.value = lien.selectedOptions[0].textContent; };
     return h('form', { class: 'formulaire ligne', onsubmit: async (e) => {

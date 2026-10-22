@@ -39,7 +39,7 @@ export async function dessinerContrat(zone, opts) {
   if (!contrat) { vider(zone, h('p', { class: 'vide' }, 'Le contrat n’a pas encore été créé par l’enseignant de la matière.')); return; }
   const eleves = (await db.lire('eleves', `promotion_id=eq.${ctx.promo.id}&order=nom,prenom`)).filter((e) => !e.arret);
   let criteres = await db.lire('criteres', `contrat_id=eq.${contrat.id}&order=groupe_ordre,ordre,id`);
-  const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})`) : [];
+  const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
   const notes = new Map(notesL.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
   let voirRetires = false;
 

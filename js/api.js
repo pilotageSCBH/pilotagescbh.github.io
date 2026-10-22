@@ -114,26 +114,47 @@ async function appel(chemin, options = {}) {
 }
 
 const enc = encodeURIComponent;
+const PAGE = 1000;
 const AVEC_RETOUR = { Prefer: 'return=representation' };
+
+// signalé après chaque enregistrement (le bouton « Annuler » se met à jour)
+export const MODIFICATION = 'donnees-modifiees';
+const signaler = (r) => { window.dispatchEvent(new Event(MODIFICATION)); return r; };
+const LECTURES = new Set(['mon_profil', 'notes_sommatives']);
 
 export const db = {
   // requete : filtres et tri à la façon de Supabase, ex. « matiere_id=eq.3&order=numero »
-  lire: (table, requete = '') => appel(`/rest/v1/${table}?select=*${requete ? '&' + requete : ''}`),
+  // (le serveur renvoie au plus 1000 lignes par demande : les lignes suivantes sont lues par pages)
+  lire: async (table, requete = '') => {
+    const base = `/rest/v1/${table}?select=*${requete ? '&' + requete : ''}`;
+    if (/(^|&)limit=/.test(requete)) return appel(base);
+    let tout = [];
+    for (let debut = 0; ; debut += PAGE) {
+      const r = await appel(`${base}&limit=${PAGE}&offset=${debut}`);
+      tout = tout.concat(r);
+      if (!Array.isArray(r) || r.length < PAGE) return tout;
+    }
+  },
   ajouter: async (table, valeurs) => {
-    const r = await appel(`/rest/v1/${table}`, { method: 'POST', body: valeurs, headers: AVEC_RETOUR });
+    const r = signaler(await appel(`/rest/v1/${table}`, { method: 'POST', body: valeurs, headers: AVEC_RETOUR }));
     return Array.isArray(valeurs) ? r : r?.[0];
   },
   modifier: async (table, id, valeurs, cle = 'id') => {
     const r = await appel(`/rest/v1/${table}?${cle}=eq.${enc(id)}`, { method: 'PATCH', body: valeurs, headers: AVEC_RETOUR });
     if (Array.isArray(r) && r.length === 0) throw new Error("Modification refusée : vous n'avez pas le droit de modifier cette donnée.");
+    signaler();
     return r?.[0];
   },
   supprimer: async (table, id, cle = 'id') => {
     const r = await appel(`/rest/v1/${table}?${cle}=eq.${enc(id)}`, { method: 'DELETE', headers: AVEC_RETOUR });
     if (Array.isArray(r) && r.length === 0) throw new Error("Suppression refusée : vous n'avez pas le droit de supprimer cette donnée.");
+    signaler();
   },
   // ajoute ou remplace des lignes (clé = colonnes de « conflit », ex. 'promotion_id,matiere_id,semaine')
-  enregistrer: (table, lignes, conflit) => appel(`/rest/v1/${table}?on_conflict=${conflit}`,
-    { method: 'POST', body: lignes, headers: { Prefer: 'resolution=merge-duplicates,return=representation' } }),
-  rpc: (fonction, args = {}) => appel(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: args }),
+  enregistrer: async (table, lignes, conflit) => signaler(await appel(`/rest/v1/${table}?on_conflict=${conflit}`,
+    { method: 'POST', body: lignes, headers: { Prefer: 'resolution=merge-duplicates,return=representation' } })),
+  rpc: async (fonction, args = {}) => {
+    const r = await appel(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: args });
+    return LECTURES.has(fonction) ? r : signaler(r);
+  },
 };

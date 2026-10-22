@@ -1,6 +1,7 @@
 // Fiches d'une séquence : préparation de séquence, contrat sommatif, puis pour chaque séance sa fiche de déroulement
 // et son contrat formatif. Sans séquence choisie : liste des séquences de chaque matière.
 import { db } from '../api.js';
+import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
 
@@ -39,6 +40,7 @@ export async function pageFiches(zone, arg, ctx) {
       h('div', { class: 'actions-page' },
         h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
+        modif ? boutonAnnuler(ctx, 'fiches') : null,
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet ? 'actif' : '' }, t))),

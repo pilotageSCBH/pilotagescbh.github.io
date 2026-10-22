@@ -1,6 +1,7 @@
 // Couverture des compétences ou des savoirs : pour chaque code du référentiel et chaque matière,
 // « prévue » (case cochée par l'enseignant) et « traitée » (nombre de séances du séquençage qui la citent).
 import { db } from '../api.js';
+import { boutonAnnuler } from '../annuler.js';
 import { h, vider, toast, erreur, imprimer } from '../ui.js';
 
 const STATUTS = {
@@ -67,6 +68,7 @@ export async function pageCouverture(zone, arg, ctx) {
           h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; dessiner(); } },
             [['tout', 'Tout afficher'], ['non', 'Non couvertes'], ['prevue', 'Prévues, pas encore traitées'], ['couverte', 'Couvertes']]
               .map(([v, t]) => h('option', { value: v, selected: v === filtre }, t))),
+          boutonAnnuler(ctx, 'couverture'),
           h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'))),
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, `${compte.couverte} / ${items.length}`), h('span', {}, 'couvertes (au moins une séance)')),
