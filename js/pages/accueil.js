@@ -10,9 +10,21 @@ export async function pageAccueil(zone, _arg, ctx) {
     sequences.length ? db.lire('seances', `sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : [],
     db.lire('progression_cases', `promotion_id=eq.${p}`).catch(() => []), ctx.referentiel()]);
   const placees = new Set(cases.filter((c) => c.seance_id).map((c) => c.seance_id));
+  const notesSom = await db.rpc('notes_sommatives', { p }).catch(() => []);
+  const contratsNotes = new Set((notesSom || []).map((n) => n.contrat_id));
+  const contrats = contratsNotes.size ? await db.lire('contrats', `id=in.(${[...contratsNotes].join(',')})`).catch(() => []) : [];
+  const nEvalues = new Set(contrats.map((c) => c.sequence_id)).size;
+  const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  // carte « indicateur » : icône, libellé, valeur, précision, jauge (pourcentage) et lien
+  const kpi = (icone, libelle, valeur, detail, pourcent, lien, teinte = '') => h('a', { class: 'kpi ' + teinte, href: lien },
+    h('div', { class: 'kpi-tete' }, h('span', { class: 'kpi-icone' }, icone), h('span', { class: 'kpi-lib' }, libelle)),
+    h('div', { class: 'kpi-valeur' }, valeur, pourcent !== null ? h('small', {}, ` ${pourcent} %`) : null),
+    pourcent !== null ? h('div', { class: 'kpi-jauge' }, h('i', { style: { width: Math.min(100, pourcent) + '%' } })) : null,
+    h('div', { class: 'kpi-detail' }, detail));
   const compsTraitees = new Set(seances.flatMap((x) => x.competences || []).filter((c) => ref.comp[c]));
   const savTraites = new Set(seances.flatMap((x) => x.savoirs || []).filter((c) => ref.sav[c]));
   const enFormation = eleves.filter((e) => !e.arret);
+  const arrets = eleves.length - enFormation.length;
   const apprentis = enFormation.filter((e) => e.statut === 'Apprenti').length;
   const seqDe = (m) => sequences.filter((s) => s.matiere_id === m.id);
   const seaDe = (m) => { const ids = new Set(seqDe(m).map((s) => s.id)); return seances.filter((x) => ids.has(x.sequence_id)); };
@@ -36,21 +48,23 @@ export async function pageAccueil(zone, _arg, ctx) {
       h('div', { class: 'ouvrir' }, ctx.peutMatiere(m.id) ? '▶  Ouvrir et modifier' : '▶  Consulter'));
   });
 
+  const nPlacees = seances.filter((x) => remplie(x) && placees.has(x.id)).length;
+  const totSeqRemplies = sequences.length;
   vider(zone,
     h('header', { class: 'entete-page' },
       h('div', {}, h('h1', {}, 'Tableau de bord'),
         h('p', { class: 'sous-titre' }, 'BTS Systèmes Constructifs Bois et Habitat')),
       h('div', { class: 'actions-page' }, h('label', { class: 'grand-choix' }, 'Promotion affichée', choixPromotion('grand')))),
-    h('section', { class: 'chiffres-cles' },
-      h('div', { class: 'tuile' }, h('strong', {}, enFormation.length), h('span', {}, 'élèves en formation')),
-      h('div', { class: 'tuile' }, h('strong', {}, apprentis), h('span', {}, 'apprentis')),
-      h('div', { class: 'tuile' }, h('strong', {}, enFormation.length - apprentis), h('span', {}, 'scolaires'))),
+    h('section', { class: 'kpi-ligne' },
+      kpi('👥', 'Élèves en formation', String(enFormation.length), arrets ? `${arrets} arrêt(s) de formation` : `Promotion ${ctx.promo.libelle}`, null, '#/eleves'),
+      kpi('🛠', 'Apprentis', String(apprentis), 'formés en alternance', pc(apprentis, enFormation.length), '#/eleves', 'orange'),
+      kpi('🎓', 'Scolaires', String(enFormation.length - apprentis), 'sous statut scolaire', pc(enFormation.length - apprentis, enFormation.length), '#/eleves')),
     h('h2', { class: 'titre-section' }, 'Suivi de la promotion'),
-    h('section', { class: 'chiffres-cles suivi' },
-      h('a', { class: 'tuile lien-tuile', href: '#/progression' }, h('strong', {}, `${seances.filter((x) => placees.has(x.id)).length} / ${totS}`), h('span', {}, 'séances placées dans la progression')),
-      h('a', { class: 'tuile lien-tuile', href: '#/couverture/competences' }, h('strong', {}, `${compsTraitees.size} / ${ref.competences.length}`), h('span', {}, 'compétences traitées')),
-      h('a', { class: 'tuile lien-tuile', href: '#/couverture/savoirs' }, h('strong', {}, `${savTraites.size} / ${ref.savoirs.length}`), h('span', {}, 'savoirs associés traités')),
-      h('a', { class: 'tuile lien-tuile', href: '#/validation' }, h('strong', {}, '→'), h('span', {}, 'validation des compétences'))),
+    h('section', { class: 'kpi-ligne quatre' },
+      kpi('📅', 'Progression', `${nPlacees} / ${totS}`, 'séances placées dans le calendrier', pc(nPlacees, totS), '#/progression'),
+      kpi('🧩', 'Compétences', `${compsTraitees.size} / ${ref.competences.length}`, 'traitées dans au moins une séance', pc(compsTraitees.size, ref.competences.length), '#/couverture/competences'),
+      kpi('📚', 'Savoirs associés', `${savTraites.size} / ${ref.savoirs.length}`, 'traités dans au moins une séance', pc(savTraites.size, ref.savoirs.length), '#/couverture/savoirs'),
+      kpi('✅', 'Évaluations sommatives', `${nEvalues} / ${totSeqRemplies}`, 'séquences dont le contrat est noté', pc(nEvalues, totSeqRemplies), '#/validation')),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),
     h('h2', { class: 'titre-section' }, 'Mode d’emploi'),

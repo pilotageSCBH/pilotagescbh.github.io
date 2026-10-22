@@ -619,3 +619,22 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
 .legende-graph small { color: var(--gris); }
 .bulle-graph { position: fixed; z-index: 2000; display: none; pointer-events: none; background: #1F2D2B; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 6px; max-width: 320px; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 @media print { .graphiques { grid-template-columns: 1fr 1fr; } .carte-graph { box-shadow: none; border: 1px solid var(--ligne); } }
+
+/* ------------------------------------------------------------------ tableau de bord : indicateurs */
+.kpi-ligne { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.kpi-ligne.quatre { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1100px) { .kpi-ligne, .kpi-ligne.quatre { grid-template-columns: repeat(2, 1fr); } }
+.kpi { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; background: var(--auto); border-radius: 12px; padding: 14px 18px 16px;
+  border-left: 5px solid var(--teal); box-shadow: var(--ombre); transition: transform .12s, box-shadow .12s; }
+.kpi:hover { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--teal), var(--ombre); }
+.kpi.orange { border-left-color: #E8893A; }
+.kpi-tete { display: flex; align-items: center; gap: 10px; }
+.kpi-icone { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 17px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.kpi-lib { font-size: 12.5px; font-weight: 700; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
+.kpi-valeur { font-size: 30px; font-weight: 800; color: var(--fonce); line-height: 1.1; }
+.kpi-valeur small { font-size: 14px; font-weight: 700; color: var(--teal); margin-left: 4px; }
+.kpi.orange .kpi-valeur small { color: #C8701E; }
+.kpi-jauge { height: 7px; border-radius: 4px; background: #fff; overflow: hidden; }
+.kpi-jauge i { display: block; height: 100%; border-radius: 4px; background: var(--teal); }
+.kpi.orange .kpi-jauge i { background: #E8893A; }
+.kpi-detail { font-size: 12px; color: var(--gris); }
