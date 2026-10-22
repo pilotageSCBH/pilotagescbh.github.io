@@ -29,7 +29,7 @@ const SECTIONS = [
     ['Commentaires', "Cliquez une séance placée : en bas de la fenêtre, chaque enseignant peut écrire un commentaire sur la séance, visible par tous ou, en cochant « Visible par moi seul », par lui seul (🔒). Une bulle 💬 indique les séances commentées. Vous pouvez modifier ou supprimer vos commentaires."],
   ]],
   ['fiches', 'Fiches et contrats', [
-    ['Ouvrir les fiches', "Bouton vert « ▶ Fiches » d'une séquence (séquençage), ou menu « Fiches et contrats ». Onglets : préparation de séquence, contrat sommatif, puis une page par séance (fiche de déroulement + contrat formatif)."],
+    ['Ouvrir les fiches', "Bouton vert « ▶ Fiches » d'une séquence (séquençage), ou menu « Fiches et contrats ». Onglets : préparation de séquence, contrat sommatif, puis un onglet par séance, qui sépare la « Fiche de déroulement » et le « Contrat d’évaluation formative » (deux boutons sous les onglets ; chacun s'imprime séparément)."],
     ['Ce qui est automatique', "Matière, enseignant, promotion, effectif, volume, objectifs, compétences et savoirs sont repris du séquençage : pour les modifier, passez par le séquençage."],
     ['Contrat sommatif', "Une rubrique par compétence de la séquence, avec les indicateurs de performance du référentiel comme critères. « ↻ Ajouter les compétences… » complète le contrat si le séquençage a changé."],
     ['Contrat formatif', "Une rubrique par objectif opérationnel de la séance ; les critères sont les résultats attendus de la tâche citée [A1-T1], sinon deux critères à rédiger."],

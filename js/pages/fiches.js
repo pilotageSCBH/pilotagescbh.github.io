@@ -43,7 +43,13 @@ export async function pageFiches(zone, arg, ctx) {
         modif ? boutonAnnuler(ctx, 'fiches') : null,
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
-    h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet ? 'actif' : '' }, t))),
+    h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet || k === onglet.replace('formatif-', 'seance-') ? 'actif' : '' }, t))),
+    // séance : fiche de déroulement et contrat d'évaluation formative séparés
+    /^(seance|formatif)-/.test(onglet) ? h('nav', { class: 'sous-onglets ecran' },
+      [['seance', '📝  Fiche de déroulement'], ['formatif', '✅  Contrat d’évaluation formative']].map(([k, t]) => {
+        const id = onglet.split('-')[1];
+        return h('a', { href: lien(`${k}-${id}`), class: onglet.startsWith(k + '-') ? 'actif' : '' }, t);
+      })) : null,
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
     h('div', { id: 'fiche' }, h('div', { class: 'chargement' }, 'Chargement…')));
   const fiche = zone.querySelector('#fiche');
@@ -139,20 +145,28 @@ export async function pageFiches(zone, arg, ctx) {
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
-      h('article', { class: 'feuille large saut' },
+      h('p', { class: 'aide ecran' }, 'Le contrat d’évaluation formative de cette séance est dans l’onglet « Contrat d’évaluation formative » ci-dessus.'));
+    dessinerPhases();
+    ajusterTout(fiche);
+  }
+
+  // ------------------------------------------------------------------------------------- séance : contrat d'évaluation formative
+  async function formatif(x) {
+    const corps = h('div', {});
+    const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
+    vider(fiche,
+      h('article', { class: 'feuille large' },
         entete('CONTRAT · ÉVALUATION FORMATIVE', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire évalué'), h('p', { class: 'fort' }, x.objectif_inter || '—')), corps));
-    dessinerPhases();
-    ajusterTout(fiche);
     await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }) });
   }
 
   try {
     if (onglet === 'sommatif') await sommatif();
-    else if (onglet.startsWith('seance-')) {
-      const x = seances.find((s) => String(s.id) === onglet.slice(7));
-      if (x) await seance(x); else await preparation();
+    else if (/^(seance|formatif)-/.test(onglet)) {
+      const x = seances.find((s) => String(s.id) === onglet.split('-')[1]);
+      if (!x) await preparation(); else if (onglet.startsWith('formatif-')) await formatif(x); else await seance(x);
     } else await preparation();
   } catch (e) { erreur(e); throw e; }
 }

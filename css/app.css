@@ -584,3 +584,6 @@ table.liste td.auto, table.liste.auto td, .table-fiche.auto td, table.synthese t
 .carte-matiere .chiffres > div { border-radius: 8px; padding: 6px 4px; }
 .a-placer { background: var(--auto); }
 .a-placer .puce { background: #fff; }
+.sous-onglets { display: flex; gap: 8px; margin: -6px 0 14px; }
+.sous-onglets a { padding: 7px 14px; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 13px; color: var(--fonce); background: var(--carte); border: 1px solid var(--ligne); }
+.sous-onglets a.actif { background: var(--fonce); color: #fff; border-color: var(--fonce); }
