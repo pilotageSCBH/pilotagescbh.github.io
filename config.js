@@ -5,8 +5,8 @@
 //   - SUPABASE_KEY : clé publique « anon » ou « publishable » (elle peut être publique : la base est protégée
 //                    par les règles de sécurité ; ne JAMAIS mettre ici la clé « service_role » / « secret »)
 // =====================================================================================================
-export const SUPABASE_URL = 'https://VOTRE-PROJET.supabase.co';
-export const SUPABASE_KEY = 'VOTRE-CLE-PUBLIQUE';
+export const SUPABASE_URL = 'https://vkwuepherglgcbaszewf.supabase.co';
+export const SUPABASE_KEY = 'sb_publishable_THrS_9LQ_GDqcpLidbm2jg_8aFWDTK_';
 
 // identifiant court → adresse complète (ex. « brice.claudel » → brice.claudel@ac-nancy-metz.fr)
 export const DOMAINE = 'ac-nancy-metz.fr';
