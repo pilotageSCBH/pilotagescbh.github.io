@@ -21,7 +21,7 @@ export async function pageEquipe(zone, _arg, ctx) {
               : h('span', { class: 'pastille', style: { background: m.couleur } })),
             h('td', {}, champ(m.nom, async (v) => { await db.modifier('matieres', m.id, { nom: v }); m.nom = v; rafraichirMenu(); }, { lecture: !admin })),
             h('td', {}, champ(m.abreviation, (v) => db.modifier('matieres', m.id, { abreviation: v }), { lecture: !admin })),
-            h('td', {}, ctx.enseignantsDe(m.id).join(', ') || '—')))))),
+            h('td', { class: 'auto' }, ctx.enseignantsDe(m.id).join(', ') || '—')))))),
       h('section', { class: 'bloc' }, h('h2', {}, 'Équipe pédagogique'),
         h('p', { class: 'aide' }, 'Cocher les matières de chaque enseignant : il pourra modifier le séquençage de ces matières (et consulter les autres).'),
         h('table', { class: 'liste equipe' },
@@ -35,7 +35,7 @@ export async function pageEquipe(zone, _arg, ctx) {
                 try { await db.modifier('enseignants', e.id, { matieres: [...s] }); e.matieres = [...s]; toast('Enregistré'); }
                 catch (err) { ev.target.checked = !ev.target.checked; erreur(err); }
               } }))),
-            h('td', { class: 'petit' }, e.profil_id ? h('span', { class: 'badge scolaire' }, 'compte actif') : h('span', { class: 'gris' }, 'pas de compte')),
+            h('td', { class: 'petit auto' }, e.profil_id ? h('span', { class: 'badge scolaire' }, 'compte actif') : h('span', { class: 'gris' }, 'pas de compte')),
             admin ? h('td', {}, h('button', { class: 'icone', title: 'Retirer de l’équipe', onclick: async () => {
               if (!(await confirmer('Retirer un enseignant', `Retirer ${e.nom} de l’équipe ? (Son compte de connexion n’est pas supprimé.)`, 'Retirer'))) return;
               try { await db.supprimer('enseignants', e.id); await dessiner(); } catch (err) { erreur(err); }

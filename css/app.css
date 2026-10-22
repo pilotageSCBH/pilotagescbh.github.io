@@ -574,3 +574,13 @@ table.progression tr.semaine td.col-sem { background: var(--auto) !important; }
 /* résultats : notes des contrats, moyennes, statistiques, synthèse */
 .resultats td.auto, .resultats td.gen, .resultats tfoot td, table.resultats:not(.detail) tbody td { background: var(--auto) !important; }
 .resultats tfoot th { background: var(--auto-fonce); }
+/* (suite) autres valeurs remplies automatiquement */
+table.liste td.auto, table.liste.auto td, .table-fiche.auto td, table.synthese td { background: var(--auto) !important; }
+.validation td.nom, .validation td.total { background: var(--auto) !important; }
+.couverture td.code, .couverture td.lib { background: var(--auto); }
+.resultats tbody th { background: var(--auto) !important; }
+.resume { background: var(--auto); border-radius: 12px; padding: 2px 10px; }
+.chiffres-cles .tuile, .carte-matiere .chiffres > div { background: var(--auto); }
+.carte-matiere .chiffres > div { border-radius: 8px; padding: 6px 4px; }
+.a-placer { background: var(--auto); }
+.a-placer .puce { background: #fff; }

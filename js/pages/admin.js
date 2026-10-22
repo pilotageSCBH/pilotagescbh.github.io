@@ -88,7 +88,7 @@ export async function pageAdmin(zone, _arg, ctx) {
         const bilan = new Map((await db.rpc('bilan_connexions', { depuis: d.toISOString() })).map((b) => [b.profil_id, b]));
         const lignes = profils.map((p) => ({ p, b: bilan.get(p.id) || { nb: 0, secondes: 0, derniere: null } }))
           .sort((x, y) => (y.b.derniere || '').localeCompare(x.b.derniere || ''));
-        vider(corps, h('table', { class: 'liste' },
+        vider(corps, h('table', { class: 'liste auto' },
           h('thead', {}, h('tr', {}, ['Compte', 'Connexions', 'Temps total', 'Temps moyen', 'Dernière connexion'].map((t) => h('th', {}, t)))),
           h('tbody', {}, lignes.map(({ p, b }) => h('tr', { class: 'cliquable' + (p.actif ? '' : ' arret'), title: 'Voir le détail des connexions', onclick: () => detail(p) },
             h('td', {}, h('b', {}, p.nom || identifiantDe(p.email)), h('br'), h('small', {}, identifiantDe(p.email) + ' · ' + nomRole(p.role))),
