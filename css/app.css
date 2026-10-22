@@ -546,3 +546,6 @@ input.note-saisie, input.coef-res { width: 64px; text-align: center; padding: 3p
 .commentaires, .formulaire > textarea { grid-column: 1 / -1; }
 .resultats thead tr.coefs th { color: var(--texte); background: #FFF8D6; }
 .tete-bloc { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.valeur-secours { font: 700 28px/1.2 "Consolas", "Courier New", monospace; letter-spacing: 3px; text-align: center; color: var(--fonce); background: var(--clair); border-radius: 10px; padding: 16px; margin: 10px 0; }
+@media print { body:has(.code-secours) .cadre { display: none; } .fond-fenetre { position: static; background: none; } .fond-fenetre .pied-fenetre, .fond-fenetre .fermer { display: none; } }
+.bloc.alerte { border-left: 5px solid var(--orange); background: #FFFAF0; }

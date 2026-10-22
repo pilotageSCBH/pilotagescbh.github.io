@@ -1,6 +1,6 @@
 // Application « Pilotage BTS SCBH » : connexion, menu, navigation entre les pages.
 import { NOM_APPLI } from '../config.js';
-import { estConnecte, connexion, premiereConnexion, deconnexion, db, emailConnecte, SESSION_EXPIREE } from './api.js';
+import { estConnecte, connexion, premiereConnexion, deconnexion, db, emailConnecte, SESSION_EXPIREE, rpcPublic, emailDe, changerCode } from './api.js';
 import { h, vider, erreur, toast } from './ui.js';
 import { pageAccueil } from './pages/accueil.js';
 import { pageEquipe } from './pages/equipe.js';
@@ -107,9 +107,71 @@ function ecranConnexion(message = '') {
   } },
   h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
   h('h1', {}, NOM_APPLI), titre,
-  h('label', {}, 'Identifiant', ident), h('label', {}, 'Code', code), ligne2, valider, info, bascule, aide);
+  h('label', {}, 'Identifiant', ident), h('label', {}, 'Code', code), ligne2, valider, info, bascule,
+  h('button', { class: 'lien', type: 'button', onclick: () => ecranCodeOublie(ident.value) }, 'Code oublié ?'), aide);
   vider(app, h('div', { class: 'ecran-connexion' }, form));
   ident.focus();
+}
+
+// code oublié : nouveau code avec le code de secours, ou demande à l'administrateur
+function ecranCodeOublie(identifiant = '') {
+  const ident = h('input', { autocomplete: 'username', placeholder: 'prenom.nom', value: identifiant });
+  const secours = h('input', { placeholder: 'XXXX-XXXX-XXXX', autocomplete: 'off', style: { textTransform: 'uppercase', letterSpacing: '1px' } });
+  const c1 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 6 });
+  const c2 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 6 });
+  const info = h('p', { class: 'msg-connexion' });
+  const msg = (t, err = false) => { info.textContent = t; info.classList.toggle('erreur', err); };
+  const valider = h('button', { class: 'btn principal large', type: 'submit' }, 'Changer mon code et entrer');
+  const demander = h('button', { class: 'btn large', type: 'button', onclick: async () => {
+    if (!ident.value.trim()) return msg('Saisissez d’abord votre identifiant.', true);
+    demander.disabled = true;
+    try { await rpcPublic('demander_code', { identifiant: emailDe(ident.value) }); msg('Demande envoyée : l’administrateur vous donnera un code provisoire, à changer à votre prochaine connexion.'); }
+    catch (e) { msg(e.message, true); demander.disabled = false; }
+  } }, 'Prévenir l’administrateur');
+  const form = h('form', { class: 'carte-connexion', onsubmit: async (e) => {
+    e.preventDefault(); msg('');
+    if (!ident.value.trim() || !secours.value.trim()) return msg('Saisissez votre identifiant et votre code de secours.', true);
+    if (c1.value.length < 6) return msg('Le nouveau code doit contenir au moins 6 caractères.', true);
+    if (c1.value !== c2.value) return msg('Les deux codes ne sont pas identiques.', true);
+    valider.disabled = true;
+    try {
+      const ok = await rpcPublic('code_par_secours', { identifiant: emailDe(ident.value), secours: secours.value, code: c1.value });
+      if (!ok) { msg('Identifiant ou code de secours incorrect (5 essais par heure).', true); return; }
+      await connexion(ident.value, c1.value);
+      toast('Nouveau code enregistré');
+      await demarrer();
+    } catch (x) { msg(x.message, true); } finally { valider.disabled = false; }
+  } },
+  h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+  h('h1', {}, NOM_APPLI), h('h2', {}, 'Code oublié'),
+  h('p', { class: 'aide' }, 'Avec votre code de secours (créé dans « Mon compte ») : choisissez vous-même un nouveau code.'),
+  h('label', {}, 'Identifiant', ident), h('label', {}, 'Code de secours', secours),
+  h('label', {}, 'Nouveau code', c1), h('label', {}, 'Confirmer le nouveau code', c2), valider, info,
+  h('p', { class: 'aide' }, 'Pas de code de secours ? L’administrateur sera prévenu et vous donnera un code provisoire.'), demander,
+  h('button', { class: 'lien', type: 'button', onclick: () => ecranConnexion() }, '← Retour à la connexion'));
+  vider(app, h('div', { class: 'ecran-connexion' }, form));
+  (identifiant ? secours : ident).focus();
+}
+
+// code provisoire donné par l'administrateur : à remplacer avant d'entrer
+function ecranNouveauCode() {
+  const c1 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 6, required: true });
+  const c2 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 6, required: true });
+  const info = h('p', { class: 'msg-connexion erreur' });
+  const form = h('form', { class: 'carte-connexion', onsubmit: async (e) => {
+    e.preventDefault(); info.textContent = '';
+    if (c1.value.length < 6) { info.textContent = 'Le code doit contenir au moins 6 caractères.'; return; }
+    if (c1.value !== c2.value) { info.textContent = 'Les deux codes ne sont pas identiques.'; return; }
+    try { await changerCode(c1.value); await db.rpc('code_change'); ctx.profil.doit_changer = false; toast('Code enregistré'); await ctx.chargerBase(); afficher(); demarrerPresence(); }
+    catch (x) { info.textContent = x.message; }
+  } },
+  h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+  h('h1', {}, NOM_APPLI), h('h2', {}, 'Choisissez votre code'),
+  h('p', { class: 'aide' }, 'Vous êtes entré avec un code provisoire donné par l’administrateur : choisissez maintenant votre propre code (6 caractères au moins).'),
+  h('label', {}, 'Nouveau code', c1), h('label', {}, 'Confirmer', c2), h('button', { class: 'btn principal large', type: 'submit' }, 'Enregistrer et entrer'), info,
+  h('button', { class: 'lien', type: 'button', onclick: async () => { await deconnexion(); ctx.profil = null; ecranConnexion(); } }, 'Se déconnecter'));
+  vider(app, h('div', { class: 'ecran-connexion' }, form));
+  c1.focus();
 }
 
 // ------------------------------------------------------------------------------------------- cadre
@@ -141,7 +203,7 @@ function menu(route) {
     lien('#/referentiel/taches', 'Activités et tâches', page === 'referentiel' && arg === 'taches'),
     h('div', { class: 'bas-menu' },
       lien('#/aide', '?  Aide', page === 'aide'),
-      ctx.estAdmin() ? lien('#/admin', '⚙  Administration', page === 'admin') : null,
+      ctx.estAdmin() ? lien('#/admin', '⚙  Administration' + (ctx.demandes ? `  (${ctx.demandes} demande${ctx.demandes > 1 ? 's' : ''})` : ''), page === 'admin') : null,
       lien('#/compte', '👤  ' + (ctx.profil?.nom || emailConnecte()) + (ctx.peutEcrire() ? '' : '  (consultation)'), page === 'compte'),
       h('button', { class: 'lien-menu', type: 'button', onclick: async () => { await deconnexion(); ecranConnexion('Vous êtes déconnecté.'); } }, '⏻  Se déconnecter')));
 }
@@ -155,6 +217,7 @@ let rendu = 0;
 async function afficher() {
   if (!estConnecte()) return ecranConnexion();
   if (!ctx.profil) return demarrer();
+  if (ctx.profil.doit_changer) return ecranNouveauCode();
   const r = route();
   if (r[0] === 'admin' && !ctx.estAdmin()) { location.hash = '#/accueil'; return; }
   const n = ++rendu;
@@ -164,6 +227,8 @@ async function afficher() {
     await PAGES[r[0]](zone, r[1], ctx);
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches',
       validation: 'validation', resultats: 'resultats', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+    if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
+      '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
@@ -204,6 +269,8 @@ async function demarrer() {
     if (!profil) throw new Error("Compte introuvable : demandez à l'administrateur de vous ajouter.");
     if (!profil.actif) { await deconnexion(); return ecranConnexion("Votre compte est désactivé : contactez l'administrateur."); }
     ctx.profil = { ...profil, matieres: (profil.matieres || []).map(Number) };
+    if (ctx.profil.doit_changer) return ecranNouveauCode();
+    if (ctx.estAdmin()) { try { ctx.demandes = (await db.lire('demandes_code')).length; } catch { ctx.demandes = 0; } }
     await ctx.chargerBase();
     afficher();
     demarrerPresence();

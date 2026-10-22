@@ -2,6 +2,7 @@
 import { db, emailDe, identifiantDe } from '../api.js';
 import { DOMAINE } from '../../config.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
+import { rafraichirMenu } from '../app.js';
 
 // rôles des comptes : « lecture » = consultation seule (ex. DDFPT), aucune modification possible
 const ROLES = [['enseignant', 'Enseignant'], ['lecture', 'Lecture seule (DDFPT…)'], ['admin', 'Administrateur']];
@@ -10,11 +11,23 @@ const nomRole = (r) => (ROLES.find((x) => x[0] === r) || ROLES[0])[1];
 export async function pageAdmin(zone, _arg, ctx) {
   async function dessiner() {
     await ctx.chargerBase();
-    const [profils, invitations] = await Promise.all([db.lire('profils', 'order=nom,email'), db.lire('invitations', 'order=cree_le')]);
+    const [profils, invitations, demandes] = await Promise.all([db.lire('profils', 'order=nom,email'), db.lire('invitations', 'order=cree_le'),
+      db.lire('demandes_code', 'order=quand').catch(() => [])]);
+    ctx.demandes = demandes.length; rafraichirMenu();
     const ens = (pid) => ctx.enseignants.find((e) => e.profil_id === pid);
     const libres = ctx.enseignants.filter((e) => !e.profil_id);
     vider(zone,
       h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Administration'), h('p', { class: 'sous-titre' }, 'Comptes de connexion de l’équipe'))),
+      demandes.length ? h('section', { class: 'bloc alerte' }, h('h2', {}, '🔑  Code oublié : demandes en attente'),
+        h('p', { class: 'aide' }, 'Choisissez un code provisoire et communiquez-le à votre collègue (de vive voix, par la messagerie de l’ENT…) : il devra le remplacer par son propre code à sa connexion.'),
+        h('table', { class: 'liste' }, h('tbody', {}, demandes.map((d) => {
+          const p = profils.find((x) => x.email === d.email);
+          return h('tr', {}, h('td', {}, h('b', {}, p?.nom || identifiantDe(d.email)), ' · ', identifiantDe(d.email)),
+            h('td', {}, new Date(d.quand).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })),
+            h('td', {}, p ? h('button', { class: 'btn petit principal', onclick: async () => { if (await nouveauCode(p)) await dessiner(); } }, 'Donner un code provisoire') : null,
+              h('button', { class: 'icone', title: 'Supprimer la demande', onclick: async () => {
+                try { await db.supprimer('demandes_code', d.email, 'email'); await dessiner(); } catch (e) { erreur(e); } } }, '✖')));
+        })))) : null,
       h('section', { class: 'bloc' }, h('h2', {}, 'Autoriser un collègue'),
         h('p', { class: 'aide' }, `Ajoutez son identifiant (adresse académique, ou « prenom.nom » pour …@${DOMAINE}). Donnez-lui ensuite l’adresse du site : à sa première connexion, il clique sur « Première connexion » et choisit son code. `
           + 'Rôle « Lecture seule » : consulte toutes les pages sans rien pouvoir modifier (DDFPT, inspection…). Un enseignant ne modifie que les matières cochées pour lui dans « Matières et équipe ».'),
@@ -160,13 +173,14 @@ export async function pageAdmin(zone, _arg, ctx) {
   async function nouveauCode(p) {
     const c = h('input', { class: 'champ', type: 'text', minlength: 6, placeholder: '6 caractères au moins' });
     const r = await fenetre('Nouveau code pour ' + (p.nom || identifiantDe(p.email)), h('div', { class: 'formulaire' },
-      h('p', {}, 'Choisissez un code provisoire et communiquez-le à votre collègue ; il pourra le changer dans « Mon compte ».'), h('label', {}, 'Nouveau code', c)),
+      h('p', {}, 'Choisissez un code provisoire et communiquez-le à votre collègue : à sa prochaine connexion, il devra choisir son propre code.'), h('label', {}, 'Code provisoire', c)),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', action: async () => {
       if (c.value.length < 6) throw new Error('Le code doit contenir au moins 6 caractères.');
       await db.rpc('admin_nouveau_code', { compte: p.id, code: c.value });
       return true;
     } }]);
-    if (r) toast('Nouveau code enregistré');
+    if (r) toast('Code provisoire enregistré');
+    return !!r;
   }
 
   await dessiner();

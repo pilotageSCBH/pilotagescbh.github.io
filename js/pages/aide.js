@@ -8,6 +8,7 @@ const SECTIONS = [
     ['Rien à enregistrer', "Chaque case est enregistrée dès que vous la quittez (elle devient brièvement verte). Les collègues voient la même chose ; rechargez la page (F5) pour voir leurs dernières modifications."],
     ['Qui peut modifier quoi ?', "Chaque enseignant modifie seulement les matières cochées pour lui dans « Matières et équipe » (séquençage, progression, fiches, contrats, résultats, couvertures) et consulte tout le reste. Le calendrier commun (vacances, apprentis, évènements) est modifiable par tous les enseignants. Seul l'administrateur ajoute, modifie ou supprime les élèves. Un compte « Lecture seule » (DDFPT…) consulte tout sans rien pouvoir modifier."],
     ['Annuler', "Le bouton « ↶ Annuler » des pages à remplir défait votre dernière modification sur la page (survolez-le pour voir laquelle) ; cliquez de nouveau pour remonter plus loin. Un déplacement de séance ou une suppression de séquence comptent pour une seule opération. Seules vos propres modifications sont annulées, et une valeur changée depuis par un collègue n'est pas écrasée."],
+    ['Code oublié', "Créez dès maintenant votre code de secours dans « Mon compte » et notez-le. En cas d'oubli : écran de connexion → « Code oublié ? » → identifiant + code de secours + nouveau code. Sans code de secours : « Prévenir l'administrateur » ; il vous donnera un code provisoire, que vous remplacerez par le vôtre en vous connectant."],
     ['Mettre à jour l’affichage', "Après une mise à jour de l'application, faites Ctrl + F5 pour être sûr d'avoir la dernière version."],
   ]],
   ['sequencage', 'Séquençages', [
@@ -52,7 +53,7 @@ const SECTIONS = [
   ]],
   ['admin', 'Administration (administrateur)', [
     ['Autoriser un collègue', "Administration → « Autoriser un collègue » : identifiant, nom, enseignant de l'équipe correspondant. Envoyez-lui l'adresse du site : il choisit son code à sa première connexion."],
-    ['Code oublié, départ', "« Nouveau code » donne un code provisoire. Décocher l'accès suspend immédiatement un compte."],
+    ['Code oublié, départ', "Les demandes « code oublié » apparaissent en haut de la page Administration (et dans le menu) : « Donner un code provisoire », à communiquer au collègue, qui devra le remplacer à sa connexion. « Nouveau code » fait de même pour n'importe quel compte. Décocher l'accès suspend immédiatement un compte."],
     ['Suivi des connexions', "Administration → « Suivi des connexions » : pour chaque compte, nombre de connexions, temps total et moyen, dernière connexion, sur 7 jours, 30 jours, depuis la rentrée ou depuis le début. Cliquez une ligne pour le détail (date, heures, durée). Le temps n'est compté que lorsque l'application est affichée et utilisée ; après 30 minutes sans activité, une nouvelle connexion commence."],
     ['Compte en lecture seule', "Pour le DDFPT (ou une inspection) : autorisez le compte avec le rôle « Lecture seule ». Il voit toutes les pages et peut imprimer, mais ne peut rien modifier."],
     ['Élèves', "Seul l'administrateur ajoute, modifie ou supprime les élèves (page Élèves) ; « Imprimer la liste » imprime la liste de la promotion."],

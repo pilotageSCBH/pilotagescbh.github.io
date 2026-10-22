@@ -94,6 +94,9 @@ export async function changerCode(code) {
   await envoyer('/auth/v1/user', { method: 'PUT', body: { password: code }, jeton: session.access_token });
 }
 
+// sans être connecté (code oublié) : fonctions ouvertes au public, rien d'autre
+export const rpcPublic = (fonction, args = {}) => envoyer(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: args });
+
 // ------------------------------------------------------------------------------------------- données
 export const SESSION_EXPIREE = 'session-expiree';
 
