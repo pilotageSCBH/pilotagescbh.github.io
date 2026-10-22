@@ -556,3 +556,21 @@ input.note-saisie, input.coef-res { width: 64px; text-align: center; padding: 3p
 textarea.champ.petit-texte { font-size: 12px; margin-top: 3px; }
 .alerte-pre { display: inline-block; margin-left: 4px; font-size: 10.5px; font-weight: 800; color: #fff; background: var(--rouge); border-radius: 9px; padding: 0 6px; }
 .infos-seance .pre-ok { color: #2E6B0E; } .infos-seance .pre-ko { color: var(--rouge); font-weight: 700; }
+
+/* ------------------------------------------------------------------ cellules automatiques (calculées ou reprises) : grisées */
+:root { --auto: #E9ECEB; --auto-fonce: #D9DEDC; }
+/* fiches : informations et rubriques reprises du séquençage */
+.grille-infos .val, .grille-infos .valeur { background: var(--auto); align-self: stretch; display: flex; align-items: center; }
+.rubrique > p, .rubrique > .codes-fiche, .rubrique > .gris { background: var(--auto) !important; }
+/* contrats : moyennes, niveaux et note finale */
+tr.ligne-moy td { background: var(--auto); }
+tr.ligne-finale td { background: var(--auto-fonce); color: var(--texte); }
+/* séquençage, élèves : numérotation automatique */
+table.seances td.num, table.liste td.num { background: var(--auto); }
+/* progression : dates des semaines */
+table.progression tr.semaine td.col-sem { background: var(--auto) !important; }
+/* couvertures : nombre de séances, total, statut */
+.couverture td.nb, .couverture td.total, .couverture td.statut { background: var(--auto); }
+/* résultats : notes des contrats, moyennes, statistiques, synthèse */
+.resultats td.auto, .resultats td.gen, .resultats tfoot td, table.resultats:not(.detail) tbody td { background: var(--auto) !important; }
+.resultats tfoot th { background: var(--auto-fonce); }
