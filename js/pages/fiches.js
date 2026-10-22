@@ -8,9 +8,9 @@ import { dessinerContrat } from './contrat.js';
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
 const NB_PHASES = 5;
-const COLS_PHASES = [['phase', 'Phase'], ['temporalite', 'Temporalité'], ['activite', 'Activité proposée'], ['enseignant', 'Activités de l’enseignant'],
+const COLS_PHASES = [['phase', 'Phase'], ['activite', 'Activité proposée'], ['enseignant', 'Activités de l’enseignant'],
   ['eleves', 'Activités des élèves'], ['duree', 'Durée']];
-const phaseVide = () => ({ phase: '', temporalite: '', activite: '', enseignant: '', eleves: '', duree: '' });
+const phaseVide = () => ({ phase: '', activite: '', enseignant: '', eleves: '', duree: '' });
 // intitulé saisi sans son numéro (« 2. Découverte » → « Découverte ») ; intitulés par défaut d'avant effacés
 const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
@@ -117,7 +117,7 @@ export async function pageFiches(zone, arg, ctx) {
         h('td', { class: 'num-phase' }, i + 1),
         COLS_PHASES.map(([k]) => h('td', { class: k },
           champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
-            { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase', temporalite: 'ex. 8 h 00 → 8 h 20' }[k] || '' : '' }))),
+            { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase' }[k] || '' : '' }))),
         modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
           phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null)));
       ajusterTout(tablePhases);
