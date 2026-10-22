@@ -214,7 +214,7 @@ export async function pageProgression(zone, arg, ctx) {
     } else if (c?.seance_id) {
       td.append(h('div', { class: 'puce libre' }, 'Séance supprimée du séquençage'));
     }
-    if (c?.note) td.append(h('div', { class: 'note' }, c.note));
+    if (c?.note) td.append(h('div', { class: 'note-sem' }, c.note));
     if (modif && !vac && !cle && !c?.note) td.append(h('span', { class: 'ajout' }, '＋'));
     td.addEventListener('click', () => ouvrirCase(m, w));
     if (modif && !vac) {

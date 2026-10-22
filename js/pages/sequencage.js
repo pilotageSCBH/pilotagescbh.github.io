@@ -47,6 +47,7 @@ export async function pageSequencage(zone, id, ctx) {
         h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero),
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),
         h('div', { class: 'resume' }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
+        h('a', { class: 'btn petit fiches', href: `#/fiches/${s.id}` }, '▶ Fiches'),
         modif ? h('button', { class: 'icone', title: 'Supprimer la séquence', onclick: () => supprimerSequence(s, seances) }, '✖') : null),
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
         champ(s.objectif, maj('objectif'), { multi: true, lecture: !modif, placeholder: 'Objectif principal de la séquence' })),
