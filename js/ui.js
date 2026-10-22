@@ -121,3 +121,22 @@ export const nombre = (v) => {
 };
 export const heures = (n) => (n == null ? '' : (Number.isInteger(n) ? n : String(n).replace('.', ',')) + ' h');
 export const dateFr = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('fr-FR') : '');
+
+// ------------------------------------------------------------------------------------------- impression
+// format : 'A4 portrait', 'A4 landscape', 'A3 landscape'… ; les zones de texte sont remplacées par leur texte complet
+export function imprimer(format = 'A4 portrait') {
+  let st = document.getElementById('format-impression');
+  if (!st) { st = document.createElement('style'); st.id = 'format-impression'; document.head.append(st); }
+  st.textContent = `@page { size: ${format}; margin: 8mm; }`;
+  window.print();
+}
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.texte-impression').forEach((d) => d.remove());
+  document.querySelectorAll('textarea.champ').forEach((t) => {
+    const d = document.createElement('div');
+    d.className = 'texte-impression';
+    d.textContent = t.value;
+    t.after(d);
+  });
+});
+window.addEventListener('afterprint', () => document.querySelectorAll('.texte-impression').forEach((d) => d.remove()));

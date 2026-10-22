@@ -6,7 +6,12 @@ import { choixPromotion } from '../app.js';
 export async function pageAccueil(zone, _arg, ctx) {
   const p = ctx.promo.id;
   const [eleves, sequences] = await Promise.all([db.lire('eleves', `promotion_id=eq.${p}`), db.lire('sequences', `promotion_id=eq.${p}`)]);
-  const seances = sequences.length ? await db.lire('seances', `sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : [];
+  const [seances, cases, ref] = await Promise.all([
+    sequences.length ? db.lire('seances', `sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : [],
+    db.lire('progression_cases', `promotion_id=eq.${p}`).catch(() => []), ctx.referentiel()]);
+  const placees = new Set(cases.filter((c) => c.seance_id).map((c) => c.seance_id));
+  const compsTraitees = new Set(seances.flatMap((x) => x.competences || []).filter((c) => ref.comp[c]));
+  const savTraites = new Set(seances.flatMap((x) => x.savoirs || []).filter((c) => ref.sav[c]));
   const enFormation = eleves.filter((e) => !e.arret);
   const apprentis = enFormation.filter((e) => e.statut === 'Apprenti').length;
   const seqDe = (m) => sequences.filter((s) => s.matiere_id === m.id);
@@ -43,6 +48,12 @@ export async function pageAccueil(zone, _arg, ctx) {
       h('div', { class: 'tuile' }, h('strong', {}, totSeq), h('span', {}, 'séquences')),
       h('div', { class: 'tuile' }, h('strong', {}, totS), h('span', {}, 'séances')),
       h('div', { class: 'tuile' }, h('strong', {}, heures(totH) || '0 h'), h('span', {}, 'volume total'))),
+    h('h2', { class: 'titre-section' }, 'Suivi de la promotion'),
+    h('section', { class: 'chiffres-cles suivi' },
+      h('a', { class: 'tuile lien-tuile', href: '#/progression' }, h('strong', {}, `${seances.filter((x) => placees.has(x.id)).length} / ${totS}`), h('span', {}, 'séances placées dans la progression')),
+      h('a', { class: 'tuile lien-tuile', href: '#/couverture/competences' }, h('strong', {}, `${compsTraitees.size} / ${ref.competences.length}`), h('span', {}, 'compétences traitées')),
+      h('a', { class: 'tuile lien-tuile', href: '#/couverture/savoirs' }, h('strong', {}, `${savTraites.size} / ${ref.savoirs.length}`), h('span', {}, 'savoirs associés traités')),
+      h('a', { class: 'tuile lien-tuile', href: '#/validation' }, h('strong', {}, '→'), h('span', {}, 'validation des compétences'))),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),
     h('h2', { class: 'titre-section' }, 'Mode d’emploi'),

@@ -2,7 +2,7 @@
 // de toutes les matières de la promotion. Si une compétence est évaluée plusieurs fois, la meilleure note est retenue
 // (à égalité, la plus récente) ; la case indique le niveau, la date et la matière.
 import { db } from '../api.js';
-import { h, vider } from '../ui.js';
+import { h, vider, imprimer } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
 
 const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
@@ -38,7 +38,7 @@ export async function pageValidation(zone, _arg, ctx) {
   vider(zone,
     h('header', { class: 'entete-page ecran' }, h('div', {}, h('h1', {}, 'Validation des compétences'),
       h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ${eleves.length} élèves  ·  ${contrats.length} contrat(s) sommatif(s)`)),
-      h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => window.print() }, '🖶  Imprimer (A3 paysage)'))),
+      h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer (A3 paysage)'))),
     h('p', { class: 'aide ecran' }, 'Meilleure évaluation obtenue dans les contrats sommatifs de toutes les matières (à égalité, la plus récente). Dans chaque case : niveau, date et matière ('
       + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'),
     h('div', { class: 'tableau-validation' }, h('table', { class: 'validation' },

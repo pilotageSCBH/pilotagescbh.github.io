@@ -2,7 +2,7 @@
 // Par semaine : vacances / autres, apprentis ; par jour : évènement ; par matière : séance (ou texte libre) et note.
 // Les séances se déplacent par glisser-déposer : les autres séances de la matière se décalent (semaines de cours seulement).
 import { db } from '../api.js';
-import { h, vider, toast, erreur, fenetre } from '../ui.js';
+import { h, vider, toast, erreur, fenetre, imprimer } from '../ui.js';
 
 const SEM_AN = 45;
 const VACANCES = ['Vacances', 'Epreuves', 'Stage'];
@@ -127,6 +127,7 @@ export async function pageProgression(zone, arg, ctx) {
       h('div', { class: 'actions-page' },
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
+        h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
           h('option', { value: 'toutes', selected: filtre === 'toutes' }, 'Toutes les matières'),
           ctx.matieres.map((m) => h('option', { value: m.id, selected: String(m.id) === filtre }, m.nom)))));

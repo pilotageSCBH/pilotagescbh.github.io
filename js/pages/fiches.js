@@ -1,7 +1,7 @@
 // Fiches d'une séquence : préparation de séquence, contrat sommatif, puis pour chaque séance sa fiche de déroulement
 // et son contrat formatif. Sans séquence choisie : liste des séquences de chaque matière.
 import { db } from '../api.js';
-import { h, vider, champ, erreur, heures, ajusterTout } from '../ui.js';
+import { h, vider, champ, erreur, heures, ajusterTout, imprimer } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
 
 const PHASES = ['1. Lancement (contexte, objectifs)', '2. Découverte / recherche', '3. Structuration (synthèse)',
@@ -39,7 +39,7 @@ export async function pageFiches(zone, arg, ctx) {
       h('div', { class: 'actions-page' },
         h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
-        h('button', { class: 'btn', onclick: () => window.print() }, '🖶  Imprimer'),
+        h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet ? 'actif' : '' }, t))),
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,

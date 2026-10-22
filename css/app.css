@@ -389,7 +389,6 @@ table.validation { border-collapse: collapse; font-size: 11px; }
 
 /* ------------------------------------------------------------------ impression */
 @media print {
-  @page { size: A4 portrait; margin: 10mm; }
   body { background: #fff; }
   .menu, .ecran, #toast, .barre-contrat button, .mini-actions, .lien, .icone, .legende .aide { display: none !important; }
   .cadre { display: block; }
@@ -402,5 +401,68 @@ table.validation { border-collapse: collapse; font-size: 11px; }
   tr, .rubrique { break-inside: avoid; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-@page validation { size: A3 landscape; margin: 8mm; }
-@media print { .tableau-validation { page: validation; } .validation th, .validation .nom { position: static; } }
+@media print { .validation th, .validation .nom { position: static; } }
+
+/* ------------------------------------------------------------------ tableau de bord : suivi */
+.lien-tuile { text-decoration: none; color: inherit; border-top-color: var(--anis); }
+.lien-tuile:hover { box-shadow: 0 0 0 2px var(--teal); }
+
+/* ------------------------------------------------------------------ couvertures */
+.tableau-couverture { overflow: auto; background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); max-height: calc(100vh - 260px); }
+table.couverture { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.couverture th { background: var(--fonce); color: #fff; padding: 5px 6px; border: 1px solid #fff; position: sticky; top: 0; z-index: 2; font-size: 12px; }
+.couverture th.mat { background: var(--couleur); }
+.couverture th.sous { top: 27px; font-weight: 600; font-size: 11px; background: var(--teal); }
+.couverture td { border-bottom: 1px solid var(--ligne); padding: 4px 6px; vertical-align: middle; }
+.couverture td.code { font-weight: 800; color: var(--fonce); white-space: nowrap; }
+.couverture td.lib { min-width: 260px; }
+.couverture .taxo { color: var(--gris); font-size: 11.5px; }
+.couverture td.prevue, .couverture td.nb { text-align: center; border-left: 1px solid #EEF2F1; width: 46px; }
+.couverture td.nb { font-weight: 700; }
+.couverture td.ok { background: #E3F2DC; }
+.couverture td.attente { background: #FCF2D2; }
+.couverture td.hors { background: #DCEAF7; }
+.couverture td.total { text-align: center; font-weight: 800; }
+.couverture td.statut { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.st-ok { color: #2E6B0E; } .st-prevue { color: #8A4B00; } .st-non { color: #8E1C10; }
+tr.ligne-groupe td { background: var(--clair); color: var(--fonce); font-weight: 800; }
+.legende-couv { display: flex; gap: 8px; font-size: 12px; margin: 10px 0; }
+.legende-couv span { padding: 3px 9px; border-radius: 4px; }
+.legende-couv .ok { background: #E3F2DC; } .legende-couv .attente { background: #FCF2D2; } .legende-couv .hors { background: #DCEAF7; }
+
+/* ------------------------------------------------------------------ synthèse */
+.bloc-synthese { background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); margin-bottom: 16px; overflow: hidden; border-top: 5px solid var(--couleur); }
+.tete-synthese { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
+.tete-synthese h2 { font-size: 17px; color: var(--couleur); }
+.tete-synthese span { color: var(--gris); font-size: 13px; }
+.bloc-synthese .table-fiche { border-left: 0; border-right: 0; }
+.bloc-synthese .vide { padding: 0 14px 12px; }
+table.synthese td:nth-child(2) { width: 18%; } table.synthese td:nth-child(3) { width: 30%; } table.synthese td:nth-child(4) { width: 40%; }
+
+/* ------------------------------------------------------------------ impressions des tableaux larges */
+@media print {
+  .tableau-progression { zoom: .72; overflow: visible; max-height: none; box-shadow: none; }
+  .tableau-progression th, .tableau-progression .col-sem, tr.ligne-mois td { position: static !important; }
+  .tableau-couverture { overflow: visible; max-height: none; box-shadow: none; }
+  .couverture th { position: static; }
+  .couverture input[type=checkbox] { -webkit-appearance: checkbox; }
+  .sequence { box-shadow: none; break-inside: auto; }
+  table.seances { zoom: .8; }
+  .bloc-synthese .vide { display: none; }
+  .poignee-cell .poignee { visibility: hidden; }
+  table.seances col:first-child { width: 1% !important; }
+  .bloc-synthese { box-shadow: none; break-inside: avoid; }
+  .legende, .a-placer, .actions-page, .chiffres-cles, .legende-couv { display: none !important; }
+  select.mini, select.champ { appearance: none; border: 0; background: transparent; }
+  .ajout { display: none; }
+}
+
+.texte-impression { display: none; }
+@media print {
+  textarea.champ { display: none !important; }
+  .texte-impression { display: block; white-space: pre-wrap; font-size: inherit; padding: 3px 5px; }
+  .rubrique > .texte-impression { border: 1px solid var(--ligne); border-top: 0; padding: 8px 10px; min-height: 30px; }
+  table.seances { zoom: 1; min-width: 0; }
+  .seances td, .seances th { font-size: 10px; }
+}
+@media print { .btn.fiches { display: none !important; } .tete-sequence + .objectif-sequence, .tete-sequence { break-after: avoid; } }
