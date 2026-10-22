@@ -234,29 +234,30 @@ export async function pageProgression(zone, arg, ctx) {
       }
       return r;
     };
-    const fond = (w, extra = '') => h('div', { class: 'frise-case' + (semaines.get(w)?.vacances ? ' vac-' + cls(semaines.get(w).vacances) : '') + (w === aujourdhui ? ' auj' : '') + extra,
+    const mp = (w) => (jourDe(w, 2).getMonth() % 2 ? ' mp' : '');
+    const fond = (w, extra = '') => h('div', { class: 'frise-case' + mp(w) + (semaines.get(w)?.vacances ? ' vac-' + cls(semaines.get(w).vacances) : '') + (w === aujourdhui ? ' auj' : '') + extra,
       style: { gridColumn: col(w), gridRow: '1 / -1' } });
 
     // mois et semaines
     const moisL = plages((w) => { const d = jourDe(w, 2); return `${MOIS[d.getMonth()]} ${d.getFullYear()}`; });
     const tete = [
       ligne('frise-mois', '', moisL.map((p) => h('div', { class: 'frise-mois-lib', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}` } }, p.v))),
-      ligne('frise-semaines', 'Semaine', semaines0.map((w) => h('div', { class: 'frise-sem' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w) },
-        title: libSemaine(w) }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, jj(lundi(w)))))),
+      ligne('frise-semaines', 'Semaine', semaines0.map((w) => h('div', { class: 'frise-sem' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w) },
+        title: libSemaine(w) + (w === aujourdhui ? ' · semaine en cours' : '') }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, jj(lundi(w)))))),
     ];
     // calendrier commun : vacances, apprentis, évènements
     const vacL = plages((w) => semaines.get(w)?.vacances || '');
     const appL = plages((w) => semaines.get(w)?.apprentis === 'PFMP' ? 'PFMP' : '');
     const commun = [
-      ligne('frise-commun', 'Vacances / autres', semaines0.map((w) => h('div', { class: 'frise-case clic' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+      ligne('frise-commun', '🏖  Vacances / autres', semaines0.map((w) => h('div', { class: 'frise-case clic' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
         title: `${libSemaine(w)} : cliquer pour choisir`, onclick: () => choisirSemaine(w, 'vacances', VACANCES) })),
         vacL.map((p) => h('div', { class: 'frise-bande vac-' + cls(p.v), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, p.v))),
-      ligne('frise-commun', 'Apprentis', semaines0.map((w) => h('div', { class: 'frise-case clic' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+      ligne('frise-commun', '🏭  Apprentis', semaines0.map((w) => h('div', { class: 'frise-case clic' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
         title: `${libSemaine(w)} : apprentis ${semaines.get(w)?.apprentis || '—'} (cliquer pour choisir)`, onclick: () => choisirSemaine(w, 'apprentis', APPRENTIS) })),
         appL.map((p) => h('div', { class: 'frise-bande frise-pfmp', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, 'PFMP'))),
-      ligne('frise-commun', 'Évènements', semaines0.map((w) => {
+      ligne('frise-commun', '📌  Évènements', semaines0.map((w) => {
         const evs = JOURS.map((_, k) => ({ k, ev: jours.get(w * 7 + k) || '' })).filter((x) => x.ev);
-        return h('div', { class: 'frise-case clic frise-ev' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+        return h('div', { class: 'frise-case clic frise-ev' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
           title: evs.length ? evs.map((x) => `${jourDe(w, x.k).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} : ${x.ev}`).join('\n') : `${libSemaine(w)} : cliquer pour ajouter un évènement`,
           onclick: () => choisirJour(w) }, evs.map((x) => h('i', { class: 'ev-' + cls(EVENEMENTS.includes(x.ev) ? x.ev : 'autre') }, '▲')));
       })),
@@ -275,8 +276,10 @@ export async function pageProgression(zone, arg, ctx) {
       });
       const seqL = plages((w) => seqDe[w - w0]?.id || '');
       const blocs = plages((w) => cleDe(m, w));
+      const nP = toutes.filter((x) => placees.has(x.id)).length;
       const lib = h('div', { class: 'frise-lib frise-mat', style: { '--couleur': m.couleur } }, h('b', {}, m.nom),
-        h('span', {}, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
+        h('span', {}, `${nP} / ${toutes.length} séances placées`),
+        h('div', { class: 'frise-jauge' }, h('i', { style: { width: (toutes.length ? Math.round((nP / toutes.length) * 100) : 0) + '%' } })));
       const ligneMat = h('div', { class: 'frise-ligne frise-matiere', style: { gridTemplateColumns: `var(--frise-lib) repeat(${N}, var(--frise-sem))`, '--couleur': m.couleur } },
         lib,
         semaines0.map((w) => {
@@ -297,15 +300,15 @@ export async function pageProgression(zone, arg, ctx) {
           return c;
         }),
         seqL.map((p) => { const sq = seqDe[p.debut - w0];
-          return h('div', { class: 'frise-seq', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 }, title: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
-            `Séq. ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}`); }),
+          return h('div', { class: 'frise-seq' + (sq.numero % 2 ? '' : ' seq-paire'), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 }, title: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
+            h('b', {}, `S${sq.numero}`), sq.intitule || `Séquence ${sq.numero}`); }),
         blocs.map((p) => {
           const c = caseDe(m, p.debut), x = seanceDe(m, p.debut);
           const suite = x && blocs.some((q) => q !== p && q.v === p.v && q.fin < p.debut);
           const pb = x && !suite ? problemes(x) : [];
           const nbc = x ? (commentaires.get(x.id) || []).length : 0;
           const n = p.fin - p.debut + 1;
-          const b = h('div', { class: 'frise-bloc' + (x ? '' : ' libre') + (suite ? ' suite' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 2 },
+          const b = h('div', { class: 'frise-bloc' + (x ? (x.seq.numero % 2 ? '' : ' seq-paire') : ' libre') + (suite ? ' suite' : '') + (n === 1 ? ' court' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 2 },
             draggable: modif ? 'true' : null,
             title: x ? `${num(x)} · ${x.titre || 'Séance sans titre'}\nSéquence ${x.seq.numero}${x.seq.intitule ? ' · ' + x.seq.intitule : ''}\n${libSemaine(p.debut)}${n > 1 ? ` → ${libSemaine(p.fin)} (${n} semaines)` : ''}`
               + (x.objectif_inter ? `\nObjectif : ${x.objectif_inter}` : '') + (c?.note ? `\nNote : ${c.note}` : '')
