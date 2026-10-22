@@ -65,7 +65,7 @@ export async function pageSequencage(zone, id, ctx) {
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
         champ(s.objectif, maj('objectif'), { multi: true, lecture: !modif, placeholder: 'Objectif principal de la séquence' })),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'seances' },
-        h('colgroup', {}, [3, 4, 12, 5.5, 11.5, 17, 11, 12, 12, 12].map((w) => h('col', { style: { width: w + '%' } }))),
+        h('colgroup', {}, [3, 4, 11, 5, 10, 11, 25, 10, 10.5, 10.5].map((w) => h('col', { style: { width: w + '%' } }))),
         h('thead', {}, h('tr', {},
           ['', 'N°', 'Séance', 'Durée', 'Prérequis (antériorités)', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Compétences', 'Savoirs associés']
             .map((t) => h('th', {}, t)))),
