@@ -10,10 +10,6 @@ export async function pageAccueil(zone, _arg, ctx) {
     sequences.length ? db.lire('seances', `sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : [],
     db.lire('progression_cases', `promotion_id=eq.${p}`).catch(() => []), ctx.referentiel()]);
   const placees = new Set(cases.filter((c) => c.seance_id).map((c) => c.seance_id));
-  const notesSom = await db.rpc('notes_sommatives', { p }).catch(() => []);
-  const contratsNotes = new Set((notesSom || []).map((n) => n.contrat_id));
-  const contrats = contratsNotes.size ? await db.lire('contrats', `id=in.(${[...contratsNotes].join(',')})`).catch(() => []) : [];
-  const nEvalues = new Set(contrats.map((c) => c.sequence_id)).size;
   const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   // carte « indicateur » : icône, libellé, valeur, précision, jauge (pourcentage) et lien
   const kpi = (icone, libelle, valeur, detail, pourcent, lien, teinte = '') => h('a', { class: 'kpi ' + teinte, href: lien },
@@ -48,8 +44,6 @@ export async function pageAccueil(zone, _arg, ctx) {
       h('div', { class: 'ouvrir' }, ctx.peutMatiere(m.id) ? '▶  Ouvrir et modifier' : '▶  Consulter'));
   });
 
-  const nPlacees = seances.filter((x) => remplie(x) && placees.has(x.id)).length;
-  const totSeqRemplies = sequences.length;
   vider(zone,
     h('header', { class: 'entete-page' },
       h('div', {}, h('h1', {}, 'Tableau de bord'),
@@ -60,11 +54,9 @@ export async function pageAccueil(zone, _arg, ctx) {
       kpi('🛠', 'Apprentis', String(apprentis), 'formés en alternance', pc(apprentis, enFormation.length), '#/eleves', 'orange'),
       kpi('🎓', 'Scolaires', String(enFormation.length - apprentis), 'sous statut scolaire', pc(enFormation.length - apprentis, enFormation.length), '#/eleves')),
     h('h2', { class: 'titre-section' }, 'Suivi de la promotion'),
-    h('section', { class: 'kpi-ligne quatre' },
-      kpi('📅', 'Progression', `${nPlacees} / ${totS}`, 'séances placées dans le calendrier', pc(nPlacees, totS), '#/progression'),
+    h('section', { class: 'kpi-ligne deux' },
       kpi('🧩', 'Compétences', `${compsTraitees.size} / ${ref.competences.length}`, 'traitées dans au moins une séance', pc(compsTraitees.size, ref.competences.length), '#/couverture/competences'),
-      kpi('📚', 'Savoirs associés', `${savTraites.size} / ${ref.savoirs.length}`, 'traités dans au moins une séance', pc(savTraites.size, ref.savoirs.length), '#/couverture/savoirs'),
-      kpi('✅', 'Évaluations sommatives', `${nEvalues} / ${totSeqRemplies}`, 'séquences dont le contrat est noté', pc(nEvalues, totSeqRemplies), '#/validation')),
+      kpi('📚', 'Savoirs associés', `${savTraites.size} / ${ref.savoirs.length}`, 'traités dans au moins une séance', pc(savTraites.size, ref.savoirs.length), '#/couverture/savoirs')),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),
     h('h2', { class: 'titre-section' }, 'Mode d’emploi'),
