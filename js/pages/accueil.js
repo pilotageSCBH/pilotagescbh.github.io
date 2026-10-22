@@ -18,6 +18,8 @@ export async function pageAccueil(zone, _arg, ctx) {
     pourcent !== null ? h('div', { class: 'kpi-jauge' }, h('i', { style: { width: Math.min(100, pourcent) + '%' } })) : null,
     h('div', { class: 'kpi-detail' }, detail));
   const compsTraitees = new Set(seances.flatMap((x) => x.competences || []).filter((c) => ref.comp[c]));
+  const coeur = ref.competences.filter((c) => !ctx.transversale(c.code)), trans = ref.competences.filter((c) => ctx.transversale(c.code));
+  const coeurT = coeur.filter((c) => compsTraitees.has(c.code)).length, transT = trans.filter((c) => compsTraitees.has(c.code)).length;
   const savTraites = new Set(seances.flatMap((x) => x.savoirs || []).filter((c) => ref.sav[c]));
   const enFormation = eleves.filter((e) => !e.arret);
   const arrets = eleves.length - enFormation.length;
@@ -54,8 +56,9 @@ export async function pageAccueil(zone, _arg, ctx) {
       kpi('🛠', 'Apprentis', String(apprentis), 'formés en alternance', pc(apprentis, enFormation.length), '#/eleves', 'orange'),
       kpi('🎓', 'Scolaires', String(enFormation.length - apprentis), 'sous statut scolaire', pc(enFormation.length - apprentis, enFormation.length), '#/eleves')),
     h('h2', { class: 'titre-section' }, 'Suivi de la promotion'),
-    h('section', { class: 'kpi-ligne deux' },
-      kpi('🧩', 'Compétences cœur de métier', `${compsTraitees.size} / ${ref.competences.length}`, 'traitées dans au moins une séance', pc(compsTraitees.size, ref.competences.length), '#/couverture/competences'),
+    h('section', { class: 'kpi-ligne' },
+      kpi('🧩', 'Compétences cœur de métier', `${coeurT} / ${coeur.length}`, 'C1 à C4 · traitées dans au moins une séance', pc(coeurT, coeur.length), '#/couverture/competences'),
+      kpi('🤝', 'Compétences transversales', `${transT} / ${trans.length}`, 'C5 et C6 · traitées dans au moins une séance', pc(transT, trans.length), '#/couverture/competences'),
       kpi('📚', 'Savoirs associés', `${savTraites.size} / ${ref.savoirs.length}`, 'traités dans au moins une séance', pc(savTraites.size, ref.savoirs.length), '#/couverture/savoirs')),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),

@@ -64,6 +64,9 @@ export const ctx = {
     }
     return ctx.ref;
   },
+  // compétences C1 à C4 : cœur de métier ; à partir de C5-1 : transversales
+  transversale: (code) => Number((String(code).match(/^C(\d+)/) || [])[1] || 0) >= 5,
+  categorie: (code) => (ctx.transversale(code) ? 'Compétences transversales' : 'Compétences cœur de métier'),
   // code court d'une matière (PR, AD, OR, LA, EA, AT…)
   codeMat: (m) => ({ Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' }[m?.abreviation] || (m?.abreviation || m?.nom || '?').slice(0, 2).toUpperCase()),
   enseignantsDe: (matiereId) => ctx.enseignants.filter((e) => (e.matieres || []).map(Number).includes(Number(matiereId))).map((e) => e.nom),

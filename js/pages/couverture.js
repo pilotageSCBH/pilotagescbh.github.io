@@ -40,10 +40,15 @@ export async function pageCouverture(zone, arg, ctx) {
     const compte = { couverte: 0, prevue: 0, non: 0 };
     items.forEach((it) => compte[statut(it)]++);
     const lignes = [];
-    let g = null;
+    let g = null, cat = null;
     for (const it of items) {
       const st = statut(it);
       if (filtre !== 'tout' && st !== filtre) continue;
+      if (type === 'competence' && ctx.categorie(it.code) !== cat) {
+        cat = ctx.categorie(it.code);
+        lignes.push(h('tr', { class: 'ligne-categorie' + (ctx.transversale(it.code) ? ' transversale' : '') },
+          h('td', { colspan: 4 + ctx.matieres.length * 2 }, cat.toUpperCase(), h('span', {}, ctx.transversale(it.code) ? '  ·  C5 et C6' : '  ·  C1 à C4'))));
+      }
       if (groupe(it) !== g) { g = groupe(it); lignes.push(h('tr', { class: 'ligne-groupe' }, h('td', { colspan: 3 + ctx.matieres.length * 2 }, g))); }
       let total = 0;
       lignes.push(h('tr', {},
@@ -72,7 +77,11 @@ export async function pageCouverture(zone, arg, ctx) {
           boutonAnnuler(ctx, 'couverture'),
           h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'))),
       h('section', { class: 'chiffres-cles' },
-        h('div', { class: 'tuile' }, h('strong', {}, `${compte.couverte} / ${items.length}`), h('span', {}, 'couvertes (au moins une séance)')),
+        type === 'competence' ? [false, true].map((tr) => {
+          const its = items.filter((it) => ctx.transversale(it.code) === tr);
+          return h('div', { class: 'tuile' + (tr ? ' transversale' : '') }, h('strong', {}, `${its.filter((it) => statut(it) === 'couverte').length} / ${its.length}`),
+            h('span', {}, `compétences ${tr ? 'transversales' : 'cœur de métier'} couvertes`));
+        }) : h('div', { class: 'tuile' }, h('strong', {}, `${compte.couverte} / ${items.length}`), h('span', {}, 'couvertes (au moins une séance)')),
         h('div', { class: 'tuile' }, h('strong', {}, compte.prevue), h('span', {}, 'prévues, pas encore traitées')),
         h('div', { class: 'tuile' }, h('strong', {}, compte.non), h('span', {}, 'non couvertes'))),
       h('p', { class: 'legende-couv' }, h('span', { class: 'ok' }, 'prévue et traitée'), h('span', { class: 'attente' }, 'prévue, sans séance'),
@@ -91,22 +100,41 @@ export async function pageCouverture(zone, arg, ctx) {
     const nom = type === 'competence' ? 'compétences' : 'savoirs';
     const ST = [{ nom: 'Couvertes', couleur: 'var(--g-ok)' }, { nom: 'Prévues, pas encore traitées', couleur: 'var(--g-attente)' }, { nom: 'Non couvertes', couleur: 'var(--g-na)' }];
     const groupes = [...new Set(items.map(groupe))];
+    const anneauDe = (its, titre, sous) => {
+      const c = [0, 0, 0]; its.forEach((it) => { c[['couverte', 'prevue', 'non'].indexOf(statut(it))]++; });
+      return carteGraph(titre, sous, anneau(ST.map((x, i) => ({ ...x, valeur: c[i] })), { centre: `${Math.round((c[0] / Math.max(1, its.length)) * 100)} %`, sous: 'couvertes' }));
+    };
+    const familles = (its, titre) => carteGraph(titre, 'part des compétences de chaque famille', empileH([...new Set(its.map(groupe))].map((g) => {
+      const r = [0, 0, 0]; its.filter((it) => groupe(it) === g).forEach((it) => { r[['couverte', 'prevue', 'non'].indexOf(statut(it))]++; });
+      return { label: g.split(' · ')[0], valeurs: r };
+    }), ST, { pourcent: true }));
+    if (type === 'competence') {
+      const coeur = items.filter((it) => !ctx.transversale(it.code)), trans = items.filter((it) => ctx.transversale(it.code));
+      return h('section', { class: 'graphiques' },
+        anneauDe(coeur, 'Compétences cœur de métier', `C1 à C4 · ${coeur.length} compétences`),
+        anneauDe(trans, 'Compétences transversales', `C5 et C6 · ${trans.length} compétences`),
+        parMatiere(), familles(coeur, 'Familles cœur de métier (C1 à C4)'), familles(trans, 'Familles transversales (C5 et C6)'));
+    }
     return h('section', { class: 'graphiques' },
       carteGraph(`Couverture des ${nom}`, `${items.length} ${nom} du référentiel`, anneau(ST.map((x, i) => ({ ...x, valeur: [compte.couverte, compte.prevue, compte.non][i] })),
         { centre: `${Math.round((compte.couverte / Math.max(1, items.length)) * 100)} %`, sous: 'couvertes' })),
-      carteGraph('Par matière', `${nom} prévues (cochées) et traitées (au moins une séance)`, empileH(ctx.matieres.map((m) => {
+      parMatiere(),
+      carteGraph('Par groupe de savoirs', 'part des codes de chaque groupe', empileH(groupes.map((g) => {
+        const its = items.filter((it) => groupe(it) === g);
+        const r = [0, 0, 0]; its.forEach((it) => { r[['couverte', 'prevue', 'non'].indexOf(statut(it))]++; });
+        return { label: g.split(' · ')[0], valeurs: r };
+      }), ST, { pourcent: true })));
+
+    function parMatiere() {
+      return carteGraph('Par matière', `${nom} prévues (cochées) et traitées (au moins une séance)`, empileH(ctx.matieres.map((m) => {
         let ok = 0, att = 0, hors = 0;
         for (const it of items) {
           const p = prevues.has(`${m.id}:${it.code}`), t = (traitees.get(`${m.id}:${it.code}`) || []).length > 0;
           if (p && t) ok++; else if (p) att++; else if (t) hors++;
         }
         return { label: m.nom, valeurs: [ok, att, hors] };
-      }), [{ nom: 'Prévues et traitées', couleur: 'var(--g-ok)' }, { nom: 'Prévues, sans séance', couleur: 'var(--g-attente)' }, { nom: 'Traitées sans être prévues', couleur: 'var(--g-hors)' }])),
-      carteGraph(type === 'competence' ? 'Par famille de compétences' : 'Par groupe de savoirs', 'part des codes de chaque groupe', empileH(groupes.map((g) => {
-        const its = items.filter((it) => groupe(it) === g);
-        const r = [0, 0, 0]; its.forEach((it) => { r[['couverte', 'prevue', 'non'].indexOf(statut(it))]++; });
-        return { label: g.split(' · ')[0], valeurs: r };
-      }), ST, { pourcent: true })));
+      }), [{ nom: 'Prévues et traitées', couleur: 'var(--g-ok)' }, { nom: 'Prévues, sans séance', couleur: 'var(--g-attente)' }, { nom: 'Traitées sans être prévues', couleur: 'var(--g-hors)' }]));
+    }
   }
 
   async function cocher(m, code, oui, caseACocher) {

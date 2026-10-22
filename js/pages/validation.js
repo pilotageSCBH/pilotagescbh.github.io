@@ -34,6 +34,9 @@ export async function pageValidation(zone, _arg, ctx) {
   const comps = ref.competences;
   const familles = [];
   for (const c of comps) { const f = familles[familles.length - 1]; if (f && f.code === c.famille) f.n++; else familles.push({ code: c.famille, lib: c.famille_libelle, n: 1 }); }
+  // séparation cœur de métier (C1 à C4) / transversales (à partir de C5-1)
+  const premiereTransCode = comps.find((c) => ctx.transversale(c.code))?.code;
+  const premiereTrans = (famille) => comps.find((c) => c.famille === famille)?.code === premiereTransCode;
   const jj = (d) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '');
 
   vider(zone,
@@ -44,16 +47,19 @@ export async function pageValidation(zone, _arg, ctx) {
       + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'),
     h('div', { class: 'tableau-validation' }, h('table', { class: 'validation' },
       h('thead', {},
-        h('tr', {}, h('th', { rowspan: 2, class: 'nom' }, 'Élève'), familles.map((f) => h('th', { colspan: f.n, class: 'famille', title: f.lib }, f.code)),
-          ['A', 'EVA', 'NA'].map((t) => h('th', { rowspan: 2, class: 'total niv-' + t.toLowerCase() }, t))),
-        h('tr', {}, comps.map((c) => h('th', { class: 'comp', title: `${c.code} · ${c.libelle}` }, h('span', {}, c.code))))),
+        h('tr', { class: 'categories' }, h('th', { rowspan: 3, class: 'nom' }, 'Élève'),
+          [false, true].map((tr) => { const n = comps.filter((c) => ctx.transversale(c.code) === tr).length;
+            return n ? h('th', { colspan: n, class: 'categorie' + (tr ? ' transversale' : '') }, tr ? 'Compétences transversales (C5 · C6)' : 'Compétences cœur de métier (C1 à C4)') : null; }),
+          ['A', 'EVA', 'NA'].map((t) => h('th', { rowspan: 3, class: 'total niv-' + t.toLowerCase() }, t))),
+        h('tr', {}, familles.map((f) => h('th', { colspan: f.n, class: 'famille' + (premiereTrans(f.code) ? ' debut-trans' : ''), title: f.lib }, f.code))),
+        h('tr', {}, comps.map((c) => h('th', { class: 'comp' + (c.code === premiereTransCode ? ' debut-trans' : ''), title: `${c.code} · ${c.libelle}` }, h('span', {}, c.code))))),
       h('tbody', {}, eleves.map((e) => {
         const cpt = { A: 0, EVA: 0, NA: 0 };
         const cells = comps.map((c) => {
           const b = best.get(`${e.id}:${c.code}`);
           const nv = niveau(b ? b.n : null);
           if (b) cpt[nv.code]++;
-          return h('td', { class: 'niv-' + nv.code.toLowerCase(), title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)` : `${c.code} : non évaluée` },
+          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : ''), title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)` : `${c.code} : non évaluée` },
             h('b', {}, nv.code), b ? h('small', {}, jj(b.date)) : null, b ? h('small', {}, b.mat) : null);
         });
         return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom), cells,
@@ -70,12 +76,15 @@ export async function pageValidation(zone, _arg, ctx) {
       for (const e of es) for (const c of cs) { const b = best.get(`${e.id}:${c.code}`); const k = b ? ['A', 'EVA', 'NA'].indexOf(niveau(b.n).code) : 3; r[k]++; }
       return r;
     };
-    const tout = compte(eleves, comps);
+    const parts = [['Compétences cœur de métier', 'C1 à C4', comps.filter((c) => !ctx.transversale(c.code))],
+      ['Compétences transversales', 'C5 et C6', comps.filter((c) => ctx.transversale(c.code))]];
     return h('section', { class: 'graphiques ecran-et-impression' },
-      carteGraph('Bilan de la promotion', 'toutes les compétences de tous les élèves', anneau(SERIES.map((x, i) => ({ ...x, valeur: tout[i] })),
-        { centre: `${Math.round((tout[0] / Math.max(1, tout.reduce((a, b) => a + b, 0))) * 100)} %`, sous: 'acquises' })),
-      carteGraph('Par famille de compétences', 'répartition des niveaux (tous élèves)', empileH(familles.map((f) => ({
-        label: f.code, valeurs: compte(eleves, comps.filter((c) => c.famille === f.code)) })), SERIES, { pourcent: true })),
-      carteGraph('Par élève', 'nombre de compétences à chaque niveau', empileH(eleves.map((e) => ({ label: `${e.nom} ${e.prenom}`, valeurs: compte([e], comps) })), SERIES)));
+      parts.map(([titre, codes, cs]) => { const t = compte(eleves, cs);
+        return carteGraph(titre, `${codes} · bilan de la promotion (${cs.length} compétences × ${eleves.length} élèves)`, anneau(SERIES.map((x, i) => ({ ...x, valeur: t[i] })),
+          { centre: `${Math.round((t[0] / Math.max(1, t.reduce((a, b) => a + b, 0))) * 100)} %`, sous: 'acquises' })); }),
+      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par famille`, `${codes} · répartition des niveaux (tous élèves)`,
+        empileH([...new Set(cs.map((c) => c.famille))].map((f) => ({ label: f, valeurs: compte(eleves, cs.filter((c) => c.famille === f)) })), SERIES, { pourcent: true }))),
+      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par élève`, `${codes} · nombre de compétences à chaque niveau`,
+        empileH(eleves.map((e) => ({ label: `${e.nom} ${e.prenom}`, valeurs: compte([e], cs) })), SERIES))));
   }
 }
