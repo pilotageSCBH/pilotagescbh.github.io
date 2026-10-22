@@ -120,7 +120,7 @@ const AVEC_RETOUR = { Prefer: 'return=representation' };
 // signalé après chaque enregistrement (le bouton « Annuler » se met à jour)
 export const MODIFICATION = 'donnees-modifiees';
 const signaler = (r) => { window.dispatchEvent(new Event(MODIFICATION)); return r; };
-const LECTURES = new Set(['mon_profil', 'notes_sommatives']);
+const LECTURES = new Set(['mon_profil', 'notes_sommatives', 'presence', 'bilan_connexions']);
 
 export const db = {
   // requete : filtres et tri à la façon de Supabase, ex. « matiere_id=eq.3&order=numero »

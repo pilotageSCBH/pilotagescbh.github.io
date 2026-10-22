@@ -175,6 +175,29 @@ export const rafraichirMenu = () => {
   if (ancien) ancien.replaceWith(menu(route()));
 };
 
+// ------------------------------------------------------------------------------------------- présence
+// signal toutes les minutes tant que l'application est affichée et utilisée (souris, clavier dans les 5 dernières
+// minutes) : l'administrateur voit le nombre de connexions et le temps passé par chacun
+const CLE_PRESENCE = 'pilotage-scbh-connexion';
+let minuteurPresence = null, derniereAction = Date.now();
+['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'].forEach((t) => window.addEventListener(t, () => { derniereAction = Date.now(); }, { passive: true }));
+async function signalerPresence() {
+  if (!ctx.profil || !estConnecte()) return;
+  if (document.visibilityState !== 'visible' || Date.now() - derniereAction > 5 * 60000) return;
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(CLE_PRESENCE)); } catch { /* sans stockage */ }
+  try {
+    const id = await db.rpc('presence', { c: c && c.profil === ctx.profil.id ? c.id : null });
+    try { localStorage.setItem(CLE_PRESENCE, JSON.stringify({ profil: ctx.profil.id, id })); } catch { /* sans stockage */ }
+  } catch { /* fonction absente ou réseau : sans importance */ }
+}
+function demarrerPresence() {
+  clearInterval(minuteurPresence);
+  derniereAction = Date.now();
+  signalerPresence();
+  minuteurPresence = setInterval(signalerPresence, 60000);
+}
+
 async function demarrer() {
   try {
     const profil = await db.rpc('mon_profil');
@@ -183,6 +206,7 @@ async function demarrer() {
     ctx.profil = { ...profil, matieres: (profil.matieres || []).map(Number) };
     await ctx.chargerBase();
     afficher();
+    demarrerPresence();
   } catch (e) {
     ctx.profil = null;
     if (!estConnecte()) return ecranConnexion(e.message);

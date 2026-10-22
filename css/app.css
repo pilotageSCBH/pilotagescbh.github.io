@@ -545,3 +545,4 @@ input.note-saisie, input.coef-res { width: 64px; text-align: center; padding: 3p
 .formulaire label.interrupteur input { width: auto; margin: 0; }
 .commentaires, .formulaire > textarea { grid-column: 1 / -1; }
 .resultats thead tr.coefs th { color: var(--texte); background: #FFF8D6; }
+.tete-bloc { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }

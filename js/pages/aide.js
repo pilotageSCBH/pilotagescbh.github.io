@@ -53,6 +53,7 @@ const SECTIONS = [
   ['admin', 'Administration (administrateur)', [
     ['Autoriser un collègue', "Administration → « Autoriser un collègue » : identifiant, nom, enseignant de l'équipe correspondant. Envoyez-lui l'adresse du site : il choisit son code à sa première connexion."],
     ['Code oublié, départ', "« Nouveau code » donne un code provisoire. Décocher l'accès suspend immédiatement un compte."],
+    ['Suivi des connexions', "Administration → « Suivi des connexions » : pour chaque compte, nombre de connexions, temps total et moyen, dernière connexion, sur 7 jours, 30 jours, depuis la rentrée ou depuis le début. Cliquez une ligne pour le détail (date, heures, durée). Le temps n'est compté que lorsque l'application est affichée et utilisée ; après 30 minutes sans activité, une nouvelle connexion commence."],
     ['Compte en lecture seule', "Pour le DDFPT (ou une inspection) : autorisez le compte avec le rôle « Lecture seule ». Il voit toutes les pages et peut imprimer, mais ne peut rien modifier."],
     ['Élèves', "Seul l'administrateur ajoute, modifie ou supprime les élèves (page Élèves) ; « Imprimer la liste » imprime la liste de la promotion."],
     ['Équipe et matières', "« Matières et équipe » : couleurs et noms des matières, enseignants et matières qu'ils peuvent modifier."],

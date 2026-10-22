@@ -50,7 +50,63 @@ export async function pageAdmin(zone, _arg, ctx) {
               h('td', {}, moi ? null : h('button', { class: 'btn petit', onclick: () => nouveauCode(p) }, 'Nouveau code')));
           })))),
       h('p', { class: 'aide' }, 'Suspendre un compte coupe immédiatement son accès. Pour supprimer définitivement un compte : Supabase → Authentication → Users.'),
+      connexions(profils),
       reprise());
+  }
+
+  // suivi des connexions : nombre de connexions, temps passé, dernière connexion (par compte, sur une période)
+  let periode = '30';
+  function connexions(profils) {
+    const corps = h('div', {}, h('p', { class: 'aide' }, 'Chargement…'));
+    const duree = (s) => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
+    const ilya = (d) => {
+      if (!d) return 'jamais';
+      const minuit = (x) => { const y = new Date(x); y.setHours(0, 0, 0, 0); return y; };
+      const j = Math.round((minuit(Date.now()) - minuit(d)) / 86400000);
+      const date = new Date(d).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return (j === 0 ? 'aujourd’hui' : j === 1 ? 'hier' : `il y a ${j} j`) + ` · ${date}`;
+    };
+    async function remplir() {
+      const d = new Date();
+      if (periode === 'rentree') { d.setFullYear(d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1, 7, 25); d.setHours(0, 0, 0, 0); }
+      else if (periode === 'tout') d.setFullYear(2000);
+      else d.setDate(d.getDate() - Number(periode));
+      try {
+        const bilan = new Map((await db.rpc('bilan_connexions', { depuis: d.toISOString() })).map((b) => [b.profil_id, b]));
+        const lignes = profils.map((p) => ({ p, b: bilan.get(p.id) || { nb: 0, secondes: 0, derniere: null } }))
+          .sort((x, y) => (y.b.derniere || '').localeCompare(x.b.derniere || ''));
+        vider(corps, h('table', { class: 'liste' },
+          h('thead', {}, h('tr', {}, ['Compte', 'Connexions', 'Temps total', 'Temps moyen', 'Dernière connexion'].map((t) => h('th', {}, t)))),
+          h('tbody', {}, lignes.map(({ p, b }) => h('tr', { class: 'cliquable' + (p.actif ? '' : ' arret'), title: 'Voir le détail des connexions', onclick: () => detail(p) },
+            h('td', {}, h('b', {}, p.nom || identifiantDe(p.email)), h('br'), h('small', {}, identifiantDe(p.email) + ' · ' + nomRole(p.role))),
+            h('td', { class: 'centre' }, Number(b.nb)),
+            h('td', { class: 'centre' }, Number(b.nb) ? duree(Number(b.secondes)) : '—'),
+            h('td', { class: 'centre' }, Number(b.nb) ? duree(Number(b.secondes) / Number(b.nb)) : '—'),
+            h('td', {}, ilya(b.derniere)))))));
+      } catch (e) {
+        vider(corps, h('p', { class: 'aide' }, 'Suivi indisponible : exécutez le fichier 9_connexions.sql dans Supabase. (' + e.message + ')'));
+      }
+    }
+    async function detail(p) {
+      const l = await db.lire('connexions', `profil_id=eq.${p.id}&order=debut.desc&limit=60`);
+      const hm = (d) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      fenetre('Connexions de ' + (p.nom || identifiantDe(p.email)), l.length ? h('table', { class: 'liste' },
+        h('thead', {}, h('tr', {}, ['Date', 'De', 'À', 'Durée'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, l.map((c) => h('tr', {},
+          h('td', {}, new Date(c.debut).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })),
+          h('td', {}, hm(c.debut)), h('td', {}, hm(c.derniere_activite)),
+          h('td', {}, duree((new Date(c.derniere_activite) - new Date(c.debut)) / 1000)))))) : h('p', {}, 'Aucune connexion enregistrée.'),
+      [{ texte: 'Fermer', valeur: true }], { large: true });
+    }
+    remplir();
+    return h('section', { class: 'bloc' },
+      h('div', { class: 'tete-bloc' }, h('h2', {}, 'Suivi des connexions'),
+        h('select', { class: 'champ choix-mat', onchange: (e) => { periode = e.target.value; remplir(); } },
+          [['7', '7 derniers jours'], ['30', '30 derniers jours'], ['rentree', 'Depuis la rentrée'], ['tout', 'Depuis le début']]
+            .map(([v, t]) => h('option', { value: v, selected: v === periode }, t)))),
+      h('p', { class: 'aide' }, 'Une connexion = une période d’utilisation de l’application ; elle est comptée comme nouvelle après 30 minutes sans activité. '
+        + 'Le temps n’est compté que lorsque l’application est affichée et utilisée (pas quand l’onglet reste ouvert sans rien faire). Visible par l’administrateur seulement.'),
+      corps);
   }
 
   // recopier une promotion précédente dans une nouvelle (rien n'est écrasé : seules les parties encore vides sont remplies)
