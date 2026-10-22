@@ -14,6 +14,8 @@ import { pageFiches } from './pages/fiches.js';
 import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';
 import { pageSynthese } from './pages/synthese.js';
+import { pageHistorique } from './pages/historique.js';
+import { pageAide } from './pages/aide.js';
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';
@@ -64,7 +66,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -125,6 +127,7 @@ function menu(route) {
     lien('#/synthese', 'Synthèse des séquençages', page === 'synthese'),
     lien('#/couverture/competences', 'Couverture des compétences', page === 'couverture' && arg !== 'savoirs'),
     lien('#/couverture/savoirs', 'Couverture des savoirs', page === 'couverture' && arg === 'savoirs'),
+    lien('#/historique', 'Historique des modifications', page === 'historique'),
     h('div', { class: 'titre-menu' }, 'Séquençages'),
     ctx.matieres.map((m) => { const a = lien('#/sequencage/' + m.id, m.nom, page === 'sequencage' && String(arg) === String(m.id),
       { style: { '--pastille': m.couleur } }); a.classList.add('matiere'); return a; }),
@@ -133,6 +136,7 @@ function menu(route) {
     lien('#/referentiel/savoirs', 'Savoirs associés', page === 'referentiel' && arg === 'savoirs'),
     lien('#/referentiel/taches', 'Activités et tâches', page === 'referentiel' && arg === 'taches'),
     h('div', { class: 'bas-menu' },
+      lien('#/aide', '?  Aide', page === 'aide'),
       ctx.estAdmin() ? lien('#/admin', '⚙  Administration', page === 'admin') : null,
       lien('#/compte', '👤  ' + (ctx.profil?.nom || emailConnecte()), page === 'compte'),
       h('button', { class: 'lien-menu', type: 'button', onclick: async () => { await deconnexion(); ecranConnexion('Vous êtes déconnecté.'); } }, '⏻  Se déconnecter')));
@@ -154,6 +158,9 @@ async function afficher() {
   vider(app, h('div', { class: 'cadre' }, menu(r), zone));
   try {
     await PAGES[r[0]](zone, r[1], ctx);
+    const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches',
+      validation: 'validation', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+    if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
       h('button', { class: 'btn', onclick: afficher }, 'Réessayer')));

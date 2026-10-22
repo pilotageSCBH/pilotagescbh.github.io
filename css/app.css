@@ -466,3 +466,30 @@ table.synthese td:nth-child(2) { width: 18%; } table.synthese td:nth-child(3) { 
   .seances td, .seances th { font-size: 10px; }
 }
 @media print { .btn.fiches { display: none !important; } .tete-sequence + .objectif-sequence, .tete-sequence { break-after: avoid; } }
+
+/* ------------------------------------------------------------------ aide */
+.aide-flottante { position: fixed; right: 22px; bottom: 22px; width: 46px; height: 46px; border-radius: 50%; background: var(--anis); color: #fff; font-weight: 800; font-size: 22px; display: grid; place-items: center; text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.25); z-index: 20; }
+.aide-flottante:hover { background: var(--fonce); }
+.sommaire-aide { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.sommaire-aide a { background: #fff; border: 1px solid var(--ligne); border-radius: 16px; padding: 5px 12px; text-decoration: none; font-weight: 600; font-size: 13px; }
+.sommaire-aide a.actif, .sommaire-aide a:hover { background: var(--fonce); color: #fff; border-color: var(--fonce); }
+.aide-section dl { margin: 0; }
+.aide-section dt { font-weight: 700; color: var(--fonce); margin-top: 10px; }
+.aide-section dd { margin: 3px 0 0; color: var(--texte); max-width: 900px; }
+.aide-section.cible { box-shadow: 0 0 0 3px var(--anis); }
+
+/* ------------------------------------------------------------------ historique */
+.filtres { flex-wrap: wrap; }
+.jour-histo h2 { font-size: 14px; color: var(--fonce); text-transform: capitalize; margin: 18px 0 6px; }
+.liste-histo { list-style: none; margin: 0; padding: 0; background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); overflow: hidden; }
+.liste-histo li { display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid #EEF2F1; cursor: pointer; font-size: 13px; flex-wrap: wrap; }
+.liste-histo li:hover { background: #F6FAF9; }
+.liste-histo .heure { color: var(--gris); font-variant-numeric: tabular-nums; width: 42px; }
+.liste-histo .qui { font-weight: 600; min-width: 140px; }
+.liste-histo .act { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 10px; }
+.act.ajout { background: #E3F2DC; color: #2E6B0E; } .act.modif { background: #DCEAF7; color: #1F5A8A; } .act.suppr { background: #FBE3E0; color: #8E1C10; }
+.liste-histo .mat { font-size: 11px; font-weight: 700; color: #fff; background: var(--couleur); border-radius: 4px; padding: 1px 6px; }
+.liste-histo .ctx { flex: 1; min-width: 200px; }
+.liste-histo .champs { color: var(--gris); font-size: 12px; font-style: italic; }
+td.pre { white-space: pre-wrap; }
+.cases-reprise { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0; }

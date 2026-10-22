@@ -44,7 +44,39 @@ export async function pageAdmin(zone, _arg, ctx) {
               } }), p.actif ? 'actif' : 'suspendu')),
               h('td', {}, moi ? null : h('button', { class: 'btn petit', onclick: () => nouveauCode(p) }, 'Nouveau code')));
           })))),
-      h('p', { class: 'aide' }, 'Suspendre un compte coupe immédiatement son accès. Pour supprimer définitivement un compte : Supabase → Authentication → Users.'));
+      h('p', { class: 'aide' }, 'Suspendre un compte coupe immédiatement son accès. Pour supprimer définitivement un compte : Supabase → Authentication → Users.'),
+      reprise());
+  }
+
+  // recopier une promotion précédente dans une nouvelle (rien n'est écrasé : seules les parties encore vides sont remplies)
+  function reprise() {
+    const opt = (p) => h('option', { value: p.id, selected: false }, 'Promotion ' + p.libelle);
+    const src = h('select', { class: 'champ' }, ctx.promotions.map(opt));
+    const cib = h('select', { class: 'champ' }, ctx.promotions.map(opt));
+    const i = ctx.promotions.findIndex((p) => p.id === ctx.promo.id);
+    src.value = String(ctx.promotions[Math.max(0, i)].id);
+    cib.value = String(ctx.promotions[Math.min(ctx.promotions.length - 1, i + 1)].id);
+    const cases = [['sequencages', 'Séquençages (séquences et séances)', true], ['calendrier', 'Calendrier : vacances, apprentis, évènements', false],
+      ['progression', 'Progression : séances placées, textes et notes', true], ['fiches', 'Fiches et contrats (sans les notes ni les dates)', true]]
+      .map(([k, t, v]) => ({ k, el: h('input', { type: 'checkbox', checked: v }), t }));
+    const resultat = h('p', { class: 'aide' });
+    return h('section', { class: 'bloc' }, h('h2', {}, 'Reprendre une promotion'),
+      h('p', { class: 'aide' }, 'Recopie le travail d’une promotion dans une autre. Seules les parties encore vides dans la promotion d’arrivée sont remplies : rien n’est écrasé. '
+        + 'Le calendrier est recopié semaine par semaine : vérifiez ensuite les dates des vacances, qui changent d’une année à l’autre.'),
+      h('div', { class: 'formulaire ligne' }, h('label', {}, 'Depuis', src), h('label', {}, 'Vers', cib)),
+      h('div', { class: 'cases-reprise' }, cases.map((c) => h('label', { class: 'interrupteur' }, c.el, c.t))),
+      h('button', { class: 'btn principal', onclick: async (e) => {
+        const s = ctx.promotions.find((p) => String(p.id) === src.value), c = ctx.promotions.find((p) => String(p.id) === cib.value);
+        if (s.id === c.id) return erreur(new Error('Choisissez deux promotions différentes.'));
+        if (!(await confirmer('Reprendre une promotion', `Recopier dans la promotion ${c.libelle} le travail de la promotion ${s.libelle} ?`, 'Recopier'))) return;
+        e.target.disabled = true;
+        try {
+          const r = await db.rpc('copier_promotion', { source: s.id, cible: c.id, ...Object.fromEntries(cases.map((x) => [x.k, x.el.checked])) });
+          resultat.textContent = `Recopié : ${r.sequences} séquence(s), ${r.semaines} semaine(s) de calendrier, ${r.jours} évènement(s), ${r.cases} case(s) de progression, `
+            + `${r.fiches} fiche(s), ${r.contrats} contrat(s). (0 = déjà rempli dans la promotion d’arrivée, ou rien à recopier.)`;
+          toast('Promotion reprise');
+        } catch (x) { erreur(x); } finally { e.target.disabled = false; }
+      } }, 'Recopier'), resultat);
   }
 
   function formInvitation(libres) {
