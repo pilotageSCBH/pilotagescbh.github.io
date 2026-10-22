@@ -55,7 +55,7 @@ export async function pageAccueil(zone, _arg, ctx) {
       kpi('🎓', 'Scolaires', String(enFormation.length - apprentis), 'sous statut scolaire', pc(enFormation.length - apprentis, enFormation.length), '#/eleves')),
     h('h2', { class: 'titre-section' }, 'Suivi de la promotion'),
     h('section', { class: 'kpi-ligne deux' },
-      kpi('🧩', 'Compétences', `${compsTraitees.size} / ${ref.competences.length}`, 'traitées dans au moins une séance', pc(compsTraitees.size, ref.competences.length), '#/couverture/competences'),
+      kpi('🧩', 'Compétences cœur de métier', `${compsTraitees.size} / ${ref.competences.length}`, 'traitées dans au moins une séance', pc(compsTraitees.size, ref.competences.length), '#/couverture/competences'),
       kpi('📚', 'Savoirs associés', `${savTraites.size} / ${ref.savoirs.length}`, 'traités dans au moins une séance', pc(savTraites.size, ref.savoirs.length), '#/couverture/savoirs')),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),
