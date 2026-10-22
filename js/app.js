@@ -11,17 +11,37 @@ import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
 
 const app = document.getElementById('app');
+const CLE_PROMO = 'pilotage-scbh-promotion';
+
+// menu déroulant des promotions (2025-2027, 2026-2028…) : change la promotion affichée dans toutes les pages
+export function choixPromotion(classe = '') {
+  return h('select', { class: 'choix-promo ' + classe, 'aria-label': 'Promotion', onchange: (e) => ctx.choisirPromo(e.target.value) },
+    ctx.promotions.map((p) => h('option', { value: p.annee_debut, selected: ctx.promo && p.id === ctx.promo.id }, 'Promotion ' + p.libelle)));
+}
 
 // contexte partagé par les pages : profil connecté, matières, référentiel (chargé une fois)
 export const ctx = {
-  profil: null, matieres: [], enseignants: [], promotion: null, ref: null,
+  profil: null, matieres: [], enseignants: [], promotion: null, promotions: [], promo: null, ref: null,
   estAdmin: () => ctx.profil?.role === 'admin',
   peutMatiere: (id) => ctx.estAdmin() || (ctx.profil?.matieres || []).includes(Number(id)),
   async chargerBase() {
     const [matieres, enseignants, promo] = await Promise.all([
-      db.lire('matieres', 'order=ordre'), db.lire('enseignants', 'order=ordre,nom'), db.lire('promotion'),
+      db.lire('matieres', 'order=ordre'), db.lire('enseignants', 'order=ordre,nom'), db.lire('promotions', 'order=annee_debut'),
     ]);
-    ctx.matieres = matieres; ctx.enseignants = enseignants; ctx.promotion = promo[0] || null;
+    ctx.matieres = matieres; ctx.enseignants = enseignants; ctx.promotions = promo;
+    // promotion affichée : celle choisie la dernière fois sur ce poste, sinon celle qui commence cette année scolaire
+    let choix = null;
+    try { choix = Number(localStorage.getItem(CLE_PROMO)); } catch { /* sans stockage */ }
+    const d = new Date(), rentree = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
+    ctx.promo = promo.find((p) => p.annee_debut === choix) || promo.find((p) => p.annee_debut === rentree) || promo[0] || null;
+    ctx.promotion = ctx.promo;
+  },
+  choisirPromo(annee) {
+    const p = ctx.promotions.find((x) => x.annee_debut === Number(annee));
+    if (!p) return;
+    ctx.promo = ctx.promotion = p;
+    try { localStorage.setItem(CLE_PROMO, String(p.annee_debut)); } catch { /* sans stockage */ }
+    afficher();
   },
   async referentiel() {
     if (!ctx.ref) {
@@ -88,7 +108,7 @@ function menu(route) {
   const [page, arg] = route;
   return h('nav', { class: 'menu' },
     h('a', { href: '#/accueil', class: 'marque' }, h('img', { src: 'img/logo.jpg', alt: '' }), h('span', {}, NOM_APPLI)),
-    h('div', { class: 'promo-menu' }, 'Promotion ' + (ctx.promotion?.libelle || '')),
+    h('div', { class: 'promo-menu' }, choixPromotion()),
     lien('#/accueil', '⌂  Tableau de bord', page === 'accueil'),
     h('div', { class: 'titre-menu' }, 'Promotion'),
     lien('#/equipe', 'Matières et équipe', page === 'equipe'),

@@ -14,14 +14,14 @@ export async function pageEleves(zone, _arg, ctx) {
   const admin = ctx.estAdmin();
 
   async function dessiner() {
-    const eleves = await db.lire('eleves', 'order=nom,prenom');
+    const eleves = await db.lire('eleves', `promotion_id=eq.${ctx.promo.id}&order=nom,prenom`);
     eleves.sort((a, b) => (!!a.arret - !!b.arret) || a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
     const actifs = eleves.filter((e) => !e.arret);
     const app = actifs.filter((e) => e.statut === 'Apprenti').length;
     let n = 0;
     vider(zone,
       h('header', { class: 'entete-page' },
-        h('div', {}, h('h1', {}, 'Élèves de la promotion'), h('p', { class: 'sous-titre' }, 'Promotion ' + (ctx.promotion?.libelle || ''))),
+        h('div', {}, h('h1', {}, 'Élèves de la promotion'), h('p', { class: 'sous-titre' }, 'Promotion ' + ctx.promo.libelle)),
         h('div', { class: 'actions-page' }, admin ? h('button', { class: 'btn principal', onclick: () => formulaire(null) }, '＋  Ajouter un élève') : null)),
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, actifs.length), h('span', {}, 'en formation')),
@@ -63,7 +63,7 @@ export async function pageEleves(zone, _arg, ctx) {
       d.nom = d.nom.toUpperCase();
       if (!d.nom && !d.prenom) throw new Error('Saisissez au moins le nom ou le prénom.');
       d.naissance = d.naissance || null;
-      if (e) await db.modifier('eleves', e.id, d); else await db.ajouter('eleves', d);
+      if (e) await db.modifier('eleves', e.id, d); else await db.ajouter('eleves', { ...d, promotion_id: ctx.promo.id });
       toast('Enregistré');
       return 'maj';
     } });

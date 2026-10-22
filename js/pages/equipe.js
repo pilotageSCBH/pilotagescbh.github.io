@@ -9,18 +9,10 @@ export async function pageEquipe(zone, _arg, ctx) {
   async function dessiner() {
     await ctx.chargerBase();
     rafraichirMenu();
-    const p = ctx.promotion || {};
     vider(zone,
       h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Matières et équipe'),
-        h('p', { class: 'sous-titre' }, admin ? 'Réglages de la promotion (administrateur)' : 'Consultation : seul l’administrateur peut modifier ces réglages'))),
-      h('section', { class: 'bloc' }, h('h2', {}, 'Promotion'),
-        h('div', { class: 'formulaire etroit' },
-          h('label', {}, 'Promotion (2 ans)', champ(p.libelle, async (v) => {
-            const a = parseInt(v, 10);
-            if (!/^\d{4}-\d{4}$/.test(v.trim())) throw new Error('Format attendu : 2026-2028');
-            await db.modifier('promotion', 1, { libelle: v.trim(), annee_debut: a }); ctx.promotion.libelle = v.trim(); rafraichirMenu();
-          }, { lecture: !admin, placeholder: '2026-2028' })),
-          h('label', {}, 'Établissement', champ(p.etablissement, (v) => db.modifier('promotion', 1, { etablissement: v }), { lecture: !admin, placeholder: 'Lycée…' })))),
+        h('p', { class: 'sous-titre' }, (admin ? 'Réglages communs à toutes les promotions (administrateur)' : 'Consultation : seul l’administrateur peut modifier ces réglages') +
+          '  ·  la promotion affichée se choisit dans le menu'))),
       h('section', { class: 'bloc' }, h('h2', {}, 'Matières professionnelles'),
         h('table', { class: 'liste' },
           h('thead', {}, h('tr', {}, h('th', {}, 'Couleur'), h('th', {}, 'Matière'), h('th', {}, 'Abréviation'), h('th', {}, 'Enseignant(s)'))),

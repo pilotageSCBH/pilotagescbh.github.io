@@ -9,7 +9,7 @@ export async function pageSequencage(zone, id, ctx) {
   const modif = ctx.peutMatiere(m.id);
 
   async function charger() {
-    const sequences = await db.lire('sequences', `matiere_id=eq.${m.id}&order=numero`);
+    const sequences = await db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=eq.${ctx.promo.id}&order=numero`);
     const ids = sequences.map((s) => s.id);
     const seances = ids.length ? await db.lire('seances', `sequence_id=in.(${ids.join(',')})&order=numero`) : [];
     return { sequences, seances };
@@ -26,13 +26,13 @@ export async function pageSequencage(zone, id, ctx) {
       h('header', { class: 'entete-page', style: { '--couleur': m.couleur } },
         h('div', {},
           h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), 'Séquençage · ' + m.nom),
-          h('p', { class: 'sous-titre' }, (profs.length ? 'Enseignant : ' + profs.join(', ') : 'Enseignant à attribuer') +
+          h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ` + (profs.length ? 'Enseignant : ' + profs.join(', ') : 'Enseignant à attribuer') +
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  ${heures(totH) || '0 h'}`)),
         h('div', { class: 'actions-page' },
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),
       sequences.map((s) => carteSequence(s, seances.filter((x) => x.sequence_id === s.id))),
-      sequences.length === 0 ? h('p', { class: 'vide' }, 'Aucune séquence pour le moment.') : null);
+      sequences.length === 0 ? await videPromotion() : null);
     ajusterTout(zone);
     window.scrollTo(0, garde);
   }
@@ -154,9 +154,31 @@ export async function pageSequencage(zone, id, ctx) {
     });
   }
 
+  // ------------------------------------------------------------------------------------- promotion sans séquençage
+  async function videPromotion() {
+    const autres = await db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=neq.${ctx.promo.id}`);
+    const ids = [...new Set(autres.map((s) => s.promotion_id))];
+    const sources = ctx.promotions.filter((p) => ids.includes(p.id));
+    const bloc = h('section', { class: 'bloc vide-promo' },
+      h('h2', {}, `Aucune séquence en ${m.nom} pour la promotion ${ctx.promo.libelle}`));
+    if (!modif) { bloc.append(h('p', { class: 'aide' }, 'Le séquençage de cette matière n’a pas encore été commencé pour cette promotion.')); return bloc; }
+    if (sources.length) {
+      const choix = h('select', { class: 'champ' }, sources.map((p) => h('option', { value: p.id }, 'Promotion ' + p.libelle)));
+      bloc.append(h('p', {}, 'Reprendre le séquençage d’une autre promotion (séquences et séances recopiées, modifiables ensuite) :'),
+        h('div', { class: 'ligne-actions' }, choix, h('button', { class: 'btn principal', onclick: async () => {
+          try {
+            const n = await db.rpc('copier_sequencage', { m: m.id, source: Number(choix.value), cible: ctx.promo.id });
+            toast(`${n} séquence(s) reprise(s)`); await dessiner();
+          } catch (e) { erreur(e); }
+        } }, 'Reprendre ce séquençage')),
+        h('p', { class: 'aide' }, 'ou commencer un séquençage vide avec le bouton « Ajouter une séquence ».'));
+    } else bloc.append(h('p', { class: 'aide' }, 'Commencez avec le bouton « Ajouter une séquence ».'));
+    return bloc;
+  }
+
   // ------------------------------------------------------------------------------------- structure
   async function ajouterSequence() {
-    try { await db.rpc('ajouter_sequence', { m: m.id }); toast('Séquence ajoutée'); await dessiner(); window.scrollTo(0, document.body.scrollHeight); }
+    try { await db.rpc('ajouter_sequence', { m: m.id, p: ctx.promo.id }); toast('Séquence ajoutée'); await dessiner(); window.scrollTo(0, document.body.scrollHeight); }
     catch (e) { erreur(e); }
   }
   async function supprimerSequence(s, seances) {
