@@ -9,12 +9,22 @@ export async function pageSequencage(zone, id, ctx) {
   const ref = await ctx.referentiel();
   const modif = ctx.peutMatiere(m.id);
 
+  // toutes les séances de la promotion (toutes matières) : pour choisir et afficher les prérequis
+  let toutes = new Map();
   async function charger() {
-    const sequences = await db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=eq.${ctx.promo.id}&order=numero`);
-    const ids = sequences.map((s) => s.id);
-    const seances = ids.length ? await db.lire('seances', `sequence_id=in.(${ids.join(',')})&order=numero`) : [];
+    const tousSeq = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`);
+    const ids = tousSeq.map((s) => s.id);
+    const tout = ids.length ? await db.lire('seances', `sequence_id=in.(${ids.join(',')})&order=sequence_id,numero`) : [];
+    const seqs = new Map(tousSeq.map((s) => [s.id, s]));
+    toutes = new Map(tout.map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: ctx.matieres.find((y) => y.id === seqs.get(x.sequence_id)?.matiere_id) }]));
+    const sequences = tousSeq.filter((s) => s.matiere_id === m.id).sort((a, b) => a.numero - b.numero);
+    const mes = new Set(sequences.map((s) => s.id));
+    const seances = tout.filter((x) => mes.has(x.sequence_id)).sort((a, b) => a.numero - b.numero);
     return { sequences, seances };
   }
+  const etiquette = (y) => `${ctx.codeMat(y.mat)} ${y.seq.numero}.${y.numero}`;
+  const rangMat = (y) => ctx.matieres.findIndex((z) => z.id === y.mat?.id);
+  const trier = (a, b) => rangMat(a) - rangMat(b) || a.seq.numero - b.seq.numero || a.numero - b.numero;
 
   async function dessiner() {
     const { sequences, seances } = await charger();
@@ -55,9 +65,9 @@ export async function pageSequencage(zone, id, ctx) {
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
         champ(s.objectif, maj('objectif'), { multi: true, lecture: !modif, placeholder: 'Objectif principal de la séquence' })),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'seances' },
-        h('colgroup', {}, [3, 4, 13, 6, 13, 19, 13, 14.5, 14.5].map((w) => h('col', { style: { width: w + '%' } }))),
+        h('colgroup', {}, [3, 4, 12, 5.5, 11.5, 17, 11, 12, 12, 12].map((w) => h('col', { style: { width: w + '%' } }))),
         h('thead', {}, h('tr', {},
-          ['', 'N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Compétences', 'Savoirs associés']
+          ['', 'N°', 'Séance', 'Durée', 'Prérequis (antériorités)', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Compétences', 'Savoirs associés']
             .map((t) => h('th', {}, t)))),
         h('tbody', {}, seances.map((x) => ligneSeance(s, x, seances.length))))));
   }
@@ -75,6 +85,8 @@ export async function pageSequencage(zone, id, ctx) {
           nb > 1 ? h('button', { class: 'icone petit', title: 'Supprimer la séance', onclick: () => supprimerSeance(s, x) }, '✖') : null) : null),
       h('td', {}, champ(x.titre, maj('titre'), { multi: true, lecture: !modif, placeholder: 'Titre', classe: 'gras' })),
       h('td', {}, champ(x.duree ?? '', maj('duree', (v) => nombre(v)), { lecture: !modif, options: durees })),
+      h('td', {}, prerequis(x),
+        champ(x.prerequis_texte || '', maj('prerequis_texte'), { multi: true, lecture: !modif, placeholder: modif ? 'autres prérequis…' : '', classe: 'petit-texte' })),
       h('td', {}, champ(x.objectif_inter, maj('objectif_inter'), { multi: true, lecture: !modif })),
       h('td', {}, champ(x.objectifs_ops, maj('objectifs_ops'), { multi: true, lecture: !modif, placeholder: '- un objectif par ligne' }),
         modif ? h('button', { class: 'lien petit', onclick: (e) => choisirTaches(x, e.target.closest('td').querySelector('textarea')) }, '＋ depuis les tâches') : null),
@@ -118,6 +130,45 @@ export async function pageSequencage(zone, id, ctx) {
     }
     afficher();
     return zoneC;
+  }
+
+  // prérequis : séances de la promotion (toutes matières) à faire avant celle-ci
+  function prerequis(x) {
+    const zoneP = h('div', { class: 'codes prerequis' });
+    const afficher = () => {
+      const liste = (x.prerequis || []).map((i) => toutes.get(Number(i))).filter(Boolean).sort(trier);
+      vider(zoneP, liste.map((y) => h('div', { class: 'code pre', style: { '--couleur': y.mat?.couleur || '#888' }, title: `${y.mat?.nom || ''} · séquence ${y.seq.numero} ${y.seq.intitule || ''}` },
+        h('b', {}, etiquette(y)), h('span', {}, y.titre || 'sans titre'))),
+      modif ? h('button', { class: 'lien petit', onclick: choisir }, liste.length ? '✎ modifier' : '＋ séances prérequises') : null);
+    };
+    async function choisir() {
+      const choix = new Set((x.prerequis || []).map(Number));
+      const recherche = h('input', { class: 'champ', placeholder: 'Rechercher (matière, n°, titre)…' });
+      const corps = h('div', { class: 'liste-choix' });
+      const candidates = [...toutes.values()].filter((y) => y.id !== x.id).sort(trier);
+      const remplir = () => {
+        const q = recherche.value.trim().toLowerCase();
+        let grp = null;
+        vider(corps, candidates.filter((y) => !q || `${etiquette(y)} ${y.mat?.nom} ${y.titre} ${y.seq.intitule}`.toLowerCase().includes(q)).flatMap((y) => {
+          const out = [];
+          const g = `${y.mat?.nom} · Séquence ${y.seq.numero}${y.seq.intitule ? ' · ' + y.seq.intitule : ''}`;
+          if (g !== grp) { grp = g; out.push(h('div', { class: 'groupe', style: { borderLeft: `4px solid ${y.mat?.couleur || '#888'}` } }, g)); }
+          out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(y.id),
+            onchange: (e) => (e.target.checked ? choix.add(y.id) : choix.delete(y.id)) }), h('b', {}, etiquette(y)), ' ', y.titre || 'sans titre'));
+          return out;
+        }));
+      };
+      recherche.addEventListener('input', remplir);
+      remplir();
+      const ok = await fenetre(`Prérequis de la séance ${toutes.get(x.id) ? etiquette(toutes.get(x.id)) : ''}`,
+        h('div', {}, h('p', { class: 'aide' }, 'Cochez les séances (de toutes les matières) qui doivent avoir été faites avant celle-ci. La progression signalera cette séance si elle est placée avant l’une d’elles.'),
+          recherche, corps), [{ texte: 'Annuler', valeur: false }, { texte: 'Valider', classe: 'principal', valeur: true }], { large: true });
+      if (!ok) return;
+      const val = [...choix].map((i) => toutes.get(i)).filter(Boolean).sort(trier).map((y) => y.id);
+      try { await db.modifier('seances', x.id, { prerequis: val }); x.prerequis = val; afficher(); toast('Enregistré'); } catch (e) { erreur(e); }
+    }
+    afficher();
+    return zoneP;
   }
 
   // objectifs opérationnels tirés des tâches professionnelles du référentiel

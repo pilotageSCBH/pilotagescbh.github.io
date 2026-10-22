@@ -43,6 +43,17 @@ export async function pageProgression(zone, arg, ctx) {
   const seancesDe = (m) => [...seances.values()].filter((x) => x.seq.matiere_id === m.id)
     .sort((a, b) => a.seq.numero - b.seq.numero || a.numero - b.numero);
   const num = (x) => `${x.seq.numero}.${x.numero}`;
+  // prérequis (antériorités) : chaque séance prérequise doit commencer une semaine AVANT la séance
+  const debutDe = (id) => { let d = null; for (const c of cases.values()) if (c.seance_id === id && (d === null || c.semaine < d)) d = c.semaine; return d; };
+  const etiq = (y) => `${ctx.codeMat(ctx.matieres.find((z) => z.id === y.seq.matiere_id))} ${num(y)}`;
+  function etatPrerequis(x) {
+    const d = debutDe(x.id);
+    return (x.prerequis || []).map((i) => seances.get(Number(i))).filter(Boolean).map((y) => {
+      const dy = debutDe(y.id);
+      return { y, dy, ok: dy !== null && d !== null && dy < d };
+    });
+  }
+  const problemes = (x) => etatPrerequis(x).filter((p) => !p.ok);
   const enCours = (w) => !(semaines.get(w)?.vacances);
   const caseDe = (m, w) => cases.get(`${m.id}:${w}`);
   const seanceDe = (m, w) => { const c = caseDe(m, w); return c?.seance_id ? seances.get(c.seance_id) : null; };
@@ -213,6 +224,9 @@ export async function pageProgression(zone, arg, ctx) {
         if (codes.length) puce.append(h('div', { class: 'codes-prog' }, codes.map((x) => h('span', { title: ref.comp[x]?.libelle || ref.sav[x]?.libelle || '' }, x))));
       }
       if (modif && !vac) glisserDepuis(puce, m, w);
+      const pb = suite ? [] : problemes(se);
+      if (pb.length) puce.append(h('span', { class: 'alerte-pre', title: 'Prérequis pas encore faits à cette date :\n' + pb.map((p) =>
+        `${etiq(p.y)} ${p.y.titre || ''} — ${p.dy === null ? 'pas placée' : 'placée ' + libSemaine(p.dy)}`).join('\n') }, '⚠ antériorité'));
       const nbc = (commentaires.get(se.id) || []).length;
       if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
       td.append(puce);
@@ -285,6 +299,9 @@ export async function pageProgression(zone, arg, ctx) {
         x.objectifs_ops ? h('div', { class: 'ops' }, h('b', {}, 'Objectifs opérationnels'), h('pre', {}, x.objectifs_ops)) : null,
         (x.competences || []).length ? h('p', {}, h('b', {}, 'Compétences : '), x.competences.map((k) => `${k} ${ref.comp[k]?.libelle_court || ''}`).join(' · ')) : null,
         (x.savoirs || []).length ? h('p', {}, h('b', {}, 'Savoirs : '), x.savoirs.map((k) => `${k} ${ref.sav[k]?.libelle_court || ''}`).join(' · ')) : null,
+        (x.prerequis || []).length ? h('div', {}, h('b', {}, 'Prérequis : '), etatPrerequis(x).map((p) => h('div', { class: p.ok ? 'pre-ok' : 'pre-ko' },
+          `${p.ok ? '✔' : '⚠'} ${etiq(p.y)} ${p.y.titre || ''} — ${p.dy === null ? 'pas encore placée' : 'placée ' + libSemaine(p.dy)}`))) : null,
+        x.prerequis_texte ? h('p', {}, h('b', {}, 'Autres prérequis : '), x.prerequis_texte) : null,
       ] : []);
     };
     choix.addEventListener('change', () => { if (choix.value) libre.value = ''; montrer(); });

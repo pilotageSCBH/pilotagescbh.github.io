@@ -15,6 +15,7 @@ const SECTIONS = [
     ['Séquences', "« Ajouter une séquence » crée une séquence numérotée (10 au plus par matière) ; saisissez son intitulé et son objectif principal dans l'en-tête. Le ✖ de l'en-tête supprime la séquence et renumérote les suivantes."],
     ['Séances', "Au survol du numéro d'une séance : ＋ insère une séance juste après, ✖ la supprime ; la numérotation suit toute seule. Pour réordonner, faites glisser la séance par la poignée ⠿."],
     ['Compétences et savoirs', "« ＋ choisir » ouvre la liste du référentiel avec une recherche : cochez les codes, leur libellé s'affiche dans la case."],
+    ['Prérequis (antériorités)', "Colonne « Prérequis » : « ＋ séances prérequises » ouvre la liste de toutes les séances de la promotion, toutes matières (recherche possible) ; cochez celles qui doivent être faites avant. Elles s'affichent avec leur code (OR 1.2 = Organisation, séquence 1, séance 2). Le champ en dessous accueille d'autres prérequis rédigés librement. Dans la progression, « ⚠ antériorité » signale une séance placée avant l'une de ses séances prérequises (ou dont un prérequis n'est pas encore placé) ; la fiche de déroulement les reprend."],
     ['Objectifs opérationnels', "Un objectif par ligne. « ＋ depuis les tâches » ajoute des objectifs tirés des tâches professionnelles du référentiel, avec leur code [A1-T1] : il sert ensuite au contrat formatif."],
     ['Nouvelle promotion', "Dans une promotion vide, « Reprendre ce séquençage » recopie celui d'une autre promotion, modifiable ensuite."],
   ]],

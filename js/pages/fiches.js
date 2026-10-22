@@ -109,6 +109,14 @@ export async function pageFiches(zone, arg, ctx) {
     };
     const corps = h('div', {});
     const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
+    // séances prérequises (séquençage), toutes matières
+    const ids = (x.prerequis || []).map(Number);
+    const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
+    const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
+    const lignesPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); const mm = ctx.matieres.find((z) => z.id === q?.matiere_id);
+      return { t: `${ctx.codeMat(mm)} ${q?.numero}.${y.numero} · ${y.titre || 'sans titre'}`, r: [ctx.matieres.indexOf(mm), q?.numero, y.numero] }; })
+      .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.r[2] - b.r[2]).map((l) => l.t);
+    if (x.prerequis_texte) lignesPre.push(x.prerequis_texte);
     vider(fiche,
       h('article', { class: 'feuille' },
         entete('FICHE DE DÉROULEMENT DE SÉANCE', titre),
@@ -120,7 +128,8 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'rubrique' }, h('h3', {}, 'Cours mobilisés'), h('p', { class: 'pre' }, x.cours || '—')),
         h('div', { class: 'deux' }, h('div', { class: 'rubrique' }, h('h3', {}, 'Compétences'), codes(x.competences, ref.comp)),
           h('div', { class: 'rubrique' }, h('h3', {}, 'Savoirs associés'), codes(x.savoirs, ref.sav))),
-        h('div', { class: 'deux' }, zoneTexte('Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
+        lignesPre.length ? h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis (séquençage)'), h('p', { class: 'pre' }, lignesPre.join('\n'))) : null,
+        h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('thead', {}, h('tr', {}, ['Phase', 'Activité proposée', 'Activités de l’enseignant', 'Activités des élèves', 'Durée'].map((t) => h('th', {}, t)),
             modif ? h('th', { class: 'ecran' }) : null)), tablePhases),

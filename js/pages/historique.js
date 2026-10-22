@@ -9,7 +9,7 @@ const CHAMPS = {
   valeur: 'note', coefficient: 'coefficient', actif: 'critère retiré / remis', phases: 'déroulement', activites: 'activités et tâches',
   situation: 'situation professionnelle', prerequis: 'prérequis', modalites: 'modalités d’évaluation', ressources: 'ressources', bilan: 'bilan',
   salle: 'salle', materiel: 'matériel', evaluation: 'évaluation', differenciation: 'différenciation', date_eval: 'date', forme: 'forme',
-  libelle: 'intitulé', bareme: 'noté sur', coef_resultat: 'coefficient (résultats)', lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
+  prerequis_texte: 'autres prérequis', libelle: 'intitulé', bareme: 'noté sur', coef_resultat: 'coefficient (résultats)', lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
 };
 const TYPES = {
   tout: ['Tout', null], sequencage: ['Séquençages', ['sequences', 'seances']],
@@ -75,14 +75,17 @@ export async function pageHistorique(zone, _arg, ctx) {
       lignes.length >= limite ? h('button', { class: 'btn', onclick: async () => { limite += 300; await charger(); dessiner(); } }, 'Afficher les modifications plus anciennes') : null);
   }
 
+  // prérequis des séances : liste de numéros internes → nombre de séances
+  const texteDe = (k, v) => (k === 'prerequis' && l_estSeance(v) ? `${v.length} séance(s) prérequise(s)` : texte(v));
+  const l_estSeance = (v) => Array.isArray(v) && v.length && typeof v[0] === 'number';
   function detail(l) {
     const cles = l.action === 'modification' ? l.champs : Object.keys(l.apres || l.avant || {}).filter((k) => CHAMPS[k]);
     fenetre(lisible(l.contexte), h('div', {},
       h('p', { class: 'aide' }, `${ACTIONS[l.action][0]} par ${l.qui_nom || '—'} le ${new Date(l.quand).toLocaleString('fr-FR')}`),
       h('table', { class: 'table-fiche' }, h('thead', {}, h('tr', {}, h('th', {}, 'Champ'), l.action !== 'ajout' ? h('th', {}, 'Avant') : null, l.action !== 'suppression' ? h('th', {}, 'Après') : null)),
         h('tbody', {}, cles.map((k) => h('tr', {}, h('td', { class: 'fort' }, CHAMPS[k] || k),
-          l.action !== 'ajout' ? h('td', { class: 'pre' }, texte(l.avant?.[k])) : null,
-          l.action !== 'suppression' ? h('td', { class: 'pre' }, texte(l.apres?.[k])) : null))))),
+          l.action !== 'ajout' ? h('td', { class: 'pre' }, texteDe(k, l.avant?.[k])) : null,
+          l.action !== 'suppression' ? h('td', { class: 'pre' }, texteDe(k, l.apres?.[k])) : null))))),
     [{ texte: 'Fermer', valeur: true }], { large: true });
   }
 
