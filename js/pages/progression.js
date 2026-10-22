@@ -11,7 +11,7 @@ const APPRENTIS = ['Présents', 'PFMP'];
 const EVENEMENTS = ['Férié / pont', 'Sortie scolaire', 'Épreuve'];
 const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-const CLE_AN = 'pilotage-scbh-progression-annee', CLE_MAT = 'pilotage-scbh-progression-matiere';
+const CLE_AN = 'pilotage-scbh-progression-annee', CLE_MAT = 'pilotage-scbh-progression-matiere', CLE_VUE = 'pilotage-scbh-progression-vue';
 const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const ecrire = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
 
@@ -19,6 +19,7 @@ export async function pageProgression(zone, arg, ctx) {
   const P = ctx.promo, Y = P.annee_debut;
   const ref = await ctx.referentiel();
   let annee = Number(lire(CLE_AN, '0')) === 1 ? 1 : 0;
+  let vue = lire(CLE_VUE, 'tableau') === 'frise' ? 'frise' : 'tableau';
   let filtre = arg && ctx.matieres.some((m) => String(m.id) === String(arg)) ? String(arg) : lire(CLE_MAT, 'toutes');
   if (filtre !== 'toutes' && !ctx.matieres.some((m) => String(m.id) === filtre)) filtre = 'toutes';
   const calendrierModifiable = ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
@@ -131,7 +132,7 @@ export async function pageProgression(zone, arg, ctx) {
   let glisse = null;
   const garde = { x: 0, y: 0 };
   function dessiner() {
-    const conteneur = zone.querySelector('.tableau-progression');
+    const conteneur = zone.querySelector('.tableau-progression, .frise-defile');
     if (conteneur) { garde.x = conteneur.scrollLeft; garde.y = window.scrollY; }
     const mats = filtre === 'toutes' ? ctx.matieres : ctx.matieres.filter((m) => String(m.id) === filtre);
     const detail = mats.length === 1;
@@ -141,6 +142,8 @@ export async function pageProgression(zone, arg, ctx) {
       h('div', {}, h('h1', {}, 'Progression'),
         h('p', { class: 'sous-titre' }, `Promotion ${P.libelle}  ·  ${annee === 0 ? '1re' : '2e'} année ${Y + annee}-${Y + annee + 1}`)),
       h('div', { class: 'actions-page' },
+        h('div', { class: 'bascule' }, [['tableau', '☷  Tableau'], ['frise', '▬  Frise']].map(([v, t]) => h('button', { class: 'btn' + (v === vue ? ' principal' : ''),
+          onclick: () => { vue = v; ecrire(CLE_VUE, v); garde.x = 0; dessiner(); } }, t))),
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
         boutonAnnuler(ctx, 'progression'),
@@ -192,9 +195,151 @@ export async function pageProgression(zone, arg, ctx) {
     }
     const tableau = h('div', { class: 'tableau-progression' }, h('table', { class: 'progression' + (detail ? ' detail' : '') },
       h('thead', {}, tete), h('tbody', {}, corps)));
+    if (vue === 'frise') {
+      const f = frise(mats, w0);
+      vider(zone, entete, legendeFrise(detail), detail ? aPlacer(mats[0]) : null, f);
+      f.scrollLeft = garde.x;
+      window.scrollTo(0, garde.y);
+      return;
+    }
     vider(zone, entete, legende, detail ? aPlacer(mats[0]) : null, tableau);
     tableau.scrollLeft = garde.x;
     window.scrollTo(0, garde.y);
+  }
+
+  // ------------------------------------------------------------------------------------- vue « frise »
+  // le temps de gauche à droite (une colonne par semaine), une bande par matière ; séances en blocs colorés
+  function legendeFrise(detail) {
+    return h('div', { class: 'legende' },
+      VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
+      h('span', { class: 'leg frise-pfmp' }, 'PFMP (apprentis)'),
+      EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
+      h('span', { class: 'leg frise-auj' }, 'Aujourd’hui'),
+      h('span', { class: 'aide' }, detail ? 'Glisser un bloc pour déplacer la séance (les suivantes se décalent) ; glisser une séance « à placer » sur la frise ; cliquer pour modifier.'
+        : 'Glisser un bloc pour déplacer la séance ; cliquer un bloc ou une case vide pour la modifier. Cliquer les lignes du haut pour les vacances, les apprentis et les évènements.'));
+  }
+
+  function frise(mats, w0) {
+    const N = SEM_AN, semaines0 = Array.from({ length: N }, (_, i) => w0 + i);
+    const col = (w) => w - w0 + 2;
+    const aujourdhui = (() => { const t = new Date(); return semaines0.find((w) => t >= lundi(w) && t < jourDe(w, 7)); })();
+    const ligne = (classe, libelle, ...contenu) => h('div', { class: 'frise-ligne ' + classe, style: { gridTemplateColumns: `var(--frise-lib) repeat(${N}, var(--frise-sem))` } },
+      h('div', { class: 'frise-lib' }, libelle), contenu);
+    // regroupe des semaines consécutives de même valeur : [{ debut, fin, v }]
+    const plages = (valeur) => {
+      const r = [];
+      for (const w of semaines0) {
+        const v = valeur(w), d = r[r.length - 1];
+        if (v && d && d.v === v && d.fin === w - 1) d.fin = w; else if (v) r.push({ debut: w, fin: w, v });
+      }
+      return r;
+    };
+    const fond = (w, extra = '') => h('div', { class: 'frise-case' + (semaines.get(w)?.vacances ? ' vac-' + cls(semaines.get(w).vacances) : '') + (w === aujourdhui ? ' auj' : '') + extra,
+      style: { gridColumn: col(w), gridRow: '1 / -1' } });
+
+    // mois et semaines
+    const moisL = plages((w) => { const d = jourDe(w, 2); return `${MOIS[d.getMonth()]} ${d.getFullYear()}`; });
+    const tete = [
+      ligne('frise-mois', '', moisL.map((p) => h('div', { class: 'frise-mois-lib', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}` } }, p.v))),
+      ligne('frise-semaines', 'Semaine', semaines0.map((w) => h('div', { class: 'frise-sem' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w) },
+        title: libSemaine(w) }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, jj(lundi(w)))))),
+    ];
+    // calendrier commun : vacances, apprentis, évènements
+    const vacL = plages((w) => semaines.get(w)?.vacances || '');
+    const appL = plages((w) => semaines.get(w)?.apprentis === 'PFMP' ? 'PFMP' : '');
+    const commun = [
+      ligne('frise-commun', 'Vacances / autres', semaines0.map((w) => h('div', { class: 'frise-case clic' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+        title: `${libSemaine(w)} : cliquer pour choisir`, onclick: () => choisirSemaine(w, 'vacances', VACANCES) })),
+        vacL.map((p) => h('div', { class: 'frise-bande vac-' + cls(p.v), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, p.v))),
+      ligne('frise-commun', 'Apprentis', semaines0.map((w) => h('div', { class: 'frise-case clic' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+        title: `${libSemaine(w)} : apprentis ${semaines.get(w)?.apprentis || '—'} (cliquer pour choisir)`, onclick: () => choisirSemaine(w, 'apprentis', APPRENTIS) })),
+        appL.map((p) => h('div', { class: 'frise-bande frise-pfmp', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, 'PFMP'))),
+      ligne('frise-commun', 'Évènements', semaines0.map((w) => {
+        const evs = JOURS.map((_, k) => ({ k, ev: jours.get(w * 7 + k) || '' })).filter((x) => x.ev);
+        return h('div', { class: 'frise-case clic frise-ev' + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
+          title: evs.length ? evs.map((x) => `${jourDe(w, x.k).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} : ${x.ev}`).join('\n') : `${libSemaine(w)} : cliquer pour ajouter un évènement`,
+          onclick: () => choisirJour(w) }, evs.map((x) => h('i', { class: 'ev-' + cls(EVENEMENTS.includes(x.ev) ? x.ev : 'autre') }, '▲')));
+      })),
+    ];
+    // une bande par matière : séquences (fine bande) et séances (blocs)
+    const bandes = mats.map((m) => {
+      const modif = ctx.peutMatiere(m.id);
+      const toutes = seancesDe(m), placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+      // séquence de chaque semaine (les semaines de vacances au milieu d'une séquence la prolongent)
+      const seqDe = semaines0.map((w) => { const x = seanceDe(m, w); return x ? x.seq : null; });
+      semaines0.forEach((w, i) => {
+        if (seqDe[i] || !semaines.get(w)?.vacances) return;
+        const av = seqDe.slice(0, i).reverse().find((x, k, a) => x || !semaines.get(w - k - 1)?.vacances);
+        const ap = seqDe.slice(i + 1).find((x, k) => x || !semaines.get(w + k + 1)?.vacances);
+        if (av && ap && av.id === ap.id) seqDe[i] = av;
+      });
+      const seqL = plages((w) => seqDe[w - w0]?.id || '');
+      const blocs = plages((w) => cleDe(m, w));
+      const lib = h('div', { class: 'frise-lib frise-mat', style: { '--couleur': m.couleur } }, h('b', {}, m.nom),
+        h('span', {}, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
+      const ligneMat = h('div', { class: 'frise-ligne frise-matiere', style: { gridTemplateColumns: `var(--frise-lib) repeat(${N}, var(--frise-sem))`, '--couleur': m.couleur } },
+        lib,
+        semaines0.map((w) => {
+          const c = fond(w, ' cible-mat');
+          c.title = `${m.nom} · ${libSemaine(w)}${modif ? ' : cliquer pour placer une séance' : ''}`;
+          c.addEventListener('click', () => ouvrirCase(m, w));
+          if (modif && !semaines.get(w)?.vacances) {
+            c.addEventListener('dragover', (e) => { if (glisse && glisse.m.id === m.id) { e.preventDefault(); c.classList.add('cible'); } });
+            c.addEventListener('dragleave', () => c.classList.remove('cible'));
+            c.addEventListener('drop', async (e) => {
+              e.preventDefault(); c.classList.remove('cible');
+              const g = glisse; glisse = null;
+              if (!g || g.m.id !== m.id) return;
+              if (g.nouvelle) await inserer(m, w, 's' + g.nouvelle);
+              else if (g.w !== w) await deplacer(m, g.w, w);
+            });
+          }
+          return c;
+        }),
+        seqL.map((p) => { const sq = seqDe[p.debut - w0];
+          return h('div', { class: 'frise-seq', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 }, title: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
+            `Séq. ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}`); }),
+        blocs.map((p) => {
+          const c = caseDe(m, p.debut), x = seanceDe(m, p.debut);
+          const suite = x && blocs.some((q) => q !== p && q.v === p.v && q.fin < p.debut);
+          const pb = x && !suite ? problemes(x) : [];
+          const nbc = x ? (commentaires.get(x.id) || []).length : 0;
+          const n = p.fin - p.debut + 1;
+          const b = h('div', { class: 'frise-bloc' + (x ? '' : ' libre') + (suite ? ' suite' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 2 },
+            draggable: modif ? 'true' : null,
+            title: x ? `${num(x)} · ${x.titre || 'Séance sans titre'}\nSéquence ${x.seq.numero}${x.seq.intitule ? ' · ' + x.seq.intitule : ''}\n${libSemaine(p.debut)}${n > 1 ? ` → ${libSemaine(p.fin)} (${n} semaines)` : ''}`
+              + (x.objectif_inter ? `\nObjectif : ${x.objectif_inter}` : '') + (c?.note ? `\nNote : ${c.note}` : '')
+              + (pb.length ? '\n⚠ Prérequis pas encore faits : ' + pb.map((q) => etiq(q.y)).join(', ') : '')
+              : `${c?.texte || ''}${c?.note ? '\nNote : ' + c.note : ''}` },
+            h('b', {}, x ? num(x) : '✎'), h('span', {}, x ? (suite ? '(suite)' : x.titre || '') : c?.texte || ''),
+            pb.length ? h('i', { class: 'frise-alerte', title: 'Antériorité non respectée' }, '⚠') : null,
+            nbc ? h('i', { class: 'frise-com' }, '💬' + nbc) : null,
+            c?.note ? h('i', { class: 'frise-note', title: c.note }, '✎') : null);
+          b.addEventListener('click', (e) => { if (b.classList.contains('glisse')) return; e.stopPropagation(); ouvrirCase(m, p.debut); });
+          if (modif) glisserDepuis(b, m, p.debut);
+          return b;
+        }));
+      return ligneMat;
+    });
+    return h('div', { class: 'frise-defile' }, h('div', { class: 'frise' + (mats.length === 1 ? ' large' : ''), style: { '--frise-sem': mats.length === 1 ? '96px' : '52px', '--frise-lib': '170px' } }, tete, commun, bandes));
+  }
+
+  // vacances / apprentis d'une semaine (vue frise)
+  async function choisirSemaine(w, champ, options) {
+    if (!calendrierModifiable) return;
+    const actuel = semaines.get(w)?.[champ] || '';
+    const r = await fenetre(`${champ === 'vacances' ? 'Vacances / autres' : 'Apprentis'} · ${libSemaine(w)}`, h('p', { class: 'aide' }, 'Choisir pour cette semaine :'),
+      [{ texte: '—  (rien)', classe: actuel ? '' : 'principal', valeur: '\u0000' }, ...options.map((o) => ({ texte: o, classe: o === actuel ? 'principal' : '', valeur: o }))]);
+    if (r === null || r === undefined || r === false) return;
+    try { await majSemaine(w, champ, r === '\u0000' ? '' : r); toast('Enregistré'); dessiner(); } catch (e) { erreur(e); }
+  }
+  // évènement : choisir le jour de la semaine, puis l'évènement
+  async function choisirJour(w) {
+    if (!calendrierModifiable) return;
+    const k = await fenetre(`Évènement · ${libSemaine(w)}`, h('p', { class: 'aide' }, 'Quel jour ?'),
+      JOURS.map((_, i) => ({ texte: `${jourDe(w, i).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })}${jours.get(w * 7 + i) ? ' ▲' : ''}`, valeur: String(i) })));
+    if (k === null || k === undefined || k === false) return;
+    await choisirEvenement(w, Number(k));
   }
 
   const cls = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]+/g, '-');

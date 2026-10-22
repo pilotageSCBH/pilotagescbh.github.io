@@ -22,6 +22,7 @@ const SECTIONS = [
     ['Nouvelle promotion', "Dans une promotion vide, « Reprendre ce séquençage » recopie celui d'une autre promotion, modifiable ensuite."],
   ]],
   ['progression', 'Progression', [
+    ['Vue frise', "Bouton « ▬ Frise » : la progression en frise chronologique, le temps de gauche à droite (mois, semaines), une bande par matière avec ses séquences et ses séances en blocs colorés, les vacances, PFMP et évènements en haut, la semaine en cours marquée d'un trait rouge. Glissez un bloc pour déplacer la séance, cliquez un bloc ou une case pour modifier, cliquez les lignes du haut pour les vacances, les apprentis et les évènements. « ☷ Tableau » revient à la vue habituelle ; le choix est mémorisé."],
     ['Le calendrier', "Une ligne par semaine sur deux années de 45 semaines (boutons « 1re année / 2e année »). Choisissez une seule matière en haut à droite pour voir le détail de ses séances."],
     ['Calendrier commun', "Cliquez un jour pour noter un évènement (Férié / pont, Sortie scolaire, Épreuve ou un texte). Les menus « Apprentis » et « Vacances / autres » se règlent par semaine ; une semaine de vacances, d'épreuves ou de stage ne reçoit pas de séance."],
     ['Placer une séance', "Cliquez une case : choisissez la séance, ou écrivez un texte libre, et une note pour la semaine. Avec une seule matière affichée, faites glisser une séance du bandeau « Séances à placer » vers une semaine : si elle est occupée, les suivantes descendent."],

@@ -696,3 +696,58 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
 .ajout-prof:hover { border-color: var(--teal); background: var(--clair); }
 .ajout-prof .avatar { background: var(--teal); }
 .mat-profs.auto, .mat-chiffres.auto, .badge-compte.auto { background: var(--auto); }
+
+/* ------------------------------------------------------------------ progression : vue frise */
+.frise-defile { overflow-x: auto; background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding-bottom: 6px; }
+.frise { display: flex; flex-direction: column; width: max-content; min-width: 100%; }
+.frise-ligne { display: grid; position: relative; border-bottom: 1px solid #EEF2F1; }
+.frise-lib { grid-column: 1; grid-row: 1 / -1; position: sticky; left: 0; z-index: 5; background: #fff; border-right: 2px solid var(--ligne);
+  padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--fonce); display: flex; flex-direction: column; justify-content: center; }
+.frise-mois { background: var(--fonce); }
+.frise-mois .frise-lib { background: var(--fonce); }
+.frise-mois-lib { color: #fff; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 5px 8px; border-left: 1px solid rgba(255,255,255,.35); white-space: nowrap; overflow: hidden; }
+.frise-semaines { background: var(--auto); }
+.frise-semaines .frise-lib { background: var(--auto); }
+.frise-sem { text-align: center; padding: 3px 0; border-left: 1px solid #fff; line-height: 1.1; }
+.frise-sem b { display: block; font-size: 11.5px; color: var(--fonce); }
+.frise-sem span { font-size: 9.5px; color: var(--gris); }
+.frise-case { border-left: 1px solid #F0F3F2; min-height: 26px; }
+.frise-case.clic { cursor: pointer; }
+.frise-case.clic:hover, .frise-case.cible-mat:hover { background: var(--clair); }
+.frise-case.vac-vacances { background: #FBE3E0; } .frise-case.vac-epreuves { background: #FCF2D2; } .frise-case.vac-stage { background: #E3F2DC; }
+.frise-case.cible { background: #E8F3C9 !important; box-shadow: inset 0 0 0 2px var(--anis); }
+.frise .auj { box-shadow: inset 2px 0 0 #D2483B; }
+.frise-sem.auj b { color: #D2483B; }
+.frise-commun .frise-lib { font-weight: 600; color: var(--gris); }
+.frise-bande { pointer-events: none; z-index: 1; margin: 3px 1px; border-radius: 6px; font-size: 11px; font-weight: 700; padding: 3px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #5A3B00; }
+.frise-bande.vac-vacances { background: #F3B9B1; color: #7A1E12; } .frise-bande.vac-epreuves { background: #F2D98A; } .frise-bande.vac-stage { background: #B9DDA9; color: #24500E; }
+.frise-pfmp, .leg.frise-pfmp { background: #F6C79A !important; color: #6B3A00; }
+.leg.frise-auj { border-left: 3px solid #D2483B !important; }
+.frise-ev { display: flex; align-items: center; justify-content: center; gap: 1px; font-size: 10px; }
+.frise-ev i { font-style: normal; color: #E67E22; }
+.frise-ev i.ev-ferie-pont { color: #9B6FD0; background: none !important; } .frise-ev i.ev-sortie-scolaire { color: #4A8FD0; background: none !important; } .frise-ev i.ev-epreuve { color: #D4AC0D; background: none !important; }
+.frise-matiere { grid-template-rows: 20px 46px; }
+.frise-mat { border-left: 5px solid var(--couleur); }
+.frise-mat b { font-size: 13px; color: var(--texte); }
+.frise-mat span { font-size: 10.5px; font-weight: 600; color: var(--gris); }
+.frise-seq { z-index: 2; margin: 3px 1px 0; border-radius: 5px 5px 0 0; background: color-mix(in srgb, var(--couleur) 22%, #fff); color: var(--texte);
+  font-size: 10.5px; font-weight: 700; padding: 1px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.frise-bloc { z-index: 3; margin: 2px 2px 4px; border-radius: 6px; background: var(--couleur); color: #fff; padding: 4px 6px; font-size: 11px; line-height: 1.2;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0 5px; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.15); position: relative; }
+.frise-bloc b { font-size: 12px; }
+.frise-bloc span { flex: 1 1 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .95; }
+.frise-bloc.suite { opacity: .7; }
+.frise-bloc.libre { background: #fff; color: var(--texte); border: 2px dashed var(--couleur); box-shadow: none; }
+.frise-bloc:hover { filter: brightness(1.08); box-shadow: 0 0 0 2px var(--fonce); }
+.frise-bloc.glisse { opacity: .35; }
+.frise-bloc i { font-style: normal; font-size: 10px; }
+.frise-alerte { background: #fff; color: #D2483B; border-radius: 8px; padding: 0 3px; font-weight: 800; }
+.frise-com, .frise-note { opacity: .95; }
+@media print {
+  .frise-defile { overflow: visible; box-shadow: none; }
+  .frise { zoom: .52; }
+  .frise-lib { position: static; }
+}
+.frise.large .frise-bloc { font-size: 11.5px; }
+.frise.large .frise-bloc span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.frise.large .frise-matiere { grid-template-rows: 20px 58px; }
