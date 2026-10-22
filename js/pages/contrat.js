@@ -3,6 +3,7 @@
 //   < 2 → NA (non acquis) · 2 à < 4 → EVA (en voie d'acquisition) · ≥ 4 → A (acquis) · aucune note → NE.
 import { db } from '../api.js';
 import { h, vider, champ, toast, erreur, confirmer, dateFr } from '../ui.js';
+import { empileH, colonnes, carteGraph } from '../graphiques.js';
 
 export const FORMES = ['Devoir surveillé', 'Travaux pratiques', 'QCM', 'Exposé oral', 'Dossier', 'Étude de cas', 'Mise en situation'];
 export const LIEUX = ['En salle', 'En atelier', 'En extérieur', 'À la maison'];
@@ -122,8 +123,27 @@ export async function dessinerContrat(zone, opts) {
         h('tbody', {}, lignes))),
       h('div', { class: 'legende-niveaux' },
         h('span', { class: 'niv-na' }, 'NA : non acquis (0 à moins de 2 / 5)'), h('span', { class: 'niv-eva' }, 'EVA : en voie d’acquisition (2 à moins de 4)'),
-        h('span', { class: 'niv-a' }, 'A : acquis (4 à 5)'), h('span', { class: 'niv-ne' }, 'NE : non évalué')));
+        h('span', { class: 'niv-a' }, 'A : acquis (4 à 5)'), h('span', { class: 'niv-ne' }, 'NE : non évalué')),
+      eleves.length && notes.size ? graphiques(groupes, actifs, finale) : null);
     zone.querySelectorAll('textarea.champ').forEach((t) => { t.style.height = 'auto'; t.style.height = Math.max(t.scrollHeight + 2, 26) + 'px'; });
+  }
+
+  // répartition des niveaux par compétence (ou objectif) et des notes finales
+  function graphiques(groupes, actifs, finale) {
+    const SERIES = [{ nom: 'Acquis (A)', couleur: 'var(--g-a)' }, { nom: 'En voie (EVA)', couleur: 'var(--g-eva)' }, { nom: 'Non acquis (NA)', couleur: 'var(--g-na)' }, { nom: 'Non évalué', couleur: 'var(--g-ne)' }];
+    const rang = (n) => (n === null ? 3 : ['A', 'EVA', 'NA'].indexOf(niveau(n).code));
+    const finales = eleves.map((e) => finale(e)).map((f) => (f === null ? null : f * 4));
+    const T = [[0, 4], [4, 8], [8, 10], [10, 12], [12, 14], [14, 16], [16, 20.01]];
+    return h('section', { class: 'graphiques ecran' },
+      carteGraph(type === 'sommatif' ? 'Niveaux par compétence' : 'Niveaux par objectif', 'nombre d’élèves à chaque niveau', empileH(groupes.map((g) => {
+        const r = [0, 0, 0, 0]; eleves.forEach((e) => { r[rang(moyenne(actifs(g), notes, e.id))]++; });
+        const t = opts.titreGroupe(g.nom);
+        return { label: t.code.length > 22 ? t.code.slice(0, 21) + '…' : t.code, valeurs: r };
+      }), SERIES)),
+      carteGraph('Notes finales', 'nombre d’élèves par tranche de notes sur 20', colonnes(T.map(([a, b]) => {
+        const n = finales.filter((x) => x !== null && x >= a && x < b).length;
+        return { label: `${a}–${Math.floor(b)}`, valeur: n, couleur: b <= 10 ? 'var(--g-na)' : 'var(--g1)', info: `${n} élève(s) entre ${a} et ${Math.floor(b)}` };
+      }))));
   }
 
   function celluleNote(k, e) {

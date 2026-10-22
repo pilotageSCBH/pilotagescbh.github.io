@@ -4,6 +4,7 @@
 import { db } from '../api.js';
 import { h, vider, imprimer } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
+import { anneau, empileH, carteGraph } from '../graphiques.js';
 
 const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
 
@@ -58,5 +59,23 @@ export async function pageValidation(zone, _arg, ctx) {
         return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom), cells,
           h('td', { class: 'total' }, cpt.A), h('td', { class: 'total' }, cpt.EVA), h('td', { class: 'total' }, cpt.NA));
       })))),
-    eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'));
+    eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'),
+    eleves.length ? graphiques() : null);
+
+  // niveaux : effectifs par élève et par famille de compétences
+  function graphiques() {
+    const SERIES = [{ nom: 'Acquis (A)', couleur: 'var(--g-a)' }, { nom: 'En voie (EVA)', couleur: 'var(--g-eva)' }, { nom: 'Non acquis (NA)', couleur: 'var(--g-na)' }, { nom: 'Non évaluée', couleur: 'var(--g-ne)' }];
+    const compte = (es, cs) => {
+      const r = [0, 0, 0, 0];
+      for (const e of es) for (const c of cs) { const b = best.get(`${e.id}:${c.code}`); const k = b ? ['A', 'EVA', 'NA'].indexOf(niveau(b.n).code) : 3; r[k]++; }
+      return r;
+    };
+    const tout = compte(eleves, comps);
+    return h('section', { class: 'graphiques ecran-et-impression' },
+      carteGraph('Bilan de la promotion', 'toutes les compétences de tous les élèves', anneau(SERIES.map((x, i) => ({ ...x, valeur: tout[i] })),
+        { centre: `${Math.round((tout[0] / Math.max(1, tout.reduce((a, b) => a + b, 0))) * 100)} %`, sous: 'acquises' })),
+      carteGraph('Par famille de compétences', 'répartition des niveaux (tous élèves)', empileH(familles.map((f) => ({
+        label: f.code, valeurs: compte(eleves, comps.filter((c) => c.famille === f.code)) })), SERIES, { pourcent: true })),
+      carteGraph('Par élève', 'nombre de compétences à chaque niveau', empileH(eleves.map((e) => ({ label: `${e.nom} ${e.prenom}`, valeurs: compte([e], comps) })), SERIES)));
+  }
 }

@@ -3,6 +3,7 @@
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, toast, erreur, imprimer } from '../ui.js';
+import { anneau, empileH, carteGraph } from '../graphiques.js';
 
 const STATUTS = {
   couverte: ['Couverte', 'st-ok'], prevue: ['Prévue, pas encore traitée', 'st-prevue'], non: ['Non couverte', 'st-non'],
@@ -82,7 +83,30 @@ export async function pageCouverture(zone, arg, ctx) {
             ctx.matieres.map((m) => h('th', { colspan: 2, class: 'mat', style: { '--couleur': m.couleur } }, m.nom)),
             h('th', { rowspan: 2 }, 'Total'), h('th', { rowspan: 2 }, 'Statut')),
           h('tr', {}, ctx.matieres.flatMap(() => [h('th', { class: 'sous' }, 'Prévue'), h('th', { class: 'sous' }, 'Séances')]))),
-        h('tbody', {}, lignes))));
+        h('tbody', {}, lignes))),
+      graphiques(compte));
+  }
+
+  function graphiques(compte) {
+    const nom = type === 'competence' ? 'compétences' : 'savoirs';
+    const ST = [{ nom: 'Couvertes', couleur: 'var(--g-ok)' }, { nom: 'Prévues, pas encore traitées', couleur: 'var(--g-attente)' }, { nom: 'Non couvertes', couleur: 'var(--g-na)' }];
+    const groupes = [...new Set(items.map(groupe))];
+    return h('section', { class: 'graphiques' },
+      carteGraph(`Couverture des ${nom}`, `${items.length} ${nom} du référentiel`, anneau(ST.map((x, i) => ({ ...x, valeur: [compte.couverte, compte.prevue, compte.non][i] })),
+        { centre: `${Math.round((compte.couverte / Math.max(1, items.length)) * 100)} %`, sous: 'couvertes' })),
+      carteGraph('Par matière', `${nom} prévues (cochées) et traitées (au moins une séance)`, empileH(ctx.matieres.map((m) => {
+        let ok = 0, att = 0, hors = 0;
+        for (const it of items) {
+          const p = prevues.has(`${m.id}:${it.code}`), t = (traitees.get(`${m.id}:${it.code}`) || []).length > 0;
+          if (p && t) ok++; else if (p) att++; else if (t) hors++;
+        }
+        return { label: m.nom, valeurs: [ok, att, hors] };
+      }), [{ nom: 'Prévues et traitées', couleur: 'var(--g-ok)' }, { nom: 'Prévues, sans séance', couleur: 'var(--g-attente)' }, { nom: 'Traitées sans être prévues', couleur: 'var(--g-hors)' }])),
+      carteGraph(type === 'competence' ? 'Par famille de compétences' : 'Par groupe de savoirs', 'part des codes de chaque groupe', empileH(groupes.map((g) => {
+        const its = items.filter((it) => groupe(it) === g);
+        const r = [0, 0, 0]; its.forEach((it) => { r[['couverte', 'prevue', 'non'].indexOf(statut(it))]++; });
+        return { label: g.split(' · ')[0], valeurs: r };
+      }), ST, { pourcent: true })));
   }
 
   async function cocher(m, code, oui, caseACocher) {

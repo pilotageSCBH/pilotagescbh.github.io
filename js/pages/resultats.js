@@ -4,6 +4,7 @@
 import { db } from '../api.js';
 import { h, vider, toast, erreur, fenetre, confirmer, imprimer, dateFr, nombre } from '../ui.js';
 import { boutonAnnuler } from '../annuler.js';
+import { barresH, colonnes as graphColonnes, courbe, carteGraph } from '../graphiques.js';
 
 const CLE_MAT = 'pilotage-scbh-resultats-matiere', CLE_PER = 'pilotage-scbh-resultats-periode';
 const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -110,7 +111,7 @@ export async function pageResultats(zone, arg, ctx) {
     const st = (i) => stats(lignes.map((l) => (i === -1 ? l.gen : l.notes[i])));
     const piedLigne = (lib, k) => h('tr', { class: 'pied-res' }, h('th', {}, lib),
       ctx.matieres.map((_, i) => h('td', {}, virgule(st(i)[k]))), h('td', { class: 'gen' }, virgule(st(-1)[k])));
-    return h('div', { class: 'tableau-defile' }, h('table', { class: 'resultats' },
+    const tableau = h('div', { class: 'tableau-defile' }, h('table', { class: 'resultats' },
       h('thead', {},
         h('tr', {}, h('th', { class: 'col-eleve' }, 'Élève'),
           ctx.matieres.map((m) => h('th', { class: 'col-res mat', style: { '--couleur': m.couleur } },
@@ -124,12 +125,41 @@ export async function pageResultats(zone, arg, ctx) {
         l.notes.map((n) => h('td', { class: 'note-res ' + classeNote(n) }, virgule(n))),
         h('td', { class: 'note-res gen ' + classeNote(l.gen) }, virgule(l.gen))))),
       h('tfoot', {}, piedLigne('Moyenne de la classe', 'moy'), piedLigne('Note la plus basse', 'min'), piedLigne('Note la plus haute', 'max'))));
+    const gens = lignes.map((l) => l.gen);
+    return h('div', {}, tableau, h('section', { class: 'graphiques' },
+      carteGraph('Moyenne de la classe par matière', 'sur 20', barresH(ctx.matieres.map((m, i) => ({ label: m.nom, valeur: st(i).moy, couleur: m.couleur,
+        info: `${m.nom} : moyenne ${virgule(st(i).moy)} · de ${virgule(st(i).min)} à ${virgule(st(i).max)}` })), { max: 20, format: (v) => virgule(v) })),
+      carteGraph('Répartition des moyennes générales', 'nombre d’élèves par tranche de notes', histogramme(gens)),
+      carteGraph('Moyenne générale par élève', 'sur 20, de la plus haute à la plus basse', barresH(lignes.filter((l) => l.gen !== null)
+        .sort((a, b) => b.gen - a.gen).map((l) => ({ label: `${l.e.nom} ${l.e.prenom}`, valeur: l.gen, couleur: l.gen < 10 ? 'var(--g-na)' : 'var(--g1)' })), { max: 20, format: (v) => virgule(v) }))));
+  }
+
+  // nombre d'élèves par tranche de notes (sur 20)
+  function histogramme(notes) {
+    const T = [[0, 4], [4, 8], [8, 10], [10, 12], [12, 14], [14, 16], [16, 20.01]];
+    return graphColonnes(T.map(([a, b]) => {
+      const n = notes.filter((x) => x !== null && x >= a && x < b).length;
+      return { label: `${a}–${Math.floor(b)}`, valeur: n, couleur: b <= 10 ? 'var(--g-na)' : 'var(--g1)', info: `${n} élève(s) entre ${a} et ${b > 20 ? 20 : b}${b > 20 ? '' : ' (exclu)'}` };
+    }));
   }
 
   function tableauMatiere(m, modif) {
     const cols = colonnes(m);
     const cellMoy = new Map(), cellPied = {};
+    const zoneGraph = h('section', { class: 'graphiques' });
+    const graphes = () => {
+      const moys = eleves.map((e) => moyenneMatiere(m, e, cols));
+      vider(zoneGraph,
+        carteGraph('Moyenne de la classe à chaque évaluation', 'dans l’ordre des dates, sur 20', courbe(cols.map((c) => {
+          const st = stats(eleves.map((e) => c.note(e)));
+          return { label: c.date ? dateFr(c.date).slice(0, 5) : c.titre.slice(0, 10), valeur: st.moy, info: `${c.titre}${c.date ? ' (' + dateFr(c.date) + ')' : ''} : moyenne ${virgule(st.moy)} · de ${virgule(st.min)} à ${virgule(st.max)}` };
+        }), { min: 0, max: 20, reference: { valeur: 10, nom: '10 / 20' }, couleur: m.couleur, format: (v) => virgule(v) })),
+        carteGraph(`Répartition des moyennes en ${m.nom}`, 'nombre d’élèves par tranche de notes', histogramme(moys)),
+        carteGraph(`Moyenne par élève en ${m.nom}`, 'sur 20, de la plus haute à la plus basse', barresH(eleves.map((e, i) => ({ e, n: moys[i] })).filter((x) => x.n !== null)
+          .sort((a, b) => b.n - a.n).map((x) => ({ label: `${x.e.nom} ${x.e.prenom}`, valeur: x.n, couleur: x.n < 10 ? 'var(--g-na)' : m.couleur })), { max: 20, format: (v) => virgule(v) })));
+    };
     const recalculer = () => {
+      graphes();
       for (const e of eleves) { const n = moyenneMatiere(m, e, cols), td = cellMoy.get(e.id); td.textContent = virgule(n); td.className = 'note-res gen ' + classeNote(n); }
       for (const [k, tds] of Object.entries(cellPied)) {
         tds.forEach((td, i) => {
@@ -170,7 +200,7 @@ export async function pageResultats(zone, arg, ctx) {
       h('thead', {}, entete, coefs), h('tbody', {}, corps),
       h('tfoot', {}, pied('Moyenne de la classe', 'moy'), pied('Note la plus basse', 'min'), pied('Note la plus haute', 'max'))));
     recalculer();
-    return cols.length ? t : h('div', {}, h('p', { class: 'vide' }, 'Aucune évaluation pour cette période : les contrats sommatifs des séquences de la matière et les résultats intermédiaires s’afficheront ici.'));
+    return cols.length ? h('div', {}, t, zoneGraph) : h('div', {}, h('p', { class: 'vide' }, 'Aucune évaluation pour cette période : les contrats sommatifs des séquences de la matière et les résultats intermédiaires s’afficheront ici.'));
   }
 
   function saisieCoef(valeur, enregistrer) {

@@ -1,6 +1,7 @@
 // Élèves de la promotion : liste, effectifs ; ajout et modification par l'administrateur.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
+import { anneau, barresH, carteGraph } from '../graphiques.js';
 import { h, vider, toast, erreur, fenetre, confirmer, dateFr, imprimer } from '../ui.js';
 
 const CHAMPS = [
@@ -45,7 +46,21 @@ export async function pageEleves(zone, _arg, ctx) {
           h('td', { class: 'petit' }, e.entreprise, h('br'), [e.entreprise_commune, e.entreprise_cp].filter(Boolean).join(' ')),
           h('td', { class: 'petit' }, e.etudes, h('br'), e.etablissement, e.projet ? h('div', {}, '→ ' + e.projet) : null),
           h('td', { class: 'petit' }, e.arret)))))),
-      eleves.length === 0 ? h('p', { class: 'vide' }, 'Aucun élève saisi.') : null);
+      eleves.length === 0 ? h('p', { class: 'vide' }, 'Aucun élève saisi.') : null,
+      actifs.length ? graphiques(actifs, app) : null);
+  }
+
+  // répartitions : statut, département d'origine, études précédentes (élèves en formation)
+  function graphiques(actifs, app) {
+    const repartir = (cle) => {
+      const m = new Map(); actifs.forEach((e) => { const v = (e[cle] || '').trim() || 'Non renseigné'; m.set(v, (m.get(v) || 0) + 1); });
+      return [...m].sort((a, b) => b[1] - a[1]).map(([label, valeur]) => ({ label, valeur, couleur: label === 'Non renseigné' ? 'var(--g-ne)' : 'var(--g1)', info: `${label} : ${valeur} élève(s)` }));
+    };
+    return h('section', { class: 'graphiques' },
+      carteGraph('Statut', `${actifs.length} élève(s) en formation`, anneau([{ nom: 'Scolaires', valeur: actifs.length - app, couleur: 'var(--g1)' },
+        { nom: 'Apprentis', valeur: app, couleur: 'var(--g2)' }], { centre: String(actifs.length), sous: 'élèves' })),
+      carteGraph('Département d’origine', 'nombre d’élèves', barresH(repartir('departement'), { format: (v) => String(v) })),
+      carteGraph('Études précédentes', 'nombre d’élèves', barresH(repartir('etudes'), { format: (v) => String(v) })));
   }
 
   async function formulaire(e) {

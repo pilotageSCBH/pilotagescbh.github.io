@@ -3,6 +3,7 @@ import { db, emailDe, identifiantDe } from '../api.js';
 import { DOMAINE } from '../../config.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
 import { rafraichirMenu } from '../app.js';
+import { colonnes, barresH, carteGraph } from '../graphiques.js';
 
 // rôles des comptes : « lecture » = consultation seule (ex. DDFPT), aucune modification possible
 const ROLES = [['enseignant', 'Enseignant'], ['lecture', 'Lecture seule (DDFPT…)'], ['admin', 'Administrateur']];
@@ -95,10 +96,31 @@ export async function pageAdmin(zone, _arg, ctx) {
             h('td', { class: 'centre' }, Number(b.nb)),
             h('td', { class: 'centre' }, Number(b.nb) ? duree(Number(b.secondes)) : '—'),
             h('td', { class: 'centre' }, Number(b.nb) ? duree(Number(b.secondes) / Number(b.nb)) : '—'),
-            h('td', {}, ilya(b.derniere)))))));
+            h('td', {}, ilya(b.derniere)))))),
+          await graphiques(d, lignes));
       } catch (e) {
         vider(corps, h('p', { class: 'aide' }, 'Suivi indisponible : exécutez le fichier 9_connexions.sql dans Supabase. (' + e.message + ')'));
       }
+    }
+    // connexions par jour (ou par semaine sur une longue période) et temps total par compte
+    async function graphiques(depuis, lignes) {
+      const toutes = await db.lire('connexions', `debut=gte.${depuis.toISOString()}&order=debut`);
+      const jours = Math.ceil((Date.now() - depuis) / 86400000);
+      const parSemaine = jours > 45;
+      const cle = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); if (parSemaine) x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); };
+      const debut = new Date(Math.max(depuis.getTime(), toutes.length ? cle(toutes[0].debut) : depuis.getTime()));
+      const cases = [];
+      for (let t = cle(debut); t <= Date.now(); t += (parSemaine ? 7 : 1) * 86400000) cases.push(t);
+      const n = new Map(cases.map((t) => [t, 0]));
+      toutes.forEach((c) => { const k = cle(c.debut); if (n.has(k)) n.set(k, n.get(k) + 1); });
+      const lib = (t) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' });
+      return h('section', { class: 'graphiques' },
+        carteGraph(parSemaine ? 'Connexions par semaine' : 'Connexions par jour', 'tous les comptes', colonnes(cases.slice(-40).map((t) => ({
+          label: lib(t), valeur: n.get(t), info: `${parSemaine ? 'Semaine du ' : ''}${new Date(t).toLocaleDateString('fr-FR', { weekday: parSemaine ? undefined : 'long', day: 'numeric', month: 'long' })} : ${n.get(t)} connexion(s)` })),
+        { largeur: 640 })),
+        carteGraph('Temps passé par compte', 'sur la période', barresH(lignes.filter(({ b }) => Number(b.nb)).sort((x, y) => Number(y.b.secondes) - Number(x.b.secondes))
+          .map(({ p, b }) => ({ label: p.nom || identifiantDe(p.email), valeur: Number(b.secondes) / 3600, info: `${p.nom || identifiantDe(p.email)} : ${duree(Number(b.secondes))} en ${b.nb} connexion(s)` })),
+        { format: (v) => duree(v * 3600) })));
     }
     async function detail(p) {
       const l = await db.lire('connexions', `profil_id=eq.${p.id}&order=debut.desc&limit=60`);
