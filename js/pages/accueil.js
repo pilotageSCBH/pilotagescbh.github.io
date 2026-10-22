@@ -2,7 +2,6 @@
 import { db } from '../api.js';
 import { h, vider, heures } from '../ui.js';
 import { choixPromotion } from '../app.js';
-import { anneau, barresH, empileH, carteGraph, nb } from '../graphiques.js';
 
 export async function pageAccueil(zone, _arg, ctx) {
   const p = ctx.promo.id;
@@ -52,23 +51,6 @@ export async function pageAccueil(zone, _arg, ctx) {
       h('a', { class: 'tuile lien-tuile', href: '#/couverture/competences' }, h('strong', {}, `${compsTraitees.size} / ${ref.competences.length}`), h('span', {}, 'compétences traitées')),
       h('a', { class: 'tuile lien-tuile', href: '#/couverture/savoirs' }, h('strong', {}, `${savTraites.size} / ${ref.savoirs.length}`), h('span', {}, 'savoirs associés traités')),
       h('a', { class: 'tuile lien-tuile', href: '#/validation' }, h('strong', {}, '→'), h('span', {}, 'validation des compétences'))),
-    h('h2', { class: 'titre-section' }, 'En graphiques'),
-    h('section', { class: 'graphiques' },
-      carteGraph('Élèves en formation', `${enFormation.length} élève(s)`, anneau([
-        { nom: 'Scolaires', valeur: enFormation.length - apprentis, couleur: 'var(--g1)' }, { nom: 'Apprentis', valeur: apprentis, couleur: 'var(--g2)' }],
-      { centre: String(enFormation.length), sous: 'élèves' })),
-      carteGraph('Volume horaire par matière', 'séances renseignées dans les séquençages', barresH(ctx.matieres.map((m) => {
-        const se = seaDe(m).filter(remplie), hr = se.reduce((a, x) => a + (Number(x.duree) || 0), 0);
-        return { label: m.nom, valeur: hr, couleur: m.couleur, info: `${m.nom} : ${heures(hr) || '0 h'} · ${se.length} séance(s)` };
-      }), { format: (v) => (heures(v) || '0 h') })),
-      carteGraph('Séances placées dans la progression', 'par matière', empileH(ctx.matieres.map((m) => {
-        const se = seaDe(m).filter(remplie), pl = se.filter((x) => placees.has(x.id)).length;
-        return { label: m.nom, valeurs: [pl, se.length - pl] };
-      }), [{ nom: 'Placées', couleur: 'var(--g1)' }, { nom: 'À placer', couleur: 'var(--g-vide)' }])),
-      carteGraph('Référentiel traité', 'compétences et savoirs développés dans au moins une séance', empileH([
-        { label: 'Compétences', valeurs: [compsTraitees.size, ref.competences.length - compsTraitees.size] },
-        { label: 'Savoirs associés', valeurs: [savTraites.size, ref.savoirs.length - savTraites.size] }],
-      [{ nom: 'Traités', couleur: 'var(--g1)' }, { nom: 'Pas encore traités', couleur: 'var(--g-vide)' }], { pourcent: true }))),
     h('h2', { class: 'titre-section' }, 'Matières professionnelles'),
     h('section', { class: 'grille-matieres' }, cartes),
     h('h2', { class: 'titre-section' }, 'Mode d’emploi'),
