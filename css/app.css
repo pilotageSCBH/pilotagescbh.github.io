@@ -891,3 +891,8 @@ select.mini.app option { background: #fff; color: var(--texte); }
 .leg.app-pfmp, .frise-bande.app-pfmp { background: #E3191E !important; color: #fff !important; border-color: #E3191E !important; }
 .leg.app-presents, .frise-bande.app-presents { background: #1DB33A !important; color: #fff !important; border-color: #1DB33A !important; }
 @media print { select.mini.app[data-v] { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+/* vacances : rouge plus soutenu */
+tr.vac-vacances td:not(.col-sem) { background: #F6B3AA; }
+.leg.vac-vacances { background: #F6B3AA; border-color: #E8786A; }
+.frise-bande.vac-vacances { background: #EC7A6B; color: #fff; }
+.frise-matiere .frise-case.vac-vacances { background: repeating-linear-gradient(135deg, rgba(226,92,76,.32) 0 6px, rgba(226,92,76,.12) 6px 12px); }
