@@ -7,7 +7,7 @@ export async function pageSequencage(zone, id, ctx) {
   const m = ctx.matieres.find((x) => String(x.id) === String(id));
   if (!m) { vider(zone, h('p', {}, 'Matière introuvable.')); return; }
   const ref = await ctx.referentiel();
-  const modif = ctx.peutMatiere(m.id);
+  const modif = ctx.enseigne(m.id);
 
   // toutes les séances de la promotion (toutes matières) : pour choisir et afficher les prérequis
   let toutes = new Map();

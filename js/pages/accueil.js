@@ -43,7 +43,7 @@ export async function pageAccueil(zone, _arg, ctx) {
         h('div', {}, h('strong', {}, nSeq), h('span', {}, 'séquences')),
         h('div', {}, h('strong', {}, se.length), h('span', {}, 'séances')),
         h('div', {}, h('strong', {}, heures(hrs) || '0 h'), h('span', {}, 'volume'))),
-      h('div', { class: 'ouvrir' }, ctx.peutMatiere(m.id) ? '▶  Ouvrir et modifier' : '▶  Consulter'));
+      h('div', { class: 'ouvrir' }, ctx.enseigne(m.id) ? '▶  Ouvrir et modifier' : '▶  Consulter'));
   });
 
   vider(zone,

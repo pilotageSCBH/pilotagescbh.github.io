@@ -264,7 +264,7 @@ export async function pageProgression(zone, arg, ctx) {
     ];
     // une bande par matière : séquences (fine bande) et séances (blocs)
     const bandes = mats.map((m) => {
-      const modif = ctx.peutMatiere(m.id);
+      const modif = ctx.enseigne(m.id);
       const toutes = seancesDe(m), placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
       // séquence de chaque semaine (les semaines de vacances au milieu d'une séquence la prolongent)
       const seqDe = semaines0.map((w) => { const x = seanceDe(m, w); return x ? x.seq : null; });
@@ -356,7 +356,7 @@ export async function pageProgression(zone, arg, ctx) {
   }
 
   function cellule(m, w, prec, detail, vac) {
-    const modif = ctx.peutMatiere(m.id);
+    const modif = ctx.enseigne(m.id);
     const c = caseDe(m, w), se = seanceDe(m, w), cle = cleDe(m, w);
     const td = h('td', { class: 'col-mat' + (vac ? ' hors-cours' : ''), style: { '--couleur': m.couleur } });
     if (se) {
@@ -412,7 +412,7 @@ export async function pageProgression(zone, arg, ctx) {
   function aPlacer(m) {
     const placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
     const liste = seancesDe(m).filter((x) => !placees.has(x.id));
-    const modif = ctx.peutMatiere(m.id);
+    const modif = ctx.enseigne(m.id);
     return h('section', { class: 'a-placer', style: { '--couleur': m.couleur } },
       h('h2', {}, `Séances à placer (${liste.length})`),
       liste.length ? h('div', { class: 'puces' }, liste.map((x) => {
@@ -424,7 +424,7 @@ export async function pageProgression(zone, arg, ctx) {
 
   // ------------------------------------------------------------------------------------- fenêtres
   async function ouvrirCase(m, w) {
-    const modif = ctx.peutMatiere(m.id);
+    const modif = ctx.enseigne(m.id);
     const c = caseDe(m, w) || {};
     const vac = semaines.get(w)?.vacances;
     const liste = seancesDe(m);

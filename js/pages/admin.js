@@ -2,70 +2,167 @@
 import { db, emailDe, identifiantDe } from '../api.js';
 import { DOMAINE } from '../../config.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
-import { rafraichirMenu } from '../app.js';
+import { rafraichirMenu, verifierSite } from '../app.js';
 import { colonnes, barresH, carteGraph } from '../graphiques.js';
 
 // rôles des comptes : « lecture » = consultation seule (ex. DDFPT), aucune modification possible
 const ROLES = [['enseignant', 'Enseignant'], ['lecture', 'Lecture seule (DDFPT…)'], ['admin', 'Administrateur']];
 const nomRole = (r) => (ROLES.find((x) => x[0] === r) || ROLES[0])[1];
 
-export async function pageAdmin(zone, _arg, ctx) {
+const initiales = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('');
+const ONGLETS = [['comptes', '👥  Comptes'], ['admins', '🛡  Administrateurs'], ['maintenance', '🛠  Maintenance'], ['connexions', '📊  Connexions'], ['reprise', '📋  Reprendre une promotion']];
+
+export async function pageAdmin(zone, arg, ctx) {
+  let onglet = ONGLETS.some(([k]) => k === arg) ? arg : 'comptes';
+
   async function dessiner() {
     await ctx.chargerBase();
-    const [profils, invitations, demandes] = await Promise.all([db.lire('profils', 'order=nom,email'), db.lire('invitations', 'order=cree_le'),
-      db.lire('demandes_code', 'order=quand').catch(() => [])]);
+    const [profils, invitations, demandes, etat] = await Promise.all([db.lire('profils', 'order=nom,email'), db.lire('invitations', 'order=cree_le'),
+      db.lire('demandes_code', 'order=quand').catch(() => []), db.rpc('etat_site').catch(() => null)]);
     ctx.demandes = demandes.length; rafraichirMenu();
+    const actifs = profils.filter((p) => p.actif), admins = actifs.filter((p) => p.role === 'admin');
+    const kpi = (icone, valeur, libelle, cle, teinte = '') => h('button', { class: 'kpi-admin ' + teinte + (onglet === cle ? ' actif' : ''), type: 'button',
+      onclick: () => { location.hash = '#/admin/' + cle; } }, h('span', { class: 'kpi-icone' }, icone), h('div', {}, h('strong', {}, valeur), h('span', {}, libelle)));
+    vider(zone,
+      h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Administration'),
+        h('p', { class: 'sous-titre' }, 'Comptes, administrateurs, maintenance du site, suivi des connexions, reprise d’une promotion'))),
+      h('section', { class: 'kpis-admin' },
+        kpi('👥', actifs.length, `compte(s) actif(s)${profils.length > actifs.length ? ` · ${profils.length - actifs.length} suspendu(s)` : ''}`, 'comptes'),
+        kpi('⏳', invitations.length, 'en attente de 1re connexion', 'comptes'),
+        kpi('🔑', demandes.length, 'demande(s) « code oublié »', 'comptes', demandes.length ? 'alerte' : ''),
+        kpi('🛡', admins.length, 'administrateur(s)', 'admins'),
+        kpi(etat?.maintenance ? '🔒' : '🟢', etat?.maintenance ? 'Fermé' : 'Ouvert', etat?.maintenance ? 'site en maintenance' : 'site ouvert à tous', 'maintenance', etat?.maintenance ? 'alerte' : 'ok')),
+      h('nav', { class: 'onglets' }, ONGLETS.map(([k, t]) => h('a', { href: '#/admin/' + k, class: k === onglet ? 'actif' : '' }, t))),
+      onglet === 'comptes' ? ongletComptes(profils, invitations, demandes)
+        : onglet === 'admins' ? ongletAdmins(profils)
+          : onglet === 'maintenance' ? ongletMaintenance(etat, actifs)
+            : onglet === 'connexions' ? connexions(profils) : reprise());
+  }
+
+  // ------------------------------------------------------------------------------------- comptes
+  function ongletComptes(profils, invitations, demandes) {
     const ens = (pid) => ctx.enseignants.find((e) => e.profil_id === pid);
     const libres = ctx.enseignants.filter((e) => !e.profil_id);
-    vider(zone,
-      h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Administration'), h('p', { class: 'sous-titre' }, 'Comptes de connexion de l’équipe'))),
+    return h('div', {},
       demandes.length ? h('section', { class: 'bloc alerte' }, h('h2', {}, '🔑  Code oublié : demandes en attente'),
         h('p', { class: 'aide' }, 'Choisissez un code provisoire et communiquez-le à votre collègue (de vive voix, par la messagerie de l’ENT…) : il devra le remplacer par son propre code à sa connexion.'),
-        h('table', { class: 'liste' }, h('tbody', {}, demandes.map((d) => {
+        h('div', { class: 'liste-demandes' }, demandes.map((d) => {
           const p = profils.find((x) => x.email === d.email);
-          return h('tr', {}, h('td', {}, h('b', {}, p?.nom || identifiantDe(d.email)), ' · ', identifiantDe(d.email)),
-            h('td', {}, new Date(d.quand).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })),
-            h('td', {}, p ? h('button', { class: 'btn petit principal', onclick: async () => { if (await nouveauCode(p)) await dessiner(); } }, 'Donner un code provisoire') : null,
-              h('button', { class: 'icone', title: 'Supprimer la demande', onclick: async () => {
-                try { await db.supprimer('demandes_code', d.email, 'email'); await dessiner(); } catch (e) { erreur(e); } } }, '✖')));
-        })))) : null,
-      h('section', { class: 'bloc' }, h('h2', {}, 'Autoriser un collègue'),
-        h('p', { class: 'aide' }, `Ajoutez son identifiant (adresse académique, ou « prenom.nom » pour …@${DOMAINE}). Donnez-lui ensuite l’adresse du site : à sa première connexion, il clique sur « Première connexion » et choisit son code. `
-          + 'Rôle « Lecture seule » : consulte toutes les pages sans rien pouvoir modifier (DDFPT, inspection…). Un enseignant ne modifie que les matières cochées pour lui dans « Matières et équipe ».'),
+          return h('div', { class: 'demande' }, h('span', { class: 'avatar petit' }, initiales(p?.nom || d.email)),
+            h('div', { class: 'qui' }, h('b', {}, p?.nom || identifiantDe(d.email)), h('span', {}, identifiantDe(d.email) + ' · '
+              + new Date(d.quand).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }))),
+            p ? h('button', { class: 'btn petit principal', onclick: async () => { if (await nouveauCode(p)) await dessiner(); } }, 'Donner un code provisoire') : null,
+            h('button', { class: 'icone', title: 'Supprimer la demande', onclick: async () => {
+              try { await db.supprimer('demandes_code', d.email, 'email'); await dessiner(); } catch (e) { erreur(e); } } }, '✖'));
+        }))) : null,
+      h('section', { class: 'bloc carte-ajout' }, h('h2', {}, '＋  Autoriser un collègue'),
+        h('p', { class: 'aide' }, `Identifiant : adresse académique, ou « prenom.nom » pour …@${DOMAINE}. Donnez-lui ensuite l’adresse du site : à sa première connexion, il clique sur « Première connexion » et choisit son code. `
+          + 'Reliez-le à sa fiche « enseignant » : c’est elle qui lui donne le droit de modifier ses matières.'),
         formInvitation(libres)),
-      invitations.length ? h('section', { class: 'bloc' }, h('h2', {}, 'En attente de première connexion'),
-        h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Identifiant', 'Nom', 'Rôle', 'Enseignant lié', ''].map((t) => h('th', {}, t)))),
-          h('tbody', {}, invitations.map((i) => h('tr', {},
-            h('td', {}, identifiantDe(i.email)), h('td', {}, i.nom), h('td', {}, nomRole(i.role)),
-            h('td', {}, ctx.enseignants.find((e) => e.id === i.enseignant_id)?.nom || '—'),
-            h('td', {}, h('button', { class: 'icone', title: 'Annuler l’autorisation', onclick: async () => {
-              try { await db.supprimer('invitations', i.email, 'email'); toast('Autorisation annulée'); await dessiner(); } catch (e) { erreur(e); }
-            } }, '✖'))))))) : null,
-      h('section', { class: 'bloc' }, h('h2', {}, 'Comptes'),
-        h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Identifiant', 'Nom', 'Rôle', 'Enseignant lié', 'Accès', ''].map((t) => h('th', {}, t)))),
-          h('tbody', {}, profils.map((p) => {
-            const moi = p.id === ctx.profil.id;
-            const lie = ens(p.id);
-            return h('tr', { class: p.actif ? '' : 'arret' },
-              h('td', {}, identifiantDe(p.email), moi ? h('span', { class: 'badge scolaire' }, 'vous') : null),
-              h('td', {}, h('input', { class: 'champ', value: p.nom, onchange: async (e) => { try { await db.modifier('profils', p.id, { nom: e.target.value }); toast('Enregistré'); } catch (x) { erreur(x); } } })),
-              h('td', {}, h('select', { class: 'champ', disabled: moi, onchange: async (e) => { try { await db.modifier('profils', p.id, { role: e.target.value }); toast('Enregistré'); } catch (x) { erreur(x); } } },
-                ROLES.map(([v, t]) => h('option', { value: v, selected: p.role === v }, t)))),
-              h('td', {}, h('select', { class: 'champ', onchange: async (e) => {
+      invitations.length ? h('section', { class: 'bloc' }, h('h2', {}, `⏳  En attente de première connexion (${invitations.length})`),
+        h('div', { class: 'grille-comptes' }, invitations.map((i) => h('article', { class: 'carte-compte attente' },
+          h('div', { class: 'compte-tete' }, h('span', { class: 'avatar petit gris' }, initiales(i.nom || i.email)),
+            h('div', { class: 'qui' }, h('b', {}, i.nom || identifiantDe(i.email)), h('span', {}, identifiantDe(i.email))),
+            h('button', { class: 'icone', title: 'Annuler l’autorisation', onclick: async () => {
+              try { await db.supprimer('invitations', i.email, 'email'); toast('Autorisation annulée'); await dessiner(); } catch (e) { erreur(e); } } }, '✖')),
+          h('div', { class: 'compte-infos' }, h('span', { class: 'role-pill ' + i.role }, nomRole(i.role)),
+            h('span', { class: 'gris' }, 'Enseignant : ' + (ctx.enseignants.find((e) => e.id === i.enseignant_id)?.nom || '—'))))))) : null,
+      h('section', { class: 'bloc' }, h('h2', {}, `👥  Comptes (${profils.length})`),
+        h('div', { class: 'grille-comptes' }, profils.map((p) => {
+          const moi = p.id === ctx.profil.id, lie = ens(p.id);
+          const autresAdmins = profils.filter((x) => x.role === 'admin' && x.actif && x.id !== p.id).length;
+          return h('article', { class: 'carte-compte' + (p.actif ? '' : ' suspendu') + (moi ? ' moi' : '') },
+            h('div', { class: 'compte-tete' },
+              h('span', { class: 'avatar petit ' + p.role }, initiales(p.nom || p.email)),
+              h('div', { class: 'qui' },
+                h('input', { class: 'champ nom-compte', value: p.nom, placeholder: 'Nom affiché', onchange: async (e) => {
+                  try { await db.modifier('profils', p.id, { nom: e.target.value }); toast('Enregistré'); } catch (x) { erreur(x); } } }),
+                h('span', {}, identifiantDe(p.email), moi ? h('b', { class: 'vous' }, ' · vous') : null)),
+              moi ? null : h('label', { class: 'interrupteur bascule-acces', title: p.actif ? 'Suspendre l’accès' : 'Rétablir l’accès' },
+                h('input', { type: 'checkbox', checked: p.actif, onchange: async (e) => {
+                  try { await db.modifier('profils', p.id, { actif: e.target.checked }); toast(e.target.checked ? 'Accès rétabli' : 'Accès suspendu'); await dessiner(); }
+                  catch (x) { erreur(x); await dessiner(); } } }), p.actif ? 'actif' : 'suspendu')),
+            h('div', { class: 'compte-champs' },
+              h('label', {}, 'Rôle', h('select', { class: 'champ', disabled: moi && !autresAdmins, title: moi && !autresAdmins ? 'Nommez d’abord un autre administrateur' : '',
+                onchange: async (e) => changerRole(p, e.target.value, e.target) }, ROLES.map(([v, t]) => h('option', { value: v, selected: p.role === v }, t)))),
+              h('label', {}, 'Enseignant lié', h('select', { class: 'champ', onchange: async (e) => {
                 try {
                   if (lie) await db.modifier('enseignants', lie.id, { profil_id: null });
                   if (e.target.value) await db.modifier('enseignants', e.target.value, { profil_id: p.id });
                   toast('Enregistré'); await dessiner();
                 } catch (x) { erreur(x); }
-              } }, h('option', { value: '' }, '—'), [...(lie ? [lie] : []), ...libres].map((e) => h('option', { value: e.id, selected: lie && lie.id === e.id }, e.nom)))),
-              h('td', {}, moi ? 'actif' : h('label', { class: 'interrupteur' }, h('input', { type: 'checkbox', checked: p.actif, onchange: async (e) => {
-                try { await db.modifier('profils', p.id, { actif: e.target.checked }); toast(e.target.checked ? 'Accès rétabli' : 'Accès suspendu'); await dessiner(); } catch (x) { erreur(x); }
-              } }), p.actif ? 'actif' : 'suspendu')),
-              h('td', {}, moi ? null : h('button', { class: 'btn petit', onclick: () => nouveauCode(p) }, 'Nouveau code')));
-          })))),
-      h('p', { class: 'aide' }, 'Suspendre un compte coupe immédiatement son accès. Pour supprimer définitivement un compte : Supabase → Authentication → Users.'),
-      connexions(profils),
-      reprise());
+              } }, h('option', { value: '' }, '— aucun —'), [...(lie ? [lie] : []), ...libres].map((x) => h('option', { value: x.id, selected: lie && lie.id === x.id }, x.nom))))),
+            h('div', { class: 'compte-pied' },
+              lie ? h('span', { class: 'mats-compte' }, ctx.matieres.filter((m) => (lie.matieres || []).map(Number).includes(m.id))
+                .map((m) => h('i', { style: { background: m.couleur }, title: m.nom }, ctx.codeMat(m)))) : h('span', { class: 'gris' }, 'aucune matière'),
+              moi ? null : h('button', { class: 'btn petit', onclick: () => nouveauCode(p) }, '🔑  Nouveau code')));
+        })),
+        h('p', { class: 'aide' }, 'Suspendre un compte coupe immédiatement son accès. Pour supprimer définitivement un compte : Supabase → Authentication → Users.')));
+  }
+
+  async function changerRole(p, role, sel) {
+    const moi = p.id === ctx.profil.id;
+    if (moi && role !== 'admin' && !(await confirmer('Quitter le rôle d’administrateur',
+      'Vous ne pourrez plus accéder à l’administration ; un autre administrateur pourra vous redonner ce rôle. Continuer ?', 'Confirmer'))) { sel.value = p.role; return; }
+    try {
+      await db.modifier('profils', p.id, { role });
+      toast('Rôle enregistré');
+      if (moi) { ctx.profil.role = role; location.hash = '#/accueil'; return ctx.recharger(); }
+      await dessiner();
+    } catch (x) { erreur(x); sel.value = p.role; }
+  }
+
+  // ------------------------------------------------------------------------------------- administrateurs
+  function ongletAdmins(profils) {
+    const admins = profils.filter((p) => p.role === 'admin'), autres = profils.filter((p) => p.role !== 'admin' && p.actif);
+    const choix = h('select', { class: 'champ' }, h('option', { value: '' }, '— choisir un compte —'),
+      autres.map((p) => h('option', { value: p.id }, `${p.nom || identifiantDe(p.email)} (${identifiantDe(p.email)})`)));
+    return h('div', {},
+      h('section', { class: 'bloc' }, h('h2', {}, '🛡  Administrateurs'),
+        h('p', { class: 'aide' }, 'Un administrateur gère les comptes, l’équipe, les élèves et la maintenance, et modifie les fiches, contrats et résultats de toutes les matières. '
+          + 'Le séquençage et la progression d’une matière restent réservés à ses enseignants, administrateur compris. Il reste toujours au moins un administrateur actif.'),
+        h('div', { class: 'grille-comptes' }, admins.map((p) => {
+          const moi = p.id === ctx.profil.id;
+          return h('article', { class: 'carte-compte admin' + (moi ? ' moi' : '') },
+            h('div', { class: 'compte-tete' }, h('span', { class: 'avatar petit admin' }, initiales(p.nom || p.email)),
+              h('div', { class: 'qui' }, h('b', {}, p.nom || identifiantDe(p.email), moi ? h('span', { class: 'vous' }, ' · vous') : null), h('span', {}, identifiantDe(p.email))),
+              h('button', { class: 'btn petit', disabled: admins.filter((x) => x.actif).length <= 1, title: admins.length <= 1 ? 'Nommez d’abord un autre administrateur' : '',
+                onclick: async () => changerRole(p, 'enseignant', {}) }, moi ? 'Quitter ce rôle' : 'Retirer')));
+        }))),
+      h('section', { class: 'bloc carte-ajout' }, h('h2', {}, '＋  Nommer un administrateur'),
+        h('p', { class: 'aide' }, 'Pour changer d’administrateur : nommez d’abord le nouveau, puis retirez l’ancien (ou « Quitter ce rôle » sur votre propre carte).'),
+        h('div', { class: 'formulaire ligne' }, h('label', {}, 'Compte', choix),
+          h('button', { class: 'btn principal', onclick: async () => {
+            const p = autres.find((x) => x.id === choix.value);
+            if (!p) return erreur(new Error('Choisissez un compte.'));
+            if (!(await confirmer('Nommer un administrateur', `Donner le rôle d’administrateur à ${p.nom || identifiantDe(p.email)} ?`, 'Nommer'))) return;
+            try { await db.modifier('profils', p.id, { role: 'admin' }); toast('Administrateur nommé'); await dessiner(); } catch (x) { erreur(x); }
+          } }, 'Nommer administrateur'))));
+  }
+
+  // ------------------------------------------------------------------------------------- maintenance
+  function ongletMaintenance(etat, actifs) {
+    const ferme = !!etat?.maintenance;
+    const msg = h('textarea', { class: 'champ', rows: 3, placeholder: 'ex. Mise à jour de l’application : le site rouvre ce soir à 18 h.' });
+    msg.value = etat?.message || '';
+    return h('section', { class: 'bloc maintenance ' + (ferme ? 'ferme' : 'ouvert') },
+      h('div', { class: 'etat-site' }, h('span', { class: 'gros' }, ferme ? '🔒' : '🟢'),
+        h('div', {}, h('h2', {}, ferme ? 'Site fermé pour maintenance' : 'Site ouvert'),
+          h('p', {}, ferme ? `Depuis le ${new Date(etat.depuis).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`
+            + ' : seuls les administrateurs peuvent se connecter ; les autres voient le message ci-dessous.'
+            : `Tous les comptes actifs (${actifs.length}) peuvent se connecter.`))),
+      h('label', { class: 'msg-maintenance' }, 'Message affiché aux collègues', msg),
+      h('div', { class: 'ligne-actions' },
+        ferme ? h('button', { class: 'btn principal', onclick: () => basculer(false) }, '🟢  Rouvrir le site')
+          : h('button', { class: 'btn danger', onclick: () => basculer(true) }, '🔒  Fermer le site pour maintenance'),
+        ferme ? h('button', { class: 'btn', onclick: () => basculer(true) }, 'Mettre à jour le message') : null),
+      h('p', { class: 'aide' }, 'Pendant la maintenance, les collègues déjà connectés sont arrêtés à leur action suivante (au plus tard dans la minute) ; leurs données ne sont pas touchées. '
+        + 'Pensez à rouvrir le site ensuite.'));
+    async function basculer(fermer) {
+      if (fermer && !ferme && !(await confirmer('Fermer le site', 'Fermer le site à tous les comptes sauf les administrateurs ?', 'Fermer'))) return;
+      try { await db.rpc('mode_maintenance', { actif: fermer, texte: msg.value.trim() }); toast(fermer ? 'Site fermé pour maintenance' : 'Site rouvert'); await verifierSite(); await ctx.recharger(); }
+      catch (x) { erreur(x); }
+    }
   }
 
   // suivi des connexions : nombre de connexions, temps passé, dernière connexion (par compte, sur une période)

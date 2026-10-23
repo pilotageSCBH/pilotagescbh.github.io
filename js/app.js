@@ -33,6 +33,9 @@ export const ctx = {
   estAdmin: () => ctx.profil?.role === 'admin',
   peutEcrire: () => !!ctx.profil && ctx.profil.role !== 'lecture',              // compte « Lecture seule » (DDFPT) : consultation
   peutMatiere: (id) => ctx.estAdmin() || (ctx.peutEcrire() && (ctx.profil?.matieres || []).includes(Number(id))),
+  // séquençage et progression : seulement les enseignants de la matière (le rôle administrateur ne suffit pas)
+  enseigne: (id) => ctx.peutEcrire() && (ctx.profil?.matieres || []).includes(Number(id)),
+  maintenance: null,
   recharger: () => afficher(),
   async chargerBase() {
     const [matieres, enseignants, promo] = await Promise.all([
@@ -116,6 +119,37 @@ function ecranConnexion(message = '') {
   h('button', { class: 'lien', type: 'button', onclick: () => ecranCodeOublie(ident.value) }, 'Code oublié ?'), aide);
   vider(app, h('div', { class: 'ecran-connexion' }, form));
   ident.focus();
+  rpcPublic('etat_site').then((e) => {
+    if (e?.maintenance) form.insertBefore(h('div', { class: 'alerte-maintenance' }, h('b', {}, '🛠  Site en maintenance'),
+      h('p', {}, e.message || 'L’accès est temporairement fermé ; seul l’administrateur peut se connecter.')), titre);
+  }).catch(() => {});
+}
+
+// site fermé pour maintenance (comptes autres qu'administrateur)
+function ecranMaintenance(etat) {
+  clearInterval(minuteurPresence);
+  vider(app, h('div', { class: 'ecran-connexion' }, h('div', { class: 'carte-connexion' },
+    h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+    h('h1', {}, NOM_APPLI), h('h2', {}, '🛠  Site en maintenance'),
+    h('p', {}, etat?.message || 'L’administrateur effectue une opération de maintenance : l’accès est temporairement fermé.'),
+    etat?.depuis ? h('p', { class: 'aide' }, 'Depuis le ' + new Date(etat.depuis).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : null,
+    h('p', { class: 'aide' }, 'Vos données sont conservées. Réessayez un peu plus tard.'),
+    h('button', { class: 'btn principal large', onclick: demarrer }, 'Réessayer'),
+    h('button', { class: 'lien', onclick: async () => { await deconnexion(); ctx.profil = null; ecranConnexion(); } }, 'Se déconnecter'))));
+}
+// état du site : maintenance → écran d'attente (ou bandeau pour l'administrateur)
+export async function verifierSite() {
+  let etat = null;
+  try { etat = await db.rpc('etat_site'); } catch { return true; }
+  const avant = !!ctx.maintenance;
+  ctx.maintenance = etat?.maintenance ? etat : null;
+  if (ctx.maintenance && !ctx.estAdmin()) { ecranMaintenance(etat); return false; }
+  if (avant !== !!ctx.maintenance && ctx.profil) { const b = app.querySelector('.bandeau-maintenance'); if (b) b.remove(); if (ctx.maintenance) app.querySelector('main.contenu')?.prepend(bandeauMaintenance()); }
+  return true;
+}
+export function bandeauMaintenance() {
+  return h('div', { class: 'bandeau-maintenance' }, '🛠  Mode maintenance actif : les autres comptes ne peuvent pas se connecter.  ',
+    h('a', { href: '#/admin/maintenance' }, 'Rouvrir le site'));
 }
 
 // code oublié : nouveau code avec le code de secours, ou demande à l'administrateur
@@ -230,6 +264,7 @@ async function afficher() {
   vider(app, h('div', { class: 'cadre' }, menu(r), zone));
   try {
     await PAGES[r[0]](zone, r[1], ctx);
+    if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches',
       validation: 'validation', resultats: 'resultats', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
@@ -257,6 +292,7 @@ async function signalerPresence() {
   let c = null;
   try { c = JSON.parse(localStorage.getItem(CLE_PRESENCE)); } catch { /* sans stockage */ }
   try {
+    if (!(await verifierSite())) return;
     const id = await db.rpc('presence', { c: c && c.profil === ctx.profil.id ? c.id : null });
     try { localStorage.setItem(CLE_PRESENCE, JSON.stringify({ profil: ctx.profil.id, id })); } catch { /* sans stockage */ }
   } catch { /* fonction absente ou réseau : sans importance */ }
@@ -275,6 +311,7 @@ async function demarrer() {
     if (!profil.actif) { await deconnexion(); return ecranConnexion("Votre compte est désactivé : contactez l'administrateur."); }
     ctx.profil = { ...profil, matieres: (profil.matieres || []).map(Number) };
     if (ctx.profil.doit_changer) return ecranNouveauCode();
+    if (!(await verifierSite())) return;
     if (ctx.estAdmin()) { try { ctx.demandes = (await db.lire('demandes_code')).length; } catch { ctx.demandes = 0; } }
     await ctx.chargerBase();
     afficher();

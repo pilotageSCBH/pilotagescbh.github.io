@@ -773,3 +773,56 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
 }
 .frise:not(.large) .frise-bloc.court span { display: none; }
 .frise:not(.large) .frise-bloc.court { justify-content: center; align-content: center; }
+
+/* ------------------------------------------------------------------ administration */
+.kpis-admin { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1200px) { .kpis-admin { grid-template-columns: repeat(3, 1fr); } }
+.kpi-admin { font: inherit; text-align: left; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 0; border-left: 5px solid var(--teal);
+  background: var(--auto); box-shadow: var(--ombre); cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.kpi-admin:hover, .kpi-admin.actif { box-shadow: 0 0 0 2px var(--teal), var(--ombre); }
+.kpi-admin:hover { transform: translateY(-1px); }
+.kpi-admin strong { display: block; font-size: 22px; color: var(--fonce); line-height: 1.1; }
+.kpi-admin span { font-size: 12px; color: var(--gris); }
+.kpi-admin.alerte { border-left-color: #D2483B; } .kpi-admin.alerte strong { color: #B03A2E; }
+.kpi-admin.ok { border-left-color: #4E9A2F; }
+.kpi-admin .kpi-icone { width: 38px; height: 38px; font-size: 18px; }
+.bloc.carte-ajout { border-top: 4px solid var(--anis); }
+.grille-comptes { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+.carte-compte { background: #fff; border: 1px solid var(--ligne); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-left: 5px solid var(--teal); }
+.carte-compte.admin, .carte-compte:has(.avatar.admin) { border-left-color: #6B4FA0; }
+.carte-compte.moi { box-shadow: 0 0 0 2px var(--clair); }
+.carte-compte.suspendu { opacity: .6; border-left-color: #B9C0BE; }
+.carte-compte.attente { border-left-style: dashed; border-left-color: #B9C0BE; }
+.compte-tete { display: flex; align-items: center; gap: 10px; }
+.compte-tete .qui, .demande .qui { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.compte-tete .qui b { font-size: 14px; }
+.compte-tete .qui span, .demande .qui span { font-size: 12px; color: var(--gris); }
+.compte-tete .vous, .compte-tete .qui .vous { color: var(--teal); font-weight: 700; }
+.champ.nom-compte { font-weight: 800; font-size: 14px; border-color: transparent; padding: 2px 6px; }
+.champ.nom-compte:hover, .champ.nom-compte:focus { border-color: var(--ligne); }
+.avatar.petit { width: 38px; height: 38px; font-size: 13px; }
+.avatar.admin { background: #6B4FA0; } .avatar.lecture { background: #7A8784; } .avatar.gris { background: #B9C0BE; }
+.compte-champs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.compte-champs label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 700; color: var(--gris); }
+.compte-champs .champ { font-size: 13px; padding: 5px 8px; }
+.compte-pied { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #EEF2F1; padding-top: 8px; }
+.mats-compte { display: flex; gap: 4px; }
+.mats-compte i { font-style: normal; font-size: 10.5px; font-weight: 800; color: #fff; border-radius: 6px; padding: 2px 6px; }
+.bascule-acces { font-size: 12px; font-weight: 700; color: var(--gris); }
+.compte-infos { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.role-pill { font-size: 11.5px; font-weight: 700; border-radius: 10px; padding: 2px 9px; background: var(--clair); color: var(--fonce); }
+.role-pill.admin { background: #EEE8F7; color: #4A3480; } .role-pill.lecture { background: #ECEFEE; color: #4E5B58; }
+.liste-demandes { display: flex; flex-direction: column; gap: 8px; }
+.demande { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 10px; padding: 8px 12px; }
+.bloc.maintenance { border-top: 5px solid #4E9A2F; }
+.bloc.maintenance.ferme { border-top-color: #D2483B; background: #FFF8F6; }
+.etat-site { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.etat-site .gros { font-size: 40px; }
+.etat-site h2 { font-size: 19px; }
+.etat-site p { margin: 4px 0 0; color: var(--gris); }
+.msg-maintenance { display: flex; flex-direction: column; gap: 5px; font-weight: 700; font-size: 12.5px; color: var(--gris); margin-bottom: 12px; max-width: 760px; }
+.btn.danger { background: #D2483B; border-color: #D2483B; color: #fff; }
+.bandeau-maintenance { background: #D2483B; color: #fff; font-weight: 700; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; }
+.bandeau-maintenance a { color: #fff; }
+.alerte-maintenance { background: #FDECEA; border: 1px solid #F3B9B1; border-radius: 10px; padding: 10px 12px; color: #7A1E12; }
+.alerte-maintenance p { margin: 4px 0 0; font-size: 13px; }
