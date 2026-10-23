@@ -896,3 +896,12 @@ tr.vac-vacances td:not(.col-sem) { background: #F6B3AA; }
 .leg.vac-vacances { background: #F6B3AA; border-color: #E8786A; }
 .frise-bande.vac-vacances { background: #EC7A6B; color: #fff; }
 .frise-matiere .frise-case.vac-vacances { background: repeating-linear-gradient(135deg, rgba(226,92,76,.32) 0 6px, rgba(226,92,76,.12) 6px 12px); }
+/* épreuves et stage : couleurs plus soutenues */
+tr.vac-epreuves td:not(.col-sem) { background: #F8DE84; }
+tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
+.leg.vac-epreuves { background: #F8DE84; border-color: #E0B826; }
+.leg.vac-stage { background: #B5E0A0; border-color: #6DBA4A; }
+.frise-bande.vac-epreuves { background: #EDC12F; color: #3F2F00; }
+.frise-bande.vac-stage { background: #6DBA4A; color: #fff; }
+.frise-matiere .frise-case.vac-epreuves { background: repeating-linear-gradient(135deg, rgba(225,180,20,.38) 0 6px, rgba(225,180,20,.14) 6px 12px); }
+.frise-matiere .frise-case.vac-stage { background: repeating-linear-gradient(135deg, rgba(90,170,60,.34) 0 6px, rgba(90,170,60,.12) 6px 12px); }
