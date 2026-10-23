@@ -77,12 +77,42 @@ const SECTIONS = [
   ]],
 ];
 
+const ICONES = { demarrer: '🚀', sequencage: '🧱', progression: '📅', fiches: '📝', validation: '✅', resultats: '📈', couverture: '🧩',
+  impressions: '🖨', admin: '🛡', historique: '🕘', questions: '❓' };
+const normaliser = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 export async function pageAide(zone, arg) {
   const actif = SECTIONS.some(([k]) => k === arg) ? arg : null;
+  const recherche = h('input', { class: 'champ recherche-aide', type: 'search', placeholder: 'Rechercher dans l’aide : code oublié, imprimer, coefficient, frise…' });
+  const resultat = h('p', { class: 'resultat-aide' });
+  const sections = SECTIONS.map(([k, t, items]) => {
+    const fiches = items.map(([q, r]) => {
+      const el = h('details', { class: 'question-aide', open: !!actif && k === actif }, h('summary', {}, q), h('p', {}, r));
+      el.dataset.texte = normaliser(q + ' ' + r);
+      return el;
+    });
+    const sec = h('section', { class: 'aide-section' + (k === actif ? ' cible' : ''), id: 'aide-' + k },
+      h('div', { class: 'tete-aide' }, h('span', { class: 'icone-aide' }, ICONES[k] || '•'), h('h2', {}, t), h('span', { class: 'nb-aide' }, `${items.length} fiche(s)`)),
+      h('div', { class: 'questions-aide' }, fiches));
+    return { k, sec, fiches };
+  });
+  recherche.addEventListener('input', () => {
+    const q = normaliser(recherche.value.trim());
+    let n = 0;
+    for (const s of sections) {
+      let vis = 0;
+      for (const f of s.fiches) { const ok = !q || f.dataset.texte.includes(q); f.hidden = !ok; f.open = !!q && ok; if (ok) vis++; }
+      s.sec.hidden = vis === 0; n += vis;
+    }
+    resultat.textContent = q ? (n ? `${n} réponse(s) trouvée(s)` : 'Aucune réponse : essayez un autre mot.') : '';
+  });
   vider(zone,
-    h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Aide'), h('p', { class: 'sous-titre' }, 'Prise en main de l’application'))),
-    h('nav', { class: 'sommaire-aide' }, SECTIONS.map(([k, t]) => h('a', { href: '#/aide/' + k, class: k === actif ? 'actif' : '' }, t))),
-    SECTIONS.map(([k, t, items]) => h('section', { class: 'bloc aide-section' + (k === actif ? ' cible' : ''), id: 'aide-' + k },
-      h('h2', {}, t), h('dl', {}, items.map(([q, r]) => [h('dt', {}, q), h('dd', {}, r)])))));
+    h('section', { class: 'hero-aide' },
+      h('div', {}, h('h1', {}, 'Aide'), h('p', {}, 'Tout ce qu’il faut pour prendre en main l’application. Cherchez un mot, ou choisissez un thème.')),
+      recherche, resultat),
+    h('nav', { class: 'themes-aide' }, SECTIONS.map(([k, t, items]) => h('a', { href: '#/aide/' + k, class: 'theme-aide' + (k === actif ? ' actif' : '') },
+      h('span', { class: 'icone-aide' }, ICONES[k] || '•'), h('b', {}, t), h('small', {}, `${items.length} fiche(s)`)))),
+    sections.map((s) => s.sec));
   if (actif) requestAnimationFrame(() => document.getElementById('aide-' + actif)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  else recherche.focus();
 }
