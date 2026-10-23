@@ -884,3 +884,10 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
 @media print { .hero-aide { background: none; color: var(--texte); box-shadow: none; } .hero-aide h1 { color: var(--fonce); } .recherche-aide, .themes-aide { display: none; }
   .question-aide p { display: block; } }
 .formulaire-code label.interrupteur { flex-direction: row; align-items: center; color: var(--texte); }
+/* apprentis : PFMP en rouge vif, présents en vert vif */
+select.mini.app[data-v="PFMP"] { background: #E3191E; border-color: #E3191E; color: #fff; font-weight: 800; }
+select.mini.app[data-v="Présents"] { background: #1DB33A; border-color: #1DB33A; color: #fff; font-weight: 800; }
+select.mini.app option { background: #fff; color: var(--texte); }
+.leg.app-pfmp, .frise-bande.app-pfmp { background: #E3191E !important; color: #fff !important; border-color: #E3191E !important; }
+.leg.app-presents, .frise-bande.app-presents { background: #1DB33A !important; color: #fff !important; border-color: #1DB33A !important; }
+@media print { select.mini.app[data-v] { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

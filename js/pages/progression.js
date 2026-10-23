@@ -154,7 +154,7 @@ export async function pageProgression(zone, arg, ctx) {
 
     const legende = h('div', { class: 'legende' },
       VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
-      h('span', { class: 'leg' }, '● Présents   ● PFMP (apprentis)'),
+      h('span', { class: 'leg app-presents' }, 'Apprentis présents'), h('span', { class: 'leg app-pfmp' }, 'Apprentis en PFMP'),
       EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
       h('span', { class: 'aide' }, detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
         : 'Glisser une séance pour la déplacer ; cliquer une case pour choisir la séance. Choisir une seule matière pour voir le détail et les séances à placer.'));
@@ -212,7 +212,7 @@ export async function pageProgression(zone, arg, ctx) {
   function legendeFrise(detail) {
     return h('div', { class: 'legende' },
       VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
-      h('span', { class: 'leg frise-pfmp' }, 'PFMP (apprentis)'),
+      h('span', { class: 'leg app-presents' }, 'Apprentis présents'), h('span', { class: 'leg app-pfmp' }, 'Apprentis en PFMP'),
       EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
       h('span', { class: 'leg frise-auj' }, 'Aujourd’hui'),
       h('span', { class: 'aide' }, detail ? 'Glisser un bloc pour déplacer la séance (les suivantes se décalent) ; glisser une séance « à placer » sur la frise ; cliquer pour modifier.'
@@ -247,14 +247,14 @@ export async function pageProgression(zone, arg, ctx) {
     ];
     // calendrier commun : vacances, apprentis, évènements
     const vacL = plages((w) => semaines.get(w)?.vacances || '');
-    const appL = plages((w) => semaines.get(w)?.apprentis === 'PFMP' ? 'PFMP' : '');
+    const appL = plages((w) => semaines.get(w)?.apprentis || '');
     const commun = [
       ligne('frise-commun', '🏖  Vacances / autres', semaines0.map((w) => h('div', { class: 'frise-case clic' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
         title: `${libSemaine(w)} : cliquer pour choisir`, onclick: () => choisirSemaine(w, 'vacances', VACANCES) })),
         vacL.map((p) => h('div', { class: 'frise-bande vac-' + cls(p.v), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, p.v))),
       ligne('frise-commun', '🏭  Apprentis', semaines0.map((w) => h('div', { class: 'frise-case clic' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
         title: `${libSemaine(w)} : apprentis ${semaines.get(w)?.apprentis || '—'} (cliquer pour choisir)`, onclick: () => choisirSemaine(w, 'apprentis', APPRENTIS) })),
-        appL.map((p) => h('div', { class: 'frise-bande frise-pfmp', style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, 'PFMP'))),
+        appL.map((p) => h('div', { class: 'frise-bande ' + (p.v === 'PFMP' ? 'app-pfmp' : p.v === 'Présents' ? 'app-presents' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 1 } }, p.v))),
       ligne('frise-commun', '📌  Évènements', semaines0.map((w) => {
         const evs = JOURS.map((_, k) => ({ k, ev: jours.get(w * 7 + k) || '' })).filter((x) => x.ev);
         return h('div', { class: 'frise-case clic frise-ev' + mp(w) + (w === aujourdhui ? ' auj' : ''), style: { gridColumn: col(w), gridRow: 1 },
@@ -351,7 +351,8 @@ export async function pageProgression(zone, arg, ctx) {
     const s = h('select', { class: 'mini ' + type, disabled: !calendrierModifiable },
       h('option', { value: '' }, '—'), options.map((o) => h('option', { value: o, selected: o === valeur }, o)),
       valeur && !options.includes(valeur) ? h('option', { value: valeur, selected: true }, valeur) : null);
-    s.addEventListener('change', async () => { try { await enregistrer(s.value); toast('Enregistré'); } catch (e) { erreur(e); } });
+    s.dataset.v = valeur || '';
+    s.addEventListener('change', async () => { try { await enregistrer(s.value); s.dataset.v = s.value; toast('Enregistré'); } catch (e) { erreur(e); } });
     return s;
   }
 
