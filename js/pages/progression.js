@@ -163,10 +163,10 @@ export async function pageProgression(zone, arg, ctx) {
 
   // ------------------------------------------------------------------------------------- dessin
   let glisse = null;
-  const garde = { x: 0, y: 0 };
+  const garde = { x: 0, y: 0, t: 0 };
   function dessiner() {
     const conteneur = zone.querySelector('.tableau-progression, .frise-defile');
-    if (conteneur) { garde.x = conteneur.scrollLeft; garde.y = window.scrollY; }
+    if (conteneur) { garde.x = conteneur.scrollLeft; garde.t = conteneur.scrollTop; garde.y = window.scrollY; }
     const mats = filtre === 'toutes' ? ctx.matieres : ctx.matieres.filter((m) => String(m.id) === filtre);
     const detail = mats.length === 1;
     const w0 = annee * SEM_AN, w1 = w0 + SEM_AN;
@@ -176,9 +176,9 @@ export async function pageProgression(zone, arg, ctx) {
         h('p', { class: 'sous-titre' }, `Promotion ${P.libelle}  ·  ${annee === 0 ? '1re' : '2e'} année ${Y + annee}-${Y + annee + 1}`)),
       h('div', { class: 'actions-page' },
         h('div', { class: 'bascule' }, [['tableau', '☷  Tableau'], ['frise', '▬  Frise']].map(([v, t]) => h('button', { class: 'btn' + (v === vue ? ' principal' : ''),
-          onclick: () => { vue = v; ecrire(CLE_VUE, v); garde.x = 0; dessiner(); } }, t))),
+          onclick: () => { vue = v; ecrire(CLE_VUE, v); garde.x = 0; garde.t = 0; dessiner(); } }, t))),
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
-          onclick: () => { annee = a; ecrire(CLE_AN, String(a)); dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
+          onclick: () => { annee = a; ecrire(CLE_AN, String(a)); garde.t = 0; garde.x = 0; dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
         boutonAnnuler(ctx, 'progression'),
         h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
@@ -231,12 +231,12 @@ export async function pageProgression(zone, arg, ctx) {
     if (vue === 'frise') {
       const f = frise(mats, w0);
       vider(zone, entete, legendeFrise(detail), detail ? aPlacer(mats[0]) : null, f);
-      f.scrollLeft = garde.x;
+      f.scrollLeft = garde.x; f.scrollTop = garde.t;
       window.scrollTo(0, garde.y);
       return;
     }
     vider(zone, entete, legende, detail ? aPlacer(mats[0]) : null, tableau);
-    tableau.scrollLeft = garde.x;
+    tableau.scrollLeft = garde.x; tableau.scrollTop = garde.t;
     window.scrollTo(0, garde.y);
   }
 
