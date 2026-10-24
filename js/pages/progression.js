@@ -115,6 +115,39 @@ export async function pageProgression(zone, arg, ctx) {
     await appliquer(m, T, v, apres, 'Séance déplacée : les suivantes se sont décalées');
   }
   // placer une séance (ou un texte) à la semaine w ; si elle est occupée, les suivantes descendent jusqu'à la 1re semaine libre
+  // la semaine w prolonge-t-elle la séance (ou le texte) de la semaine de cours précédente ?
+  function estSuite(m, w) {
+    const T = semainesCours(), i = T.indexOf(w);
+    return i > 0 && !!cleDe(m, w) && cleDe(m, T[i - 1]) === cleDe(m, w);
+  }
+  // retirer une séance placée (toutes ses semaines : elle retourne dans « Séances à placer ») ou une seule semaine de suite ;
+  // decaler : les séances suivantes remontent pour combler la place libérée
+  async function retirer(m, w, { suite = false, decaler = false } = {}) {
+    const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i = T.indexOf(w), cle = v[i];
+    if (i < 0 || !cle) return;
+    let idx;
+    if (suite) idx = [i];
+    else if (cle.startsWith('s')) idx = v.map((x, k) => (x === cle ? k : -1)).filter((k) => k >= 0);
+    else { let a = i, b = i; while (a > 0 && v[a - 1] === cle) a--; while (b < v.length - 1 && v[b + 1] === cle) b++; idx = Array.from({ length: b - a + 1 }, (_, k) => a + k); }
+    const enleve = new Set(idx);
+    const apres = decaler ? v.filter((_, k) => !enleve.has(k)).concat(idx.map(() => '')) : v.map((x, k) => (enleve.has(k) ? '' : x));
+    await appliquer(m, T, v, apres, suite ? 'Semaine de suite supprimée' : cle.startsWith('s') ? 'Séance retirée : elle est de nouveau « à placer »' : 'Texte retiré');
+  }
+  // demande de confirmation (avec le choix de faire remonter les suivantes)
+  async function demanderRetrait(m, w) {
+    const suite = estSuite(m, w), x = seanceDe(m, w), c = caseDe(m, w) || {};
+    const remonter = h('input', { type: 'checkbox' });
+    const quoi = suite ? `la semaine de suite (${libSemaine(w)}) de la séance ${x ? num(x) : '« ' + c.texte + ' »'}`
+      : x ? `la séance ${num(x)}${x.titre ? ' « ' + x.titre + ' »' : ''} de la progression (toutes ses semaines)` : `le texte « ${c.texte} »`;
+    const ok = await fenetre(suite ? 'Supprimer une semaine de suite' : 'Retirer de la progression', h('div', { class: 'formulaire etroit' },
+      h('p', {}, `Retirer ${quoi} ?`),
+      x && !suite ? h('p', { class: 'aide' }, 'La séance reste dans le séquençage et retourne dans « Séances à placer ».') : null,
+      h('label', { class: 'interrupteur' }, remonter, 'Faire remonter les séances suivantes pour combler la place')),
+    [{ texte: 'Annuler', valeur: false }, { texte: suite ? 'Supprimer la suite' : 'Retirer', classe: 'danger', valeur: true }]);
+    if (ok) await retirer(m, w, { suite, decaler: remonter.checked });
+    return !!ok;
+  }
+
   async function inserer(m, w, cle, message = 'Séance placée') {
     const T = semainesCours(), v = T.map((x) => cleDe(m, x)), p = T.indexOf(w);
     if (p < 0) return erreur(new Error('Semaine de vacances / stage / épreuves : choisissez une semaine de cours.'));
@@ -319,7 +352,14 @@ export async function pageProgression(zone, arg, ctx) {
             nbc ? h('i', { class: 'frise-com' }, '💬' + nbc) : null,
             c?.note ? h('i', { class: 'frise-note', title: c.note }, '✎') : null);
           b.addEventListener('click', (e) => { if (b.classList.contains('glisse')) return; e.stopPropagation(); ouvrirCase(m, p.debut); });
-          if (modif) glisserDepuis(b, m, p.debut);
+          if (modif) {
+            glisserDepuis(b, m, p.debut);
+            const actions = h('span', { class: 'actions-bloc' });
+            if (n > 1) actions.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Raccourcir : supprimer la dernière semaine (suite)',
+              onclick: (e) => { e.stopPropagation(); demanderRetrait(m, p.fin); } }, '－'));
+            actions.append(boutonRetrait(m, p.debut, estSuite(m, p.debut)));
+            b.append(actions);
+          }
           return b;
         }));
       return ligneMat;
@@ -378,10 +418,11 @@ export async function pageProgression(zone, arg, ctx) {
         `${etiq(p.y)} ${p.y.titre || ''} — ${p.dy === null ? 'pas placée' : 'placée ' + libSemaine(p.dy)}`).join('\n') }, '⚠ antériorité'));
       const nbc = (commentaires.get(se.id) || []).length;
       if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
+      if (modif && !vac) puce.append(boutonRetrait(m, w, suite));
       td.append(puce);
     } else if (c?.texte) {
       const puce = h('div', { class: 'puce libre', draggable: modif && !vac ? 'true' : null }, c.texte);
-      if (modif && !vac) glisserDepuis(puce, m, w);
+      if (modif && !vac) { glisserDepuis(puce, m, w); puce.append(boutonRetrait(m, w, estSuite(m, w))); }
       td.append(puce);
     } else if (c?.seance_id) {
       td.append(h('div', { class: 'puce libre' }, 'Séance supprimée du séquençage'));
@@ -401,6 +442,11 @@ export async function pageProgression(zone, arg, ctx) {
       });
     }
     return td;
+  }
+
+  function boutonRetrait(m, w, suite) {
+    return h('button', { class: 'retirer-puce', type: 'button', title: suite ? 'Supprimer cette semaine de suite' : 'Retirer de la progression (retour dans « Séances à placer »)',
+      onclick: (e) => { e.stopPropagation(); demanderRetrait(m, w); } }, '✖');
   }
 
   function glisserDepuis(el, m, w, nouvelle = null) {
@@ -458,6 +504,8 @@ export async function pageProgression(zone, arg, ctx) {
     montrer();
     const boutons = [];
     if (modif && !vac) {
+      if (c.seance_id || c.texte) boutons.push({ texte: estSuite(m, w) ? '✖  Supprimer cette suite' : '✖  Retirer de la progression', classe: 'gauche danger-texte',
+        action: async () => (await demanderRetrait(m, w)) ? true : false });
       if (c.seance_id || c.texte) boutons.push({ texte: 'Prolonger d’une semaine', classe: 'gauche', action: async () => {
         const T = semainesCours(); let i = T.indexOf(w);
         while (i < T.length - 1 && cleDe(m, T[i + 1]) === cleDe(m, w)) i++;

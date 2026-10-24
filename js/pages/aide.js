@@ -28,6 +28,7 @@ const SECTIONS = [
     ['Placer une séance', "Cliquez une case : choisissez la séance, ou écrivez un texte libre, et une note pour la semaine. Avec une seule matière affichée, faites glisser une séance du bandeau « Séances à placer » vers une semaine : si elle est occupée, les suivantes descendent."],
     ['Déplacer une séance', "Faites-la glisser vers une autre semaine : elle y commence (avec toutes ses semaines si elle en dure plusieurs) et les séances situées entre les deux se décalent, en sautant les semaines de vacances."],
     ['Une séance sur plusieurs semaines', "Dans la fenêtre de la case : « Prolonger d’une semaine »."],
+    ['Retirer une séance placée', "Au survol d'une séance, le petit ✖ rouge (ou « ✖ Retirer de la progression » dans la fenêtre de la case) la retire de toutes ses semaines : elle retourne dans « Séances à placer » et reste dans le séquençage. Sur une semaine « (suite) », le ✖ supprime seulement cette semaine. Dans la frise, « － » raccourcit un bloc d'une semaine. Cochez « Faire remonter les séances suivantes » pour combler la place libérée."],
     ['Commentaires', "Cliquez une séance placée : en bas de la fenêtre, chaque enseignant peut écrire un commentaire sur la séance, visible par tous ou, en cochant « Visible par moi seul », par lui seul (🔒). Une bulle 💬 indique les séances commentées. Vous pouvez modifier ou supprimer vos commentaires."],
   ]],
   ['fiches', 'Fiches et contrats', [

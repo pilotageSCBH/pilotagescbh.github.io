@@ -905,3 +905,13 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .frise-bande.vac-stage { background: #6DBA4A; color: #fff; }
 .frise-matiere .frise-case.vac-epreuves { background: repeating-linear-gradient(135deg, rgba(225,180,20,.38) 0 6px, rgba(225,180,20,.14) 6px 12px); }
 .frise-matiere .frise-case.vac-stage { background: repeating-linear-gradient(135deg, rgba(90,170,60,.34) 0 6px, rgba(90,170,60,.12) 6px 12px); }
+/* retirer une séance placée */
+.puce { position: relative; }
+.retirer-puce { font: inherit; font-size: 10px; font-weight: 800; line-height: 1; width: 18px; height: 18px; border-radius: 50%; border: 0; cursor: pointer;
+  background: #D2483B; color: #fff; display: inline-grid; place-items: center; padding: 0; opacity: 0; transition: opacity .12s; }
+.puce > .retirer-puce { position: absolute; top: -7px; right: -7px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.puce:hover > .retirer-puce, .frise-bloc:hover .retirer-puce { opacity: 1; }
+.actions-bloc { position: absolute; top: 3px; right: 3px; display: flex; gap: 3px; }
+.actions-bloc .retirer-puce:first-child:not(:last-child) { background: #fff; color: var(--texte); }
+.btn.danger-texte { color: #B03A2E; border-color: #F3B9B1; }
+@media print { .retirer-puce { display: none !important; } }
