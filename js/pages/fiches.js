@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
-import { qrSvg } from '../qrcode.js?v=20261025c';
+import { qrSvg } from '../qrcode.js?v=20261025d';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -171,8 +171,7 @@ export async function pageFiches(zone, arg, ctx) {
       echeance: 'À faire pour le', rubriques: [
         ['objectif', 'Objectif du travail préparatoire', 'Ce que l’élève doit avoir découvert ou compris en arrivant en classe…'],
         ['consignes', 'Travail demandé', '1. Regarder la vidéo…\n2. Lire le document…\n3. Répondre aux questions…'],
-        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…'],
-        ['exploitation', 'Exploitation en classe', 'Comment le travail est repris en début de séance : questions flash, mise en commun, QCM…']] },
+        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…']] },
     apres: { col: 'maison_apres', titre: '📚  Après la séance : travail à la maison (devoirs)', ajout: '＋  Ajouter un travail à la maison après la séance (devoirs)',
       echeance: 'À rendre le', rubriques: [
         ['consignes', 'Travail demandé', 'Exercices, recherche, rédaction, révision…'],
@@ -180,8 +179,7 @@ export async function pageFiches(zone, arg, ctx) {
         ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
         ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
-  // impression d'un cadre seul (document élève) : en-tête de la séance, échéance, durée, nom de l'élève et rubriques remplies ;
-  // la rubrique « Exploitation en classe », destinée à l'enseignant, n'est pas imprimée
+  // impression d'un cadre seul (document élève) : en-tête de la séance, échéance, durée, nom de l'élève et rubriques remplies
   function imprimerCadre(x, cle, o) {
     const C = CHAMPS_MAISON[cle];
     document.getElementById('impression-cadre')?.remove();
