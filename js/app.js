@@ -9,7 +9,7 @@ import { pageReferentiel } from './pages/referentiel.js';
 import { pageSequencage } from './pages/sequencage.js';
 import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
-import { pageProgression } from './pages/progression.js';
+import { pageProgression } from './pages/progression.js?v=20261025g';
 import { pageFiches } from './pages/fiches.js?v=20261025f';
 import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';

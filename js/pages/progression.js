@@ -133,19 +133,23 @@ export async function pageProgression(zone, arg, ctx) {
     const apres = decaler ? v.filter((_, k) => !enleve.has(k)).concat(idx.map(() => '')) : v.map((x, k) => (enleve.has(k) ? '' : x));
     await appliquer(m, T, v, apres, suite ? 'Semaine de suite supprimée' : cle.startsWith('s') ? 'Séance retirée : elle est de nouveau « à placer »' : 'Texte retiré');
   }
-  // demande de confirmation (avec le choix de faire remonter les suivantes)
+  // demande de confirmation : laisser la place vide ou décaler toutes les séances suivantes pour combler la place
   async function demanderRetrait(m, w) {
     const suite = estSuite(m, w), x = seanceDe(m, w), c = caseDe(m, w) || {};
-    const remonter = h('input', { type: 'checkbox' });
     const quoi = suite ? `la semaine de suite (${libSemaine(w)}) de la séance ${x ? num(x) : '« ' + c.texte + ' »'}`
       : x ? `la séance ${num(x)}${x.titre ? ' « ' + x.titre + ' »' : ''} de la progression (toutes ses semaines)` : `le texte « ${c.texte} »`;
-    const ok = await fenetre(suite ? 'Supprimer une semaine de suite' : 'Retirer de la progression', h('div', { class: 'formulaire etroit' },
+    const choix = await fenetre(suite ? 'Supprimer une semaine de suite' : 'Retirer de la progression', h('div', { class: 'formulaire etroit' },
       h('p', {}, `Retirer ${quoi} ?`),
       x && !suite ? h('p', { class: 'aide' }, 'La séance reste dans le séquençage et retourne dans « Séances à placer ».') : null,
-      h('label', { class: 'interrupteur' }, remonter, 'Faire remonter les séances suivantes pour combler la place')),
-    [{ texte: 'Annuler', valeur: false }, { texte: suite ? 'Supprimer la suite' : 'Retirer', classe: 'danger', valeur: true }]);
-    if (ok) await retirer(m, w, { suite, decaler: remonter.checked });
-    return !!ok;
+      h('ul', { class: 'aide' },
+        h('li', {}, h('b', {}, 'Laisser la place vide'), ' : les séances suivantes ne bougent pas.'),
+        h('li', {}, h('b', {}, 'Décaler les séances suivantes'), ' : toutes les séances suivantes de la matière avancent pour combler la place libérée.'))),
+    [{ texte: 'Annuler', valeur: false },
+      { texte: 'Laisser la place vide', classe: 'danger', valeur: 'vide' },
+      { texte: 'Décaler les séances suivantes', classe: 'danger', valeur: 'decaler' }]);
+    if (!choix) return false;
+    await retirer(m, w, { suite, decaler: choix === 'decaler' });
+    return true;
   }
 
   async function inserer(m, w, cle, message = 'Séance placée') {
@@ -516,6 +520,11 @@ export async function pageProgression(zone, arg, ctx) {
       boutons.push({ texte: 'Annuler', valeur: false });
       boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
         const nv = choix.value ? { seance_id: Number(choix.value), texte: '' } : { seance_id: null, texte: libre.value.trim() };
+        // case vidée (plus de séance ni de texte) : même choix que « Retirer » (place vide ou décalage des suivantes)
+        if ((c.seance_id || c.texte) && !nv.seance_id && !nv.texte) {
+          if (note.value.trim() !== (c.note || '')) await enregistrerCases(m, [{ semaine: w, seance_id: c.seance_id || null, texte: c.texte || '', note: note.value.trim() }]);
+          return (await demanderRetrait(m, w)) ? true : false;
+        }
         await enregistrerCases(m, [{ semaine: w, ...nv, note: note.value.trim() }]);
         toast('Enregistré'); dessiner(); return true;
       } });
