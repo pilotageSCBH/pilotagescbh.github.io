@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
-import { qrSvg } from '../qrcode.js?v=20261025e';
+import { qrSvg } from '../qrcode.js?v=20261025f';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -124,12 +124,12 @@ export async function pageFiches(zone, arg, ctx) {
         COLS_PHASES.map(([k]) => h('td', { class: k },
           champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
             { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase' }[k] || '' : '' }))),
-        modif ? h('td', { class: 'ecran actions-phase' },
-          h('button', { class: 'icone petit', type: 'button', title: 'Insérer une phase au-dessus', onclick: () => modifierPhases(() => phases.splice(i, 0, phaseVide())) }, '＋↑'),
-          h('button', { class: 'icone petit', type: 'button', title: 'Insérer une phase en dessous', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, phaseVide())) }, '＋↓'),
-          i > 0 ? h('button', { class: 'icone petit', type: 'button', title: 'Monter cette phase', onclick: () => modifierPhases(() => phases.splice(i - 1, 0, ...phases.splice(i, 1))) }, '▲') : null,
-          i < phases.length - 1 ? h('button', { class: 'icone petit', type: 'button', title: 'Descendre cette phase', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, ...phases.splice(i, 1))) }, '▼') : null,
-          h('button', { class: 'icone petit', type: 'button', title: 'Retirer cette phase', onclick: () => modifierPhases(() => phases.splice(i, 1)) }, '✖')) : null)));
+        modif ? h('td', { class: 'ecran actions-phase' }, h('div', { class: 'boutons-phase' },
+          h('button', { class: 'icone', type: 'button', title: 'Insérer une phase au-dessus', onclick: () => modifierPhases(() => phases.splice(i, 0, phaseVide())) }, '↥'),
+          h('button', { class: 'icone', type: 'button', title: 'Monter cette phase', disabled: i === 0, onclick: () => modifierPhases(() => phases.splice(i - 1, 0, ...phases.splice(i, 1))) }, '▲'),
+          h('button', { class: 'icone', type: 'button', title: 'Insérer une phase en dessous', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, phaseVide())) }, '↧'),
+          h('button', { class: 'icone', type: 'button', title: 'Descendre cette phase', disabled: i === phases.length - 1, onclick: () => modifierPhases(() => phases.splice(i + 1, 0, ...phases.splice(i, 1))) }, '▼'),
+          h('button', { class: 'icone suppr', type: 'button', title: 'Retirer cette phase', onclick: () => modifierPhases(() => phases.splice(i, 1)) }, '✖'))) : null)));
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});

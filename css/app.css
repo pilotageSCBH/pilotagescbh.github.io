@@ -963,5 +963,8 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .table-liens .centre { text-align: center; width: 60px; }
 .liens-maison .lien { margin-top: 4px; }
 @media print { .table-liens .ecran { display: none; } }
-.actions-phase { white-space: nowrap; }
-.actions-phase .icone { padding: 0 3px; }
+.phases td.actions-phase, .phases th.ecran { width: 46px; padding: 2px; vertical-align: middle; }
+.boutons-phase { display: grid; grid-template-columns: 20px 20px; gap: 1px; justify-content: center; }
+.boutons-phase .icone { font-size: 11px; line-height: 16px; width: 20px; height: 18px; padding: 0; text-align: center; }
+.boutons-phase .icone:disabled { opacity: .25; cursor: default; }
+.boutons-phase .icone.suppr { grid-column: 1 / -1; width: 100%; }
