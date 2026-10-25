@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
-import { qrSvg } from '../qrcode.js?v=20261025d';
+import { qrSvg } from '../qrcode.js?v=20261025e';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -116,14 +116,20 @@ export async function pageFiches(zone, arg, ctx) {
       : Array.from({ length: NB_PHASES }, phaseVide);
     const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
     const tablePhases = h('tbody', {});
+    // insertion, déplacement ou retrait d'une phase, puis enregistrement et nouveau dessin du tableau
+    const modifierPhases = async (action) => { action(); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } };
     const dessinerPhases = () => {
       vider(tablePhases, phases.map((p, i) => h('tr', {},
         h('td', { class: 'num-phase' }, i + 1),
         COLS_PHASES.map(([k]) => h('td', { class: k },
           champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
             { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase' }[k] || '' : '' }))),
-        modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
-          phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null)));
+        modif ? h('td', { class: 'ecran actions-phase' },
+          h('button', { class: 'icone petit', type: 'button', title: 'Insérer une phase au-dessus', onclick: () => modifierPhases(() => phases.splice(i, 0, phaseVide())) }, '＋↑'),
+          h('button', { class: 'icone petit', type: 'button', title: 'Insérer une phase en dessous', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, phaseVide())) }, '＋↓'),
+          i > 0 ? h('button', { class: 'icone petit', type: 'button', title: 'Monter cette phase', onclick: () => modifierPhases(() => phases.splice(i - 1, 0, ...phases.splice(i, 1))) }, '▲') : null,
+          i < phases.length - 1 ? h('button', { class: 'icone petit', type: 'button', title: 'Descendre cette phase', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, ...phases.splice(i, 1))) }, '▼') : null,
+          h('button', { class: 'icone petit', type: 'button', title: 'Retirer cette phase', onclick: () => modifierPhases(() => phases.splice(i, 1)) }, '✖')) : null)));
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});

@@ -963,3 +963,5 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .table-liens .centre { text-align: center; width: 60px; }
 .liens-maison .lien { margin-top: 4px; }
 @media print { .table-liens .ecran { display: none; } }
+.actions-phase { white-space: nowrap; }
+.actions-phase .icone { padding: 0 3px; }
