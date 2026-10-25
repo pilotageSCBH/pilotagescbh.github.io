@@ -951,3 +951,8 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .qr-code svg { width: 26mm; height: 26mm; display: block; }
 .qr-texte { font-size: 9pt; line-height: 1.3; }
 .qr-url { font-size: 7pt; color: #555; word-break: break-all; margin-top: 1mm; }
+.qr-ecran { margin-top: 10px; }
+.qr-ecran h3 { font-size: 13px; color: #A2561A; margin-bottom: 6px; }
+.cadre-maison.apres .qr-ecran h3 { color: #245F96; }
+.qr-ecran .qr-item { background: #fff; }
+@media (max-width: 700px) { .qr-liste { grid-template-columns: 1fr; } }

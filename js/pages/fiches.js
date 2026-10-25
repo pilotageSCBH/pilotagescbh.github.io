@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
-import { qrSvg } from '../qrcode.js';
+import { qrSvg } from '../qrcode.js?v=20261025b';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -222,10 +222,16 @@ export async function pageFiches(zone, arg, ctx) {
         return;
       }
       const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
+      // QR codes des ressources, visibles à l'écran sous le cadre et repris sur le sujet élève imprimé
+      const zoneQr = h('div', { class: 'qr-ecran' });
+      const majQr = () => vider(zoneQr, /https?:\/\//.test(o.ressources || '')
+        ? [h('h3', {}, '📱  Accès direct aux ressources (QR codes imprimés sur le sujet élève)'), ressourcesQr(o.ressources)] : null);
+      majQr();
+      const enregR = (k) => (k === 'ressources' ? async (v) => { await enreg(k)(v); majQr(); } : enreg(k));
       vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
         h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
           h('span', { class: 'actions-maison ecran' },
-          h('button', { class: 'lien petit', type: 'button', title: 'Imprimer ce cadre seul, pour les élèves', onclick: () => imprimerCadre(x, cle, o) }, '🖶  Imprimer ce cadre'),
+          h('button', { class: 'btn petit', type: 'button', title: 'Imprimer ce cadre seul : sujet à distribuer aux élèves, avec les QR codes des ressources', onclick: () => imprimerCadre(x, cle, o) }, '🖶  Imprimer le sujet élève'),
           modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
             if (!(await confirmer('Retirer le cadre', 'Retirer ce travail à la maison et son contenu ? (« Annuler » permet de revenir en arrière.)', 'Retirer'))) return;
             try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); f[C.col] = null; dessinerC(); } catch (e) { erreur(e); }
@@ -233,7 +239,8 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
-        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide)))));
+        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enregR(k), aide))),
+        zoneQr));
       ajusterTout(zoneC);
     };
     dessinerC();

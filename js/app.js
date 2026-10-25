@@ -10,7 +10,7 @@ import { pageSequencage } from './pages/sequencage.js';
 import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
 import { pageProgression } from './pages/progression.js';
-import { pageFiches } from './pages/fiches.js';
+import { pageFiches } from './pages/fiches.js?v=20261025b';
 import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';
 import { pageSynthese } from './pages/synthese.js';
