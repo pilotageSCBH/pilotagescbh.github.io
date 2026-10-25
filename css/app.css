@@ -956,3 +956,10 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .cadre-maison.apres .qr-ecran h3 { color: #245F96; }
 .qr-ecran .qr-item { background: #fff; }
 @media (max-width: 700px) { .qr-liste { grid-template-columns: 1fr; } }
+.table-liens { width: 100%; border-collapse: collapse; background: #fff; }
+.table-liens th { font-size: 11px; text-align: left; color: var(--gris, #666); padding: 3px 4px; }
+.table-liens td { border-top: 1px solid var(--ligne); padding: 3px 4px; vertical-align: middle; }
+.table-liens td:first-child { width: 45%; }
+.table-liens .centre { text-align: center; width: 60px; }
+.liens-maison .lien { margin-top: 4px; }
+@media print { .table-liens .ecran { display: none; } }

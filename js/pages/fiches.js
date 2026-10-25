@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
-import { qrSvg } from '../qrcode.js?v=20261025b';
+import { qrSvg } from '../qrcode.js?v=20261025c';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -189,25 +189,58 @@ export async function pageFiches(zone, arg, ctx) {
       entete(cle === 'avant' ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`),
       h('div', { class: 'grille-infos' }, info('Matière', m.nom), info(C.echeance, o.echeance ? dateFr(o.echeance) : '—'),
         info('Durée estimée', o.duree || '—'), info('Nom et prénom', '')),
-      C.rubriques.filter(([k]) => k !== 'exploitation' && String(o[k] || '').trim())
+      C.rubriques.filter(([k]) => k !== 'exploitation' && (k === 'ressources' ? lireLiens(o).length : String(o[k] || '').trim()))
         .map(([k, lib]) => h('div', { class: 'rubrique' }, h('h3', {}, lib),
-          k === 'ressources' ? ressourcesQr(o[k]) : h('p', { class: 'pre' }, o[k]))));
+          k === 'ressources' ? ressourcesQr(lireLiens(o)) : h('p', { class: 'pre' }, o[k]))));
     document.body.append(z);
     document.body.classList.add('impression-cadre');
     const fin = () => { z.remove(); document.body.classList.remove('impression-cadre'); window.removeEventListener('afterprint', fin); };
     window.addEventListener('afterprint', fin);
     imprimer('A4 portrait');
   }
-  // ressources imprimées : chaque ligne contenant une adresse internet reçoit son QR code (accès direct au téléphone)
-  function ressourcesQr(texte) {
-    const RE = /https?:\/\/[^\s<>"]+/g;
-    return h('div', { class: 'qr-liste' }, String(texte).split('\n').map((l) => l.trim()).filter(Boolean).map((ligne) => {
-      const urls = (ligne.match(RE) || []).map((u) => u.replace(/[.,;:)\]»]+$/, ''));
-      if (!urls.length) return h('p', { class: 'qr-seul' }, ligne);
-      const libelle = ligne.replace(RE, '').replace(/^[•\-\s]+/, '').replace(/[\s:–-]+$/, '');
-      return h('div', { class: 'qr-item' }, urls.map((u) => { const d = document.createElement('div'); d.className = 'qr-code'; d.innerHTML = qrSvg(u, 96); return d; }),
-        h('div', { class: 'qr-texte' }, h('div', {}, libelle), urls.map((u) => h('div', { class: 'qr-url' }, u))));
-    }));
+  // ---------------------------------------------------------------- ressources du travail à la maison
+  // liste o.liens = [{ titre, url, qr }] ; l'ancienne rubrique texte (o.ressources) est convertie à la première lecture
+  const RE_URL = /https?:\/\/[^\s<>"]+/;
+  function lireLiens(o) {
+    if (Array.isArray(o.liens)) return o.liens;
+    return String(o.ressources || '').split('\n').map((l) => l.trim())
+      .filter((l) => l && !/^(à consulter|sources à consulter)/i.test(l))
+      .map((l) => {
+        const u = (l.match(RE_URL) || [''])[0].replace(/[.,;:)\]»]+$/, '');
+        return { titre: l.replace(RE_URL, '').replace(/^[•\-\s]+/, '').replace(/[\s:–-]+$/, ''), url: u, qr: !!u };
+      });
+  }
+  const texteLiens = (liens) => liens.map((l) => '• ' + [l.titre, l.url].filter(Boolean).join(' : ')).join('\n');
+  const blocQr = (url, taille) => { const d = document.createElement('div'); d.className = 'qr-code'; d.innerHTML = qrSvg(url, taille); return d; };
+  // affichage (écran et sujet imprimé) : QR code seulement pour les ressources cochées qui ont une adresse
+  function ressourcesQr(liens) {
+    return h('div', { class: 'qr-liste' }, liens.filter((l) => l.titre || l.url).map((l) => (l.qr && l.url
+      ? h('div', { class: 'qr-item' }, blocQr(l.url, 96), h('div', { class: 'qr-texte' }, h('div', {}, l.titre || l.url), h('div', { class: 'qr-url' }, l.url)))
+      : h('div', { class: 'qr-seul' }, '• ', l.titre || '', l.url ? h('span', { class: 'qr-url' }, ' ' + l.url) : null))));
+  }
+  // éditeur : une ligne par ressource (titre, adresse, case « QR code », retrait) + ajout
+  function editeurLiens(o, sauver, apres) {
+    const liens = lireLiens(o).map((l) => ({ ...l }));
+    const zone = h('div', { class: 'liens-maison' });
+    const enregistrer = async () => { o.liens = liens; o.ressources = texteLiens(liens); await sauver(); apres(); };
+    const dessiner = () => {
+      vider(zone,
+        liens.length ? h('table', { class: 'table-liens' },
+          h('thead', {}, h('tr', {}, h('th', {}, 'Ressource (titre, éditeur)'), h('th', {}, 'Adresse internet (facultative)'), h('th', { class: 'centre' }, 'QR code'), modif ? h('th', { class: 'ecran' }) : null)),
+          h('tbody', {}, liens.map((l, i) => h('tr', {},
+            h('td', {}, champ(l.titre || '', async (v) => { l.titre = v; await enregistrer(); }, { multi: true, lecture: !modif, placeholder: 'ex. Vidéo AQC – La responsabilité décennale' })),
+            h('td', {}, champ(l.url || '', async (v) => { l.url = v.trim(); if (l.url && l.qr === undefined) l.qr = true; await enregistrer(); dessiner(); },
+              { lecture: !modif, placeholder: 'https://…' })),
+            h('td', { class: 'centre' }, h('input', { type: 'checkbox', checked: !!l.qr, disabled: !modif || !l.url, title: l.url ? 'Imprimer un QR code pour cette ressource' : 'Indiquer d’abord une adresse',
+              onchange: async (e) => { l.qr = e.target.checked; try { await enregistrer(); } catch (x) { erreur(x); } } })),
+            modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', type: 'button', title: 'Retirer cette ressource', onclick: async () => {
+              liens.splice(i, 1); try { await enregistrer(); dessiner(); } catch (x) { erreur(x); } } }, '✖')) : null)))) : h('p', { class: 'gris' }, 'Aucune ressource.'),
+        modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
+          liens.push({ titre: '', url: '', qr: true }); try { await enregistrer(); dessiner(); } catch (x) { erreur(x); } } }, '＋ ajouter une ressource') : null);
+      ajusterTout(zone);
+    };
+    dessiner();
+    return zone;
   }
   // cadre « travail à la maison » de la fiche de déroulement (optionnel) : avant le tableau (classe inversée) ou après (devoirs)
   function cadreMaison(x, f, cle) {
@@ -224,10 +257,10 @@ export async function pageFiches(zone, arg, ctx) {
       const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
       // QR codes des ressources, visibles à l'écran sous le cadre et repris sur le sujet élève imprimé
       const zoneQr = h('div', { class: 'qr-ecran' });
-      const majQr = () => vider(zoneQr, /https?:\/\//.test(o.ressources || '')
-        ? [h('h3', {}, '📱  Accès direct aux ressources (QR codes imprimés sur le sujet élève)'), ressourcesQr(o.ressources)] : null);
+      const majQr = () => vider(zoneQr, lireLiens(o).some((l) => l.qr && l.url)
+        ? [h('h3', {}, '📱  Aperçu des QR codes imprimés sur le sujet élève'), ressourcesQr(lireLiens(o).filter((l) => l.qr && l.url))] : null);
       majQr();
-      const enregR = (k) => (k === 'ressources' ? async (v) => { await enreg(k)(v); majQr(); } : enreg(k));
+      const sauverO = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id');
       vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
         h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
           h('span', { class: 'actions-maison ecran' },
@@ -239,7 +272,9 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
-        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enregR(k), aide))),
+        h('div', { class: 'deux' }, C.rubriques.filter(([k]) => k !== 'ressources').map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide))),
+        C.rubriques.some(([k]) => k === 'ressources') ? h('div', { class: 'rubrique' }, h('h3', {}, C.rubriques.find(([k]) => k === 'ressources')[1]),
+          editeurLiens(o, sauverO, majQr)) : null,
         zoneQr));
       ajusterTout(zoneC);
     };
