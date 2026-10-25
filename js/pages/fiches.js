@@ -4,6 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
+import { qrSvg } from '../qrcode.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -179,6 +180,35 @@ export async function pageFiches(zone, arg, ctx) {
         ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
         ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
+  // impression d'un cadre seul (document élève) : en-tête de la séance, échéance, durée, nom de l'élève et rubriques remplies ;
+  // la rubrique « Exploitation en classe », destinée à l'enseignant, n'est pas imprimée
+  function imprimerCadre(x, cle, o) {
+    const C = CHAMPS_MAISON[cle];
+    document.getElementById('impression-cadre')?.remove();
+    const z = h('div', { id: 'impression-cadre', class: 'feuille' },
+      entete(cle === 'avant' ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`),
+      h('div', { class: 'grille-infos' }, info('Matière', m.nom), info(C.echeance, o.echeance ? dateFr(o.echeance) : '—'),
+        info('Durée estimée', o.duree || '—'), info('Nom et prénom', '')),
+      C.rubriques.filter(([k]) => k !== 'exploitation' && String(o[k] || '').trim())
+        .map(([k, lib]) => h('div', { class: 'rubrique' }, h('h3', {}, lib),
+          k === 'ressources' ? ressourcesQr(o[k]) : h('p', { class: 'pre' }, o[k]))));
+    document.body.append(z);
+    document.body.classList.add('impression-cadre');
+    const fin = () => { z.remove(); document.body.classList.remove('impression-cadre'); window.removeEventListener('afterprint', fin); };
+    window.addEventListener('afterprint', fin);
+    imprimer('A4 portrait');
+  }
+  // ressources imprimées : chaque ligne contenant une adresse internet reçoit son QR code (accès direct au téléphone)
+  function ressourcesQr(texte) {
+    const RE = /https?:\/\/[^\s<>"]+/g;
+    return h('div', { class: 'qr-liste' }, String(texte).split('\n').map((l) => l.trim()).filter(Boolean).map((ligne) => {
+      const urls = (ligne.match(RE) || []).map((u) => u.replace(/[.,;:)\]»]+$/, ''));
+      if (!urls.length) return h('p', { class: 'qr-seul' }, ligne);
+      const libelle = ligne.replace(RE, '').replace(/^[•\-\s]+/, '').replace(/[\s:–-]+$/, '');
+      return h('div', { class: 'qr-item' }, urls.map((u) => { const d = document.createElement('div'); d.className = 'qr-code'; d.innerHTML = qrSvg(u, 96); return d; }),
+        h('div', { class: 'qr-texte' }, h('div', {}, libelle), urls.map((u) => h('div', { class: 'qr-url' }, u))));
+    }));
+  }
   // cadre « travail à la maison » de la fiche de déroulement (optionnel) : avant le tableau (classe inversée) ou après (devoirs)
   function cadreMaison(x, f, cle) {
     const C = CHAMPS_MAISON[cle];
@@ -194,10 +224,12 @@ export async function pageFiches(zone, arg, ctx) {
       const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
       vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
         h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
+          h('span', { class: 'actions-maison ecran' },
+          h('button', { class: 'lien petit', type: 'button', title: 'Imprimer ce cadre seul, pour les élèves', onclick: () => imprimerCadre(x, cle, o) }, '🖶  Imprimer ce cadre'),
           modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
             if (!(await confirmer('Retirer le cadre', 'Retirer ce travail à la maison et son contenu ? (« Annuler » permet de revenir en arrière.)', 'Retirer'))) return;
             try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); f[C.col] = null; dessinerC(); } catch (e) { erreur(e); }
-          } }, '✖ retirer') : null),
+          } }, '✖ retirer') : null)),
         h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
