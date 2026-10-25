@@ -4,6 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
 import { dessinerContrat } from './contrat.js';
+import { boutonPartage, contenuNonPartage } from '../partage.js';
 import { qrSvg } from '../qrcode.js?v=20261025f';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
@@ -21,6 +22,11 @@ export async function pageFiches(zone, arg, ctx) {
   const sq = (await db.lire('sequences', `id=eq.${sid}`))[0];
   if (!sq) { vider(zone, h('p', {}, 'Séquence introuvable.')); return; }
   const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
+  if (!ctx.voit(m.id)) {
+    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }),
+      `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`), h('p', { class: 'sous-titre' }, m.nom))), contenuNonPartage(m, ctx));
+    return;
+  }
   const ref = await ctx.referentiel();
   const modif = ctx.peutMatiere(m.id);
   const [seances, toutes, eleves, fs] = await Promise.all([
@@ -55,6 +61,7 @@ export async function pageFiches(zone, arg, ctx) {
         h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
         modif ? boutonAnnuler(ctx, 'fiches') : null,
+        boutonPartage(ctx, m, () => ctx.recharger()),
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet || k === onglet.replace(/^(formatif|avant|apres)-/, 'seance-') ? 'actif' : '' }, t))),
@@ -319,7 +326,8 @@ async function index(zone, ctx) {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },
         h('div', { class: 'bandeau' }, h('h3', {}, m.nom)),
-        sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
+        !ctx.voit(m.id) ? h('p', { class: 'profs' }, '🔒  Contenus non partagés')
+          : sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
           : h('p', { class: 'profs' }, 'Aucune séquence pour cette promotion.'));
     })));
 }

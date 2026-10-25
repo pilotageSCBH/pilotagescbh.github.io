@@ -1,11 +1,17 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
+import { boutonPartage, contenuNonPartage } from '../partage.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 export async function pageSequencage(zone, id, ctx) {
   const m = ctx.matieres.find((x) => String(x.id) === String(id));
   if (!m) { vider(zone, h('p', {}, 'Matière introuvable.')); return; }
+  if (!ctx.voit(m.id)) {
+    vider(zone, h('header', { class: 'entete-page', style: { '--couleur': m.couleur } },
+      h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), 'Séquençage · ' + m.nom))), contenuNonPartage(m, ctx));
+    return;
+  }
   const ref = await ctx.referentiel();
   const modif = ctx.enseigne(m.id);
 
@@ -41,6 +47,7 @@ export async function pageSequencage(zone, id, ctx) {
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  ${heures(totH) || '0 h'}`)),
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
+          boutonPartage(ctx, m, () => dessiner()),
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),

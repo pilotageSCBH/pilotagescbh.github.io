@@ -20,7 +20,8 @@ export async function pageSynthese(zone, _arg, ctx) {
     totS += nS; totH += nH; parMat.push({ m, nS, nH, lignes });
     return h('section', { class: 'bloc-synthese', style: { '--couleur': m.couleur } },
       h('div', { class: 'tete-synthese' }, h('h2', {}, m.nom), h('span', {}, `${ctx.enseignantsDe(m.id).join(', ') || 'Enseignant à attribuer'}  ·  ${lignes.length} séquence(s) · ${nS} séance(s) · ${heures(nH) || '0 h'}`)),
-      lignes.length ? h('table', { class: 'table-fiche synthese' },
+      !ctx.voit(m.id) ? h('p', { class: 'vide' }, '🔒  Contenus non partagés (seuls le nombre de séances et le volume horaire sont affichés).')
+      : lignes.length ? h('table', { class: 'table-fiche synthese' },
         h('thead', {}, h('tr', {}, ['N°', 'Séquence', 'Objectif principal', 'Séances', 'Volume'].map((t) => h('th', {}, t)))),
         h('tbody', {}, lignes.map(({ s, se, hr }) => h('tr', {},
           h('td', { class: 'num' }, s.numero), h('td', { class: 'fort' }, s.intitule),

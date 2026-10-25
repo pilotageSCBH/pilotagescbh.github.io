@@ -970,3 +970,11 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .boutons-phase .icone { font-size: 11px; line-height: 16px; width: 20px; height: 18px; padding: 0; text-align: center; }
 .boutons-phase .icone:disabled { opacity: .25; cursor: default; }
 .boutons-phase .icone.suppr { grid-column: 1 / -1; width: 100%; }
+/* partage des contenus */
+.non-partage { margin: 24px auto; max-width: 640px; padding: 20px 24px; border: 2px dashed var(--ligne); border-radius: 14px; background: #fff; text-align: center; }
+.non-partage .fort { font-size: 17px; color: var(--fonce); }
+.choix-partage { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; cursor: pointer; }
+.choix-partage input { margin-top: 4px; }
+.liste-partage { margin: 4px 0 0 28px; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.liste-partage.inactive { opacity: .45; }
+.case-partage { display: flex; gap: 8px; align-items: center; }

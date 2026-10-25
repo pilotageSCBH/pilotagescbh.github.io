@@ -6,14 +6,14 @@ import { pageAccueil } from './pages/accueil.js';
 import { pageEquipe } from './pages/equipe.js';
 import { pageEleves } from './pages/eleves.js';
 import { pageReferentiel } from './pages/referentiel.js';
-import { pageSequencage } from './pages/sequencage.js';
+import { pageSequencage } from './pages/sequencage.js?v=20261025i';
 import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
-import { pageProgression } from './pages/progression.js?v=20261025g';
-import { pageFiches } from './pages/fiches.js?v=20261025f';
+import { pageProgression } from './pages/progression.js?v=20261025i';
+import { pageFiches } from './pages/fiches.js?v=20261025i';
 import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';
-import { pageSynthese } from './pages/synthese.js';
+import { pageSynthese } from './pages/synthese.js?v=20261025i';
 import { pageHistorique } from './pages/historique.js';
 import { pageAide } from './pages/aide.js';
 import { pageResultats } from './pages/resultats.js';
@@ -36,12 +36,22 @@ export const ctx = {
   // séquençage et progression : seulement les enseignants de la matière (le rôle administrateur ne suffit pas)
   enseigne: (id) => ctx.peutEcrire() && (ctx.profil?.matieres || []).includes(Number(id)),
   maintenance: null,
+  // partage des contenus par matière (séquençage, fiches, contrats) ; sans réglage : partagé avec tous
+  partages: new Map(),
+  monEnseignant: () => ctx.enseignants.find((e) => e.profil_id && e.profil_id === ctx.profil?.id)?.id ?? null,
+  voit: (id) => {
+    if (ctx.estAdmin() || (ctx.profil?.matieres || []).includes(Number(id))) return true;
+    const p = ctx.partages.get(Number(id));
+    return !p || p.mode === 'tous' || (p.mode === 'choisis' && (p.lecteurs || []).map(Number).includes(Number(ctx.monEnseignant())));
+  },
   recharger: () => afficher(),
   async chargerBase() {
     const [matieres, enseignants, promo] = await Promise.all([
       db.lire('matieres', 'order=ordre'), db.lire('enseignants', 'order=ordre,nom'), db.lire('promotions', 'order=annee_debut'),
     ]);
     ctx.matieres = matieres; ctx.enseignants = enseignants; ctx.promotions = promo;
+    // réglages de partage (table créée par la mise à jour 14_partage.sql ; absente : tout reste partagé)
+    try { ctx.partages = new Map((await db.lire('partages')).map((p) => [Number(p.matiere_id), p])); } catch { ctx.partages = new Map(); }
     // promotion affichée : celle choisie la dernière fois sur ce poste, sinon celle qui commence cette année scolaire
     let choix = null;
     try { choix = Number(localStorage.getItem(CLE_PROMO)); } catch { /* sans stockage */ }
