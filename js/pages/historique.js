@@ -9,7 +9,7 @@ const CHAMPS = {
   valeur: 'note', coefficient: 'coefficient', actif: 'critère retiré / remis', phases: 'déroulement', activites: 'activités et tâches',
   situation: 'situation professionnelle', prerequis: 'prérequis', modalites: 'modalités d’évaluation', ressources: 'ressources', bilan: 'bilan',
   salle: 'salle', materiel: 'matériel', evaluation: 'évaluation', differenciation: 'différenciation', date_eval: 'date', forme: 'forme',
-  prerequis_texte: 'autres prérequis', libelle: 'intitulé', bareme: 'noté sur', coef_resultat: 'coefficient (résultats)', lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
+  prerequis_texte: 'autres prérequis', maison_avant: 'travail avant la séance', maison_apres: 'travail après la séance', libelle: 'intitulé', bareme: 'noté sur', coef_resultat: 'coefficient (résultats)', lieu: 'lieu', organisation: 'organisation', nom: 'nom', prenom: 'prénom', statut: 'statut', arret: 'arrêt de formation',
 };
 const TYPES = {
   tout: ['Tout', null], sequencage: ['Séquençages', ['sequences', 'seances']],
