@@ -37,19 +37,10 @@ export async function pageFiches(zone, arg, ctx) {
   const lien = (o) => `#/fiches/${sq.id}:${o}`;
   const RE_SEANCE = /^(seance|formatif|avant|apres)-/;
   const idSeance = RE_SEANCE.test(onglet) ? onglet.split('-')[1] : null;
-  const ficheSe = idSeance ? (await db.lire('fiches_seance', `seance_id=eq.${idSeance}`))[0] || {} : {};
   // sous-onglets d'une séance : travail avant (option), déroulement, travail après (option), contrat formatif
   const sousOnglets = () => {
     const tab = (k, t) => h('a', { href: lien(`${k}-${idSeance}`), class: onglet.startsWith(k + '-') ? 'actif' : '' }, t);
-    const option = (k, t, col) => (ficheSe[col] ? tab(k, t) : modif ? h('a', { href: '#', class: 'option-onglet', title: 'Ajouter cet onglet (optionnel)', onclick: async (e) => {
-      e.preventDefault();
-      try { await db.enregistrer('fiches_seance', [{ seance_id: Number(idSeance), [col]: {} }], 'seance_id'); location.hash = lien(`${k}-${idSeance}`); } catch (x) { erreur(x); }
-    } }, '＋  ' + t.replace(/^\S+\s+/, '')) : null);
-    return h('nav', { class: 'sous-onglets ecran' },
-      option('avant', '🏠  Avant la séance (classe inversée)', 'maison_avant'),
-      tab('seance', '📝  Fiche de déroulement'),
-      option('apres', '📚  Après la séance (devoirs)', 'maison_apres'),
-      tab('formatif', '✅  Contrat d’évaluation formative'));
+    return h('nav', { class: 'sous-onglets ecran' }, tab('seance', '📝  Fiche de déroulement'), tab('formatif', '✅  Contrat d’évaluation formative'));
   };
 
   // ------------------------------------------------------------------------------------- en-tête et onglets
@@ -157,15 +148,14 @@ export async function pageFiches(zone, arg, ctx) {
           h('div', { class: 'rubrique' }, h('h3', {}, 'Savoirs associés'), codes(x.savoirs, ref.sav))),
         lignesPre.length ? h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis (séquençage)'), h('p', { class: 'pre' }, lignesPre.join('\n'))) : null,
         h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
-        f.maison_avant || f.maison_apres ? h('div', { class: 'rubrique' }, h('h3', {}, 'Travail à la maison'), h('div', { class: 'gris rappel-maison' },
-          f.maison_avant ? h('div', {}, h('a', { href: lien(`avant-${x.id}`) }, '🏠 Avant la séance'), resumeMaison(f.maison_avant)) : null,
-          f.maison_apres ? h('div', {}, h('a', { href: lien(`apres-${x.id}`) }, '📚 Après la séance'), resumeMaison(f.maison_apres)) : null)) : null,
+        cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), COLS_PHASES.map(([, t]) => h('th', {}, t)),
             modif ? h('th', { class: 'ecran' }) : null)), tablePhases),
           modif ? h('button', { class: 'lien petit ecran', onclick: async () => {
             phases.push(phaseVide());
             try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '＋ ajouter une phase') : null),
+        cadreMaison(x, f, 'apres'),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
@@ -175,42 +165,47 @@ export async function pageFiches(zone, arg, ctx) {
   }
 
   // ------------------------------------------------------------------------------------- séance : travail à la maison (option)
-  const resumeMaison = (o) => {
-    const t = (o.consignes || o.objectif || '').split('\n').find((l) => l.trim()) || 'à compléter';
-    return ` : ${t.length > 120 ? t.slice(0, 119) + '…' : t}${o.echeance ? ` (pour le ${dateFr(o.echeance)})` : ''}`;
-  };
   const CHAMPS_MAISON = {
-    avant: { col: 'maison_avant', titre: 'TRAVAIL PRÉPARATOIRE À LA MAISON', sous: 'à faire avant la séance (classe inversée)', echeance: 'À faire pour le', rubriques: [
-      ['objectif', 'Objectif du travail préparatoire', 'Ce que l’élève doit avoir découvert ou compris en arrivant en classe…'],
-      ['consignes', 'Travail demandé', '1. Regarder la vidéo…\n2. Lire le document…\n3. Répondre aux questions…'],
-      ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…'],
-      ['exploitation', 'Exploitation en classe', 'Comment le travail est repris en début de séance : questions flash, mise en commun, QCM…']] },
-    apres: { col: 'maison_apres', titre: 'TRAVAIL À LA MAISON', sous: 'à faire après la séance (devoirs)', echeance: 'À rendre le', rubriques: [
-      ['consignes', 'Travail demandé', 'Exercices, recherche, rédaction, révision…'],
-      ['ressources', 'Ressources (documents, liens)', 'Documents, pages du manuel, liens…'],
-      ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
-      ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
+    avant: { col: 'maison_avant', titre: '🏠  Avant la séance : travail préparatoire à la maison (classe inversée)', ajout: '＋  Ajouter un travail préparatoire avant la séance (classe inversée)',
+      echeance: 'À faire pour le', rubriques: [
+        ['objectif', 'Objectif du travail préparatoire', 'Ce que l’élève doit avoir découvert ou compris en arrivant en classe…'],
+        ['consignes', 'Travail demandé', '1. Regarder la vidéo…\n2. Lire le document…\n3. Répondre aux questions…'],
+        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…'],
+        ['exploitation', 'Exploitation en classe', 'Comment le travail est repris en début de séance : questions flash, mise en commun, QCM…']] },
+    apres: { col: 'maison_apres', titre: '📚  Après la séance : travail à la maison (devoirs)', ajout: '＋  Ajouter un travail à la maison après la séance (devoirs)',
+      echeance: 'À rendre le', rubriques: [
+        ['consignes', 'Travail demandé', 'Exercices, recherche, rédaction, révision…'],
+        ['ressources', 'Ressources (documents, liens)', 'Documents, pages du manuel, liens…'],
+        ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
+        ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
-  async function maison(x, cle) {
+  // cadre « travail à la maison » de la fiche de déroulement (optionnel) : avant le tableau (classe inversée) ou après (devoirs)
+  function cadreMaison(x, f, cle) {
     const C = CHAMPS_MAISON[cle];
-    const o = { ...(ficheSe[C.col] || {}) };
-    const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
-    const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
-    vider(fiche,
-      h('article', { class: 'feuille maison ' + cle },
-        entete(C.titre, titre),
-        h('p', { class: 'sous-maison' }, C.sous),
-        h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo),
+    const zoneC = h('div', { class: 'zone-maison ' + cle });
+    const dessinerC = () => {
+      const o = f[C.col];
+      if (!o) {
+        vider(zoneC, modif ? h('button', { class: 'ajout-maison ecran', type: 'button', onclick: async () => {
+          try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: {} }], 'seance_id'); f[C.col] = {}; dessinerC(); } catch (e) { erreur(e); }
+        } }, C.ajout) : null);
+        return;
+      }
+      const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
+      vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
+        h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
+          modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
+            if (!(await confirmer('Retirer le cadre', 'Retirer ce travail à la maison et son contenu ? (« Annuler » permet de revenir en arrière.)', 'Retirer'))) return;
+            try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); f[C.col] = null; dessinerC(); } catch (e) { erreur(e); }
+          } }, '✖ retirer') : null),
+        h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
-        cle === 'avant' && x.objectif_inter ? h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif de la séance en classe'), h('p', { class: 'fort' }, x.objectif_inter)) : null,
-        C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide))),
-      modif ? h('div', { class: 'ligne-actions ecran' }, h('button', { class: 'btn danger-texte', onclick: async () => {
-        if (!(await confirmer('Retirer l’onglet', `Retirer « ${cle === 'avant' ? 'Avant la séance' : 'Après la séance'} » et son contenu pour cette séance ? (« Annuler » permet de revenir en arrière.)`, 'Retirer'))) return;
-        try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); location.hash = lien(`seance-${x.id}`); } catch (e) { erreur(e); }
-      } }, '✖  Retirer cet onglet')) : null,
-      h('p', { class: 'aide ecran' }, 'Cette fiche s’imprime pour les élèves (bouton « Imprimer »).'));
-    ajusterTout(fiche);
+        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide)))));
+      ajusterTout(zoneC);
+    };
+    dessinerC();
+    return zoneC;
   }
 
   // ------------------------------------------------------------------------------------- séance : contrat d'évaluation formative
@@ -231,8 +226,6 @@ export async function pageFiches(zone, arg, ctx) {
       const x = seances.find((s) => String(s.id) === onglet.split('-')[1]);
       if (!x) await preparation();
       else if (onglet.startsWith('formatif-')) await formatif(x);
-      else if (onglet.startsWith('avant-') && ficheSe.maison_avant) await maison(x, 'avant');
-      else if (onglet.startsWith('apres-') && ficheSe.maison_apres) await maison(x, 'apres');
       else await seance(x);
     } else await preparation();
   } catch (e) { erreur(e); throw e; }

@@ -923,3 +923,15 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .sous-maison { margin: -4px 0 12px; font-weight: 700; color: var(--gris); text-transform: uppercase; letter-spacing: .05em; font-size: 12px; }
 .rappel-maison { display: flex; flex-direction: column; gap: 4px; }
 .rappel-maison a { font-weight: 700; }
+/* fiche de déroulement : cadres « travail à la maison » */
+.zone-maison { margin: 12px 0; }
+.ajout-maison { font: inherit; width: 100%; padding: 10px; border-radius: 10px; border: 2px dashed var(--ligne); background: transparent; color: var(--teal); font-weight: 700; cursor: pointer; }
+.ajout-maison:hover { border-color: var(--teal); background: var(--clair); }
+.cadre-maison { border: 2px solid #E8893A; border-radius: 12px; padding: 10px 14px 4px; background: #FFF9F2; }
+.cadre-maison.apres { border-color: #3D84C6; background: #F4F8FD; }
+.tete-maison { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tete-maison h3 { font-size: 14px; color: #A2561A; }
+.cadre-maison.apres .tete-maison h3 { color: #245F96; }
+.cadre-maison .grille-infos { background: #fff; }
+.cadre-maison .rubrique { margin: 8px 0; }
+@media print { .cadre-maison { break-inside: avoid; } }
