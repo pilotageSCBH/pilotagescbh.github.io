@@ -91,7 +91,6 @@ export async function pageFiches(zone, arg, ctx) {
       zoneTexte('Activités et tâches du référentiel visées', ficheSeq.activites, maj('activites'), sugg ? 'Tâches citées dans les séances :\n' + sugg : ''),
       modif && sugg && !ficheSeq.activites ? h('button', { class: 'lien petit', onclick: async (e) => {
         try { await maj('activites')(sugg); ficheSeq.activites = sugg; preparation(); } catch (x) { erreur(x); } } }, '＋ reprendre les tâches citées dans les séances') : null,
-      zoneTexte('Situation professionnelle / support', ficheSeq.situation, maj('situation'), 'ex. chantier fil rouge, dossier d’une affaire réelle…'),
       zoneTexte('Prérequis', ficheSeq.prerequis, maj('prerequis')),
       h('div', { class: 'rubrique' }, h('h3', {}, 'Séances de la séquence'),
         h('table', { class: 'table-fiche auto' }, h('thead', {}, h('tr', {}, ['N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Compétences', 'Savoirs'].map((t) => h('th', {}, t)))),
