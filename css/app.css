@@ -1152,3 +1152,19 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .menu.reduit .lien-menu.actif::before { left: -6px; }
 @media (max-width: 900px) { .menu { position: static; height: auto; } .defile-menu { max-height: 50vh; } }
 .carte-matiere .btn.classeur { margin: 10px 14px 0; }
+/* ressources : liens avec QR code */
+.qr-liens { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.qr-liens:empty { display: none; }
+.qr-lien { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 150px; padding: 8px; border: 1px solid var(--ligne); border-radius: 10px; background: #fff; text-decoration: none; }
+.qr-lien:hover { border-color: var(--teal); box-shadow: var(--ombre); }
+.qr-lien span { font-size: 10.5px; color: var(--fonce); word-break: break-all; text-align: center; line-height: 1.25; }
+@media print { .qr-lien { break-inside: avoid; } }
+/* ressources : liens avec QR code */
+.qr-liens { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.qr-liens:empty { display: none; }
+.qr-lien { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 150px; padding: 8px; border: 1px solid var(--ligne); border-radius: 10px; background: #fff; text-decoration: none; }
+.qr-lien:hover { border-color: var(--teal); box-shadow: var(--ombre); }
+.qr-lien span { font-size: 10.5px; color: var(--fonce); word-break: break-all; text-align: center; line-height: 1.25; }
+@media print { .qr-lien { break-inside: avoid; } }
+.cadre-maison .deux > .rubrique.pleine { grid-column: 1 / -1; }
+.qr-lien b { font-size: 11.5px; color: var(--texte); text-align: center; }

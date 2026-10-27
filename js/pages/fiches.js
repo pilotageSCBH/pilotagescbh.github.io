@@ -5,6 +5,7 @@ import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre } from '../ui.js';
 import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
+import { qrSVG, liensLibelles } from '../qr.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -172,12 +173,11 @@ export async function pageFiches(zone, arg, ctx) {
       echeance: 'À faire pour le', rubriques: [
         ['objectif', 'Objectif du travail préparatoire', 'Ce que l’élève doit avoir découvert ou compris en arrivant en classe…'],
         ['consignes', 'Travail demandé', '1. Regarder la vidéo…\n2. Lire le document…\n3. Répondre aux questions…'],
-        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…'],
-        ['exploitation', 'Exploitation en classe', 'Comment le travail est repris en début de séance : questions flash, mise en commun, QCM…']] },
+        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens (https://…), pages du manuel, documents déposés sur l’ENT… Un QR code est créé pour chaque lien.']] },
     apres: { col: 'maison_apres', titre: '📚  Après la séance : travail à la maison (devoirs)', ajout: '＋  Ajouter un travail à la maison après la séance (devoirs)',
       echeance: 'À rendre le', rubriques: [
         ['consignes', 'Travail demandé', 'Exercices, recherche, rédaction, révision…'],
-        ['ressources', 'Ressources (documents, liens)', 'Documents, pages du manuel, liens…'],
+        ['ressources', 'Ressources (documents, liens)', 'Documents, pages du manuel, liens (https://…)… Un QR code est créé pour chaque lien.'],
         ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
         ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
@@ -203,7 +203,17 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
-        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide)))));
+        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => {
+          if (k !== 'ressources') return zoneTexte(lib, o[k], enreg(k), aide);
+          // ressources : les liens repris avec leur adresse et un QR code (accès direct depuis un téléphone)
+          const zqr = h('div', { class: 'qr-liens' });
+          const majQR = (t) => vider(zqr, liensLibelles(t).map(({ url, lib }) => h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' },
+            lib ? h('b', {}, lib) : null, qrSVG(url, 96), h('span', {}, url))));
+          majQR(o[k]);
+          const z = zoneTexte(lib, o[k], async (v) => { await enreg(k)(v); majQR(v); }, aide);
+          z.append(zqr); z.classList.add('pleine');
+          return z;
+        }))));
       ajusterTout(zoneC);
     };
     dessinerC();
@@ -302,8 +312,9 @@ export async function modelesSequence(S, ctx, choisis) {
   const maison = (o, cle) => (!o ? null : { t: 'cadre', couleur: cle === 'avant' ? '#E8893A' : '#3D84C6',
     titre: cle === 'avant' ? 'Avant la séance : travail préparatoire à la maison (classe inversée)' : 'Après la séance : travail à la maison (devoirs)',
     blocs: [{ t: 'infos', paires: [[cle === 'avant' ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree]] },
-      ...(cle === 'avant' ? [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]
-        : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]).map(([k, l]) => R(l, o[k]))] });
+      ...(cle === 'avant' ? [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources']]
+        : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']])
+        .flatMap(([k, l]) => [R(l, o[k]), k === 'ressources' && liensLibelles(o[k]).length ? { t: 'qr', liens: liensLibelles(o[k]) } : null]).filter(Boolean)] });
   // contrat : critères (lignes) × élèves (colonnes), notes saisies, niveau par rubrique et note finale
   const contrat = async (type, idObjet, titre, groupeLib) => {
     const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${idObjet}`))[0];

@@ -2,6 +2,8 @@
 // Un document = une liste de blocs : titre, infos (paires libellé / valeur), rubrique (bandeau + texte), table, cadre, note.
 // Les bibliothèques ne sont chargées qu'au premier téléchargement.
 
+import { qrMatrice } from './qr.js';
+
 const charges = {};
 function charger(src, nom) {
   if (window[nom]) return Promise.resolve(window[nom]);
@@ -168,6 +170,24 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
         y -= h;
       }
       y -= 10;
+    },
+    // QR codes des liens (accès direct depuis un téléphone), avec l'adresse sous chaque code
+    qr(b) {
+      const cote = 74, lc = 132, parLigne = Math.max(1, Math.floor(largeur / lc)), tl = 6.3;
+      for (let i = 0; i < b.liens.length; i += parLigne) {
+        const rang = b.liens.slice(i, i + parLigne).map(({ url, lib }) => ({ u: url, lb: lib ? lignes(lib, FB, 7.5, lc - 12).slice(0, 2) : [], ls: lignes(url, F, tl, lc - 12).slice(0, 4) }));
+        const hLib = Math.max(...rang.map((r) => r.lb.length)) * 9.5;
+        const hRang = hLib + cote + 8 + Math.max(...rang.map((r) => r.ls.length)) * (tl + 1.6) + 6;
+        place(hRang);
+        rang.forEach(({ u, lb, ls }, k) => {
+          const x0 = gauche + k * lc, m = qrMatrice(u), N = m.length, t = cote / (N + 2), xq = x0 + (lc - cote) / 2, yq = y - hLib;
+          page.drawRectangle({ x: x0 + 2, y: y - hRang + 2, width: lc - 6, height: hRang - 4, borderColor: LIGNE, borderWidth: 0.5, color: BLANC });
+          lb.forEach((l, j) => { const w = FB.widthOfTextAtSize(l, 7.5); texte(l, x0 + (lc - w) / 2 - 2, y - 11 - j * 9.5, FB, 7.5, TEXTE); });
+          for (let yy = 0; yy < N; yy++) for (let xx = 0; xx < N; xx++) if (m[yy][xx]) page.drawRectangle({ x: xq + (xx + 1) * t, y: yq - 6 - (yy + 2) * t, width: t + 0.05, height: t + 0.05, color: coul('#000000') });
+          ls.forEach((l, j) => { const w = F.widthOfTextAtSize(l, tl); texte(l, x0 + (lc - w) / 2 - 2, yq - cote - 12 - j * (tl + 1.6), F, tl, FONCE); });
+        });
+        y -= hRang + 4;
+      }
     },
     // cadre de couleur autour d'un groupe de blocs (travail à la maison)
     cadre(b) {
