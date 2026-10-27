@@ -4,7 +4,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre } from '../ui.js';
 import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
-import { telecharger, nomFichier, exportSequence, enTeteEchange, documentWord, echapper, FORMAT } from '../echange.js';
+import { telecharger, nomFichier, exportSequence } from '../echange.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -57,7 +57,6 @@ export async function pageFiches(zone, arg, ctx) {
         modif ? boutonAnnuler(ctx, 'fiches') : null,
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('button', { class: 'btn', onclick: () => menuTelecharger() }, '⬇  Télécharger'),
-        modif ? h('button', { class: 'btn', onclick: () => importer() }, '⬆  Importer') : null,
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet || k === onglet.replace(/^(formatif|avant|apres)-/, 'seance-') ? 'actif' : '' }, t))),
     // séance : travail avant (option), fiche de déroulement, travail après (option), contrat formatif
@@ -223,63 +222,66 @@ export async function pageFiches(zone, arg, ctx) {
     await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }) });
   }
 
-  // ------------------------------------------------------------------------------------- téléchargements
+  // ------------------------------------------------------------------------------------- téléchargement (PDF A4 portrait dans un .zip)
+  // choix des documents : préparation et contrat sommatif de la séquence, fiche de déroulement et contrat formatif de chaque séance
   async function menuTelecharger() {
-    const x = idSeance ? seances.find((y) => String(y.id) === idSeance) : null;
-    const carte = (v, ...enfants) => h('button', { class: 'carte-choix' + (v.startsWith('json') ? ' echange' : ''), type: 'button',
-      onclick: (e) => { e.target.closest('.fond-fenetre')?.remove(); lancerTelechargement(v); } }, enfants);
-    await fenetre('Télécharger', h('div', { class: 'choix-telecharger' },
-      h('p', { class: 'aide' }, 'Documents Word : à ouvrir dans Word (ou LibreOffice) pour les modifier, les imprimer ou les enregistrer en PDF. '
-        + 'Fichier d’échange : pour faire rédiger les fiches suivantes (par exemple par Claude) puis les réimporter avec « ⬆ Importer ».'),
-      x ? carte('seance', h('b', {}, `📄  Documents de la séance ${sq.numero}.${x.numero}`),
-        h('span', {}, 'Fiche de déroulement (avec le travail à la maison) et contrat d’évaluation formative, en un seul fichier Word')) : null,
-      carte('sequence', h('b', {}, `📚  Toute la séquence ${sq.numero}`),
-        h('span', {}, 'Préparation de séquence, contrat sommatif, puis chaque séance : fiche de déroulement et contrat formatif (un seul fichier Word)')),
-      carte('json', h('b', {}, `🔄  Fichier d’échange de la séquence ${sq.numero}`),
-        h('span', {}, 'Toutes les fiches et contrats de la séquence (.json), à compléter puis à réimporter')),
-      carte('json-matiere', h('b', {}, `🔄  Fichier d’échange de toute la matière (${m.nom})`),
-        h('span', {}, `Toutes les séquences de la promotion ${promo} (.json)`))), [{ texte: 'Fermer', valeur: null }]);
-  }
-  async function lancerTelechargement(v) {
+    const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Contrat d’évaluation sommative', null],
+      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Contrat d’évaluation formative`, x]])];
+    const coche = (k) => (idSeance ? k.endsWith('-' + idSeance) : true);
+    const cases = new Map(docs.map(([k]) => [k, h('input', { type: 'checkbox', checked: coche(k) })]));
+    const compte = h('b', {});
+    const majCompte = () => { const n = [...cases.values()].filter((c) => c.checked).length; compte.textContent = `${n} document(s) sélectionné(s)`; };
+    cases.forEach((c) => c.addEventListener('change', majCompte));
+    const tous = (v) => { cases.forEach((c) => { c.checked = v; }); majCompte(); };
+    const ligne = (k, t) => h('label', { class: 'choix-doc' }, cases.get(k), t);
+    majCompte();
+    const ok = await fenetre(`Télécharger · séquence ${sq.numero}`, h('div', { class: 'choix-telecharger' },
+      h('p', { class: 'aide' }, 'Chaque document est un PDF au format A4 portrait ; l’ensemble est regroupé dans un fichier .zip.'),
+      h('div', { class: 'ligne-com' }, compte, h('span', {},
+        h('button', { class: 'lien petit', type: 'button', onclick: () => tous(true) }, 'tout cocher'), '  ·  ',
+        h('button', { class: 'lien petit', type: 'button', onclick: () => tous(false) }, 'tout décocher'))),
+      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Contrat d’évaluation sommative')),
+      seances.map((x) => h('fieldset', { class: 'groupe-docs' + (String(x.id) === idSeance ? ' courante' : '') },
+        h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
+          cases.get(`seance-${x.id}`).checked = e.target.checked; cases.get(`formatif-${x.id}`).checked = e.target.checked; majCompte(); } }),
+        `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
+        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Contrat d’évaluation formative')))),
+    [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
+      if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
+      return true;
+    } }], { large: true });
+    if (!ok) return;
+    const choisis = docs.filter(([k]) => cases.get(k).checked);
     try {
-      toast('Préparation du fichier…');
-      if (v === 'seance') await wordSeances([seances.find((y) => String(y.id) === idSeance)], false);
-      else if (v === 'sequence') await wordSeances(seances, true);
-      else if (v === 'json') {
-        const d = { ...enTeteEchange(ctx, m, promo), sequence: await exportSequence(sq) };
-        telecharger(nomFichier(`fiches_${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.json`), JSON.stringify(d, null, 2), 'application/json');
-      } else if (v === 'json-matiere') {
-        const d = { ...enTeteEchange(ctx, m, promo), sequences: await Promise.all(toutes.map((y) => exportSequence(y))) };
-        telecharger(nomFichier(`fiches_${ctx.codeMat(m)}_toutes_sequences_${promo}.json`), JSON.stringify(d, null, 2), 'application/json');
-      }
-      toast('Fichier téléchargé');
+      toast('Préparation des PDF…');
+      const [{ chargerOutils, zipDePDF }] = await Promise.all([import('../pdf.js')]);
+      await chargerOutils();
+      const logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
+      const modeles = await modelesPDF(choisis);
+      const zip = await zipDePDF(modeles, logo);
+      telecharger(nomFichier(`${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.zip`), zip);
+      toast(`${modeles.length} document(s) téléchargé(s)`);
     } catch (x) { erreur(x); }
   }
 
-  // documents Word construits à partir des données (fiches et contrats)
-  async function wordSeances(liste, avecSequence) {
+  // contenu des documents (blocs mis en page par js/pdf.js)
+  async function modelesPDF(choisis) {
     const d = await exportSequence(sq);
     const elevesL = actifs.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
-    const t = (v) => echapper(v || '—').replace(/\n/g, '<br>');
-    const TABLE = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;border:1px solid #A9B5B2">';
-    const infos = (paires) => `${TABLE}${paires.reduce((r, p, i) => (i % 2 ? (r[r.length - 1].push(p), r) : (r.push([p]), r)), [])
-      .map((l) => `<tr>${l.map(([a, b]) => `<td class="lib" bgcolor="#E3F1EF" width="18%"><b>${echapper(a)}</b></td><td width="32%">${t(b)}</td>`).join('')}${l.length < 2 ? '<td class="lib"></td><td></td>' : ''}</tr>`).join('')}</table>`;
-    const rub = (titre, v) => `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" style="color:#ffffff"><b>${echapper(titre).toUpperCase()}</b></td></tr><tr><td>${t(v)}</td></tr></table>`;
-    const tete = (titre, sous) => `<h1>${echapper(titre)}</h1><h2 class="sous">${echapper(sous)}</h2>`;
-    const codes = (l, idx) => (l || []).map((c) => `${c} ${idx[c]?.libelle || ''}`).join('\n');
-    const maison = (o, cle) => {
-      if (!o) return '';
-      const C = cle === 'avant'
-        ? ['🏠 Avant la séance : travail préparatoire à la maison (classe inversée)', 'À faire pour le', [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]]
-        : ['📚 Après la séance : travail à la maison (devoirs)', 'À rendre le', [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]];
-      return `<p style="margin-top:10pt"></p><table width="100%" border="2" cellspacing="0" cellpadding="6" style="border-collapse:collapse;border:2px solid ${cle === 'avant' ? '#E8893A' : '#3D84C6'}"><tr><td bgcolor="${cle === 'avant' ? '#FFF3E6' : '#EAF2FB'}"><b style="color:${cle === 'avant' ? '#A2561A' : '#245F96'}">${C[0]}</b>${infos([[C[1], o.echeance ? new Date(o.echeance + 'T12:00').toLocaleDateString('fr-FR') : ''], ['Durée estimée', o.duree]])}`
-        + C[2].map(([k, l]) => rub(l, o[k])).join('') + '</td></tr></table>';
-    };
-    const contrat = async (type, c, titre, groupeLib) => {
-      if (!c) return null;
-      const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${c}`))[0];
-      if (!ct) return null;
-      const ks = (await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`)).filter((k) => k.actif);
+    const dt = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR') : '');
+    const codes = (l, idx) => (l || []).map((c) => `${c}  ${idx[c]?.libelle || ''}`).join('\n');
+    const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
+    const pied = `${m.nom} · Séquence ${sq.numero} · Promotion ${promo}`;
+    const num = (n) => String(n).padStart(2, '0');
+    const maison = (o, cle) => (!o ? null : { t: 'cadre', couleur: cle === 'avant' ? '#E8893A' : '#3D84C6',
+      titre: cle === 'avant' ? 'Avant la séance : travail préparatoire à la maison (classe inversée)' : 'Après la séance : travail à la maison (devoirs)',
+      blocs: [{ t: 'infos', paires: [[cle === 'avant' ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree]] },
+        ...(cle === 'avant' ? [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]
+          : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]).map(([k, l]) => R(l, o[k]))] });
+    // contrat : critères (lignes) × élèves (colonnes), notes saisies, niveau par rubrique et note finale
+    const contrat = async (type, idObjet, titre, groupeLib) => {
+      const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${idObjet}`))[0];
+      const ks = ct ? (await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`)).filter((k) => k.actif) : [];
       const nl = ks.length ? await db.lire('notes', `critere_id=in.(${ks.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
       const notes = new Map(nl.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
       const groupes = [...new Set(ks.map((k) => k.groupe))];
@@ -287,86 +289,63 @@ export async function pageFiches(zone, arg, ctx) {
         if (type === 'sommatif') { const ms = groupes.map((g) => moyenne(ks.filter((k) => k.groupe === g), notes, e.id)).filter((v) => v !== null); return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null; }
         return moyenne(ks, notes, e.id);
       };
-      const tetes = elevesL.map((e) => `<th bgcolor="#E3F1EF" class="centre">${echapper(e.nom)}<br>${echapper(e.prenom)}</th>`).join('');
-      const lignes = groupes.map((g) => `<tr class="groupe"><td bgcolor="#1E8F86" style="color:#ffffff" colspan="${2 + elevesL.length}">${echapper(groupeLib(g))}</td></tr>`
-        + ks.filter((k) => k.groupe === g).map((k) => `<tr><td>${t(k.texte)}</td><td class="centre">${arrondi(Number(k.coefficient))}</td>${elevesL.map((e) => `<td class="centre">${echapper(notes.get(`${k.id}:${e.id}`) || '')}</td>`).join('')}</tr>`).join('')
-        + `<tr><td><i>Niveau (note / 5)</i></td><td></td>${elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return `<td class="centre"><b>${n === null ? '' : niveau(n).code}</b></td>`; }).join('')}</tr>`).join('');
-      const fin = `<tr><td><b>NOTE FINALE / 20</b></td><td></td>${elevesL.map((e) => { const f = finale(e); return `<td class="centre"><b>${f === null ? '' : arrondi(f * 4)}</b></td>`; }).join('')}</tr>`;
-      return { paysage: true, html: tete(`CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, titre)
-        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Date', ct.date_eval ? new Date(ct.date_eval + 'T12:00').toLocaleDateString('fr-FR') : ''],
-          ['Forme', ct.forme], ['Lieu', ct.lieu], ['Organisation', ct.organisation], ['Durée', ct.duree]])
-        + `<p style="margin-top:8pt"></p>${TABLE}<tr><th bgcolor="#E3F1EF" width="30%">${type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères'}</th><th bgcolor="#E3F1EF" class="centre">Coef.</th>${tetes}</tr>${lignes}${fin}</table>`
-        + '<p style="margin-top:4pt;font-size:8.5pt">NA : non acquis (0 à moins de 2 / 5) · EVA : en voie d’acquisition (2 à moins de 4) · A : acquis (4 à 5) · NE : non évalué</p>' };
+      const lignes = [];
+      for (const g of groupes) {
+        lignes.push({ groupe: groupeLib(g) });
+        ks.filter((k) => k.groupe === g).forEach((k) => lignes.push([k.texte, arrondi(Number(k.coefficient)), ...elevesL.map((e) => notes.get(`${k.id}:${e.id}`) || '')]));
+        lignes.push({ fond: '#EFF1F0', cellules: ['Niveau (note / 5)', '', ...elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return n === null ? '' : niveau(n).code; })] });
+      }
+      lignes.push({ fond: '#D9DEDC', gras: true, cellules: ['NOTE FINALE / 20', '', ...elevesL.map((e) => { const f = finale(e); return f === null ? '' : arrondi(f * 4); })] });
+      return [{ t: 'titre', texte: `CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, sous: titre, couleur: m.couleur },
+        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Date', dt(ct?.date_eval)], ['Forme', ct?.forme],
+          ['Lieu', ct?.lieu], ['Organisation', ct?.organisation], ['Durée', ct?.duree]] },
+        ks.length ? { t: 'table', taille: 7.5, teteVerticale: 2,
+          colonnes: [{ titre: type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères', part: 34 }, { titre: 'Coef.', part: 5.5, centre: true },
+            ...elevesL.map((e) => ({ titre: `${e.nom} ${e.prenom}`, part: Math.max(3, 62 / Math.max(1, elevesL.length)), centre: true }))], lignes }
+          : R('Critères', 'Contrat pas encore créé.'),
+        { t: 'note', texte: 'NA : non acquis (0 à moins de 2 / 5) · EVA : en voie d’acquisition (2 à moins de 4) · A : acquis (4 à 5) · NE : non évalué' }];
     };
-    const sections = [];
-    if (avecSequence) {
-      const p = d.preparation;
-      sections.push({ html: tete('FICHE DE PRÉPARATION DE SÉQUENCE', `Séquence ${sq.numero} · ${sq.intitule || ''}`)
-        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Volume', volume]])
-        + rub('Objectif principal', sq.objectif) + rub('Activités et tâches du référentiel visées', p.activites) + rub('Situation professionnelle / support', p.situation)
-        + rub('Prérequis', p.prerequis)
-        + `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" colspan="6" style="color:#ffffff"><b>SÉANCES DE LA SÉQUENCE</b></td></tr><tr>${['N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Compétences', 'Savoirs'].map((x) => `<th bgcolor="#E3F1EF">${x}</th>`).join('')}</tr>${seances.map((x) =>
-          `<tr><td>${sq.numero}.${x.numero}</td><td><b>${t(x.titre)}</b></td><td>${heures(x.duree == null ? null : Number(x.duree))}</td><td>${t(x.objectif_inter)}</td><td>${(x.competences || []).join(' ')}</td><td>${(x.savoirs || []).join(' ')}</td></tr>`).join('')}</table>`
-        + rub('Modalités d’évaluation', p.modalites) + rub('Ressources et supports', p.ressources) + rub('Bilan de la séquence', p.bilan) });
-      const cs = await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`);
-      if (cs) sections.push(cs);
+    const out = [];
+    for (const [k, , x] of choisis) {
+      if (k === 'preparation') {
+        const p = d.preparation;
+        out.push({ fichier: `${num(0)}_Fiche_de_preparation_sequence_${sq.numero}.pdf`, titre: `Fiche de préparation · séquence ${sq.numero}`, pied, blocs: [
+          { t: 'titre', texte: 'FICHE DE PRÉPARATION DE SÉQUENCE', sous: `Séquence ${sq.numero} · ${sq.intitule || ''}`, couleur: m.couleur },
+          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Volume', volume]] },
+          R('Objectif principal', sq.objectif, { gras: true, gris: true }), R('Activités et tâches du référentiel visées', p.activites), R('Situation professionnelle / support', p.situation), R('Prérequis', p.prerequis),
+          { t: 'table', titre: 'Séances de la séquence', colonnes: [{ titre: 'N°', part: 5, gras: true }, { titre: 'Séance', part: 22, gras: true }, { titre: 'Durée', part: 7 },
+            { titre: 'Objectif intermédiaire', part: 34 }, { titre: 'Compétences', part: 14 }, { titre: 'Savoirs', part: 18 }],
+          lignes: seances.map((y) => [`${sq.numero}.${y.numero}`, y.titre, heures(y.duree == null ? null : Number(y.duree)), y.objectif_inter, (y.competences || []).join(' '), (y.savoirs || []).join(' ')]) },
+          R('Modalités d’évaluation', p.modalites), R('Ressources et supports', p.ressources), R('Bilan de la séquence', p.bilan)] });
+      } else if (k === 'sommatif') {
+        out.push({ fichier: `${num(1)}_Contrat_sommatif_sequence_${sq.numero}.pdf`, titre: `Contrat sommatif · séquence ${sq.numero}`, pied,
+          blocs: await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`) });
+      } else if (k.startsWith('seance-')) {
+        const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
+        const ids = (x.prerequis || []).map(Number);
+        const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
+        const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
+        const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
+        if (x.prerequis_texte) lPre.push(x.prerequis_texte);
+        out.push({ fichier: `S${sq.numero}.${x.numero}_a_Fiche_de_deroulement.pdf`, titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`, pied, blocs: [
+          { t: 'titre', texte: 'FICHE DE DÉROULEMENT DE SÉANCE', sous: `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: m.couleur },
+          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
+            ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
+          R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', x.cours, { gris: true }),
+          R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
+          lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
+          maison(f.maison_avant, 'avant'),
+          { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true }, { titre: 'Activité proposée', part: 21 },
+            { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
+          lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
+          maison(f.maison_apres, 'apres'),
+          R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
+      } else if (k.startsWith('formatif-')) {
+        out.push({ fichier: `S${sq.numero}.${x.numero}_b_Contrat_formatif.pdf`, titre: `Contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
+          blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
+      }
     }
-    for (const x of liste) {
-      const ds = d.seances.find((y) => y.numero === x.numero), f = ds?.fiche || {};
-      const ids = (x.prerequis || []).map(Number);
-      const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
-      const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
-      const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
-      if (x.prerequis_texte) lPre.push(x.prerequis_texte);
-      const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
-      sections.push({ html: tete('FICHE DE DÉROULEMENT DE SÉANCE', titre)
-        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
-          ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]])
-        + rub('Objectif intermédiaire', x.objectif_inter) + rub('Objectifs opérationnels', x.objectifs_ops) + rub('Cours mobilisés', x.cours)
-        + rub('Compétences', codes(x.competences, ref.comp)) + rub('Savoirs associés', codes(x.savoirs, ref.sav))
-        + (lPre.length ? rub('Prérequis (séquençage)', lPre.join('\n')) : '') + rub(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis) + rub('Matériel et ressources', f.materiel)
-        + maison(f.maison_avant, 'avant')
-        + `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" colspan="6" style="color:#ffffff"><b>DÉROULEMENT</b></td></tr><tr>${['N°', 'Phase', 'Activité proposée', 'Activités de l’enseignant', 'Activités des élèves', 'Durée'].map((x) => `<th bgcolor="#E3F1EF">${x}</th>`).join('')}</tr>${(f.phases || []).map((p, i) =>
-          `<tr><td class="centre"><b>${i + 1}</b></td><td><b>${echapper(p.phase)}</b></td><td>${t(p.activite)}</td><td>${t(p.enseignant)}</td><td>${t(p.eleves)}</td><td>${t(p.duree)}</td></tr>`).join('')}</table>`
-        + maison(f.maison_apres, 'apres')
-        + rub('Évaluation', f.evaluation) + rub('Différenciation scolaires / apprentis', f.differenciation) + rub('Bilan de séance / remédiation', f.bilan) });
-      const cf = await contrat('formatif', x.id, titre, (g) => g);
-      if (cf) sections.push(cf);
-    }
-    const nom = liste.length === 1 && !avecSequence ? `seance_${sq.numero}.${liste[0].numero}` : `sequence_${sq.numero}`;
-    telecharger(nomFichier(`${ctx.codeMat(m)}_${nom}_${promo}.doc`), documentWord(`${m.nom} · ${nom}`, sections), 'application/msword');
-  }
-
-  // ------------------------------------------------------------------------------------- import d'un fichier d'échange
-  async function importer() {
-    const entree = h('input', { type: 'file', accept: '.json,application/json' });
-    entree.addEventListener('change', async () => {
-      const fichier = entree.files[0];
-      if (!fichier) return;
-      let d;
-      try { d = JSON.parse(await fichier.text()); } catch { return erreur(new Error('Ce fichier n’est pas un fichier d’échange valide (JSON illisible).')); }
-      if (d.format !== FORMAT) return erreur(new Error('Ce fichier n’est pas un fichier d’échange de l’application.'));
-      // une séquence (la séquence affichée) ou plusieurs (retrouvées par leur numéro dans la matière)
-      const lots = d.sequences ? d.sequences.map((x) => ({ x, cible: toutes.find((y) => y.numero === x.numero) })) : [{ x: d.sequence, cible: sq }];
-      const ok = lots.filter((l) => l.cible && l.x), ko = lots.filter((l) => !l.cible);
-      const resume = ok.map((l) => `Séquence ${l.cible.numero} : ${(l.x.seances || []).length} séance(s)` + (l.x.contrat_sommatif ? ', contrat sommatif' : '') + (l.x.preparation ? ', préparation' : ''));
-      if (d.sequence && d.sequence.numero !== sq.numero) resume.unshift(`⚠ Le fichier vient de la séquence ${d.sequence.numero} : il sera importé dans la séquence affichée (${sq.numero}).`);
-      if (ko.length) resume.push(`Ignoré (séquence absente de la promotion) : ${ko.map((l) => l.x.numero).join(', ')}`);
-      const go = await fenetre('Importer des fiches', h('div', {},
-        h('p', {}, `Fichier « ${fichier.name} »${d.matiere ? ` · ${d.matiere}` : ''}${d.matiere && d.matiere !== m.nom ? ' (⚠ autre matière)' : ''}`),
-        h('ul', {}, resume.map((r) => h('li', {}, r))),
-        h('p', { class: 'aide' }, 'Les fiches et les contrats sont complétés ou remplacés par le contenu du fichier ; le séquençage et les notes des élèves ne sont pas modifiés. '
-          + '« ↶ Annuler » permet de revenir en arrière (un clic par séquence importée).')),
-      [{ texte: 'Annuler', valeur: false }, { texte: 'Importer', classe: 'principal', valeur: true }]);
-      if (!go) return;
-      try {
-        let n = { fiches: 0, contrats: 0 };
-        for (const l of ok) { const r = await db.rpc('importer_fiches', { s: l.cible.id, d: l.x }); n.fiches += r.fiches; n.contrats += r.contrats; }
-        toast(`Import terminé : ${n.fiches} fiche(s), ${n.contrats} contrat(s)`);
-        await ctx.recharger();
-      } catch (x) { erreur(x); }
-    });
-    entree.click();
+    return out;
   }
 
   try {

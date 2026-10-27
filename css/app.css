@@ -942,3 +942,8 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .carte-choix:hover { box-shadow: 0 0 0 2px var(--teal); }
 .carte-choix b { color: var(--fonce); font-size: 14px; } .carte-choix span { color: var(--gris); font-size: 12.5px; }
 .carte-choix.echange { border-left-color: #6B4FA0; }
+.groupe-docs { border: 1px solid var(--ligne); border-radius: 10px; padding: 6px 12px 8px; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.groupe-docs.courante { border-color: var(--teal); background: var(--clair); }
+.groupe-docs legend { font-weight: 800; color: var(--fonce); font-size: 13px; padding: 0 4px; }
+.groupe-docs legend label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.choix-doc { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
