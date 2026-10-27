@@ -1,19 +1,14 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { boutonPartage, contenuNonPartage } from '../partage.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 export async function pageSequencage(zone, id, ctx) {
   const m = ctx.matieres.find((x) => String(x.id) === String(id));
   if (!m) { vider(zone, h('p', {}, 'Matière introuvable.')); return; }
-  if (!ctx.voit(m.id)) {
-    vider(zone, h('header', { class: 'entete-page', style: { '--couleur': m.couleur } },
-      h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), 'Séquençage · ' + m.nom))), contenuNonPartage(m, ctx));
-    return;
-  }
   const ref = await ctx.referentiel();
   const modif = ctx.enseigne(m.id);
+  const mesMatieres = ctx.matieres.filter((y) => ctx.enseigne(y.id));        // matières où l'on peut dupliquer
 
   // toutes les séances de la promotion (toutes matières) : pour choisir et afficher les prérequis
   let toutes = new Map();
@@ -47,7 +42,6 @@ export async function pageSequencage(zone, id, ctx) {
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  ${heures(totH) || '0 h'}`)),
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
-          boutonPartage(ctx, m, () => dessiner()),
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),
@@ -68,6 +62,7 @@ export async function pageSequencage(zone, id, ctx) {
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),
         h('div', { class: 'resume' }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
         h('a', { class: 'btn petit fiches', href: `#/fiches/${s.id}` }, '▶ Fiches'),
+        mesMatieres.length ? h('button', { class: 'btn petit', title: 'Dupliquer la séquence (séances, fiches et contrats) vers une de vos matières, dans cette promotion ou une autre', onclick: () => dupliquerSequence(s) }, '⧉ Dupliquer') : null,
         modif ? h('button', { class: 'icone', title: 'Supprimer la séquence', onclick: () => supprimerSequence(s, seances) }, '✖') : null),
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
         champ(s.objectif, maj('objectif'), { multi: true, lecture: !modif, placeholder: 'Objectif principal de la séquence' })),
@@ -87,6 +82,7 @@ export async function pageSequencage(zone, id, ctx) {
     const tr = h('tr', { 'data-id': x.id },
       h('td', { class: 'poignee-cell' }, modif ? h('span', { class: 'poignee', title: 'Glisser pour déplacer la séance' }, '⠿') : null),
       h('td', { class: 'num' }, `${s.numero}.${x.numero}`,
+        mesMatieres.length ? h('button', { class: 'icone petit dupliquer', title: 'Dupliquer la séance (avec sa fiche et son contrat formatif) à la fin d’une autre séquence', onclick: () => dupliquerSeance(s, x) }, '⧉') : null,
         modif ? h('div', { class: 'mini-actions' },
           h('button', { class: 'icone petit', title: 'Insérer une séance après celle-ci', onclick: () => insererSeance(s, x) }, '＋'),
           nb > 1 ? h('button', { class: 'icone petit', title: 'Supprimer la séance', onclick: () => supprimerSeance(s, x) }, '✖') : null) : null),
@@ -236,6 +232,46 @@ export async function pageSequencage(zone, id, ctx) {
         h('p', { class: 'aide' }, 'ou commencer un séquençage vide avec le bouton « Ajouter une séquence ».'));
     } else bloc.append(h('p', { class: 'aide' }, 'Commencez avec le bouton « Ajouter une séquence ».'));
     return bloc;
+  }
+
+  // ------------------------------------------------------------------------------------- duplication
+  const optPromos = (sel) => ctx.promotions.map((p) => h('option', { value: p.id, selected: p.id === sel }, 'Promotion ' + p.libelle));
+  async function dupliquerSequence(s) {
+    const mat = h('select', { class: 'champ' }, mesMatieres.map((y) => h('option', { value: y.id, selected: y.id === m.id }, y.nom)));
+    const pro = h('select', { class: 'champ' }, optPromos(ctx.promo.id));
+    const r = await fenetre(`Dupliquer la séquence ${s.numero}`, h('div', { class: 'formulaire' },
+      h('p', {}, `« ${s.intitule || 'Séquence ' + s.numero} » (${m.nom}) est recopiée avec ses séances, ses fiches et ses contrats (sans les notes ni les dates). La copie prend le numéro suivant dans la matière choisie.`),
+      h('label', {}, 'Vers la matière', mat), h('label', {}, 'Dans la promotion', pro)),
+    [{ texte: 'Annuler', valeur: null }, { texte: '⧉  Dupliquer', classe: 'principal', action: async () => {
+      const id = await db.rpc('dupliquer_sequence', { s: s.id, m: Number(mat.value), p: Number(pro.value) });
+      return { id, mat: Number(mat.value), pro: Number(pro.value) };
+    } }]);
+    if (!r) return;
+    const y = ctx.matieres.find((z) => z.id === r.mat), p = ctx.promotions.find((z) => z.id === r.pro);
+    toast(`Séquence dupliquée en ${y.nom}` + (r.pro !== ctx.promo.id ? ` (promotion ${p.libelle})` : ''));
+    if (r.pro === ctx.promo.id && r.mat !== m.id) location.hash = '#/sequencage/' + r.mat; else await dessiner();
+  }
+  async function dupliquerSeance(s, x) {
+    const pro = h('select', { class: 'champ' }, optPromos(ctx.promo.id));
+    const seq = h('select', { class: 'champ' });
+    const remplir = async () => {
+      const liste = await db.lire('sequences', `promotion_id=eq.${pro.value}&matiere_id=in.(${mesMatieres.map((y) => y.id).join(',')})&order=matiere_id,numero`);
+      vider(seq, liste.length ? liste.map((q) => h('option', { value: q.id, selected: q.id === s.id && mesMatieres.some((y) => y.id === m.id) },
+        `${mesMatieres.find((y) => y.id === q.matiere_id)?.nom} · séquence ${q.numero}${q.intitule ? ' · ' + q.intitule : ''}`))
+        : h('option', { value: '' }, 'Aucune séquence dans vos matières pour cette promotion'));
+    };
+    pro.onchange = remplir; await remplir();
+    const r = await fenetre(`Dupliquer la séance ${s.numero}.${x.numero}`, h('div', { class: 'formulaire' },
+      h('p', {}, `« ${x.titre || 'Séance ' + s.numero + '.' + x.numero} » est recopiée avec sa fiche de déroulement et son contrat formatif, à la fin de la séquence choisie.`),
+      h('label', {}, 'Promotion', pro), h('label', {}, 'Vers la séquence', seq)),
+    [{ texte: 'Annuler', valeur: null }, { texte: '⧉  Dupliquer', classe: 'principal', action: async () => {
+      if (!seq.value) throw new Error('Choisissez une séquence.');
+      await db.rpc('dupliquer_seance', { x: x.id, cible: Number(seq.value) });
+      return { seq: Number(seq.value), pro: Number(pro.value), lib: seq.selectedOptions[0].textContent };
+    } }]);
+    if (!r) return;
+    toast(`Séance dupliquée : ${r.lib}`);
+    await dessiner();
   }
 
   // ------------------------------------------------------------------------------------- structure

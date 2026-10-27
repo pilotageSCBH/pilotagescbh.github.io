@@ -133,23 +133,19 @@ export async function pageProgression(zone, arg, ctx) {
     const apres = decaler ? v.filter((_, k) => !enleve.has(k)).concat(idx.map(() => '')) : v.map((x, k) => (enleve.has(k) ? '' : x));
     await appliquer(m, T, v, apres, suite ? 'Semaine de suite supprimée' : cle.startsWith('s') ? 'Séance retirée : elle est de nouveau « à placer »' : 'Texte retiré');
   }
-  // demande de confirmation : laisser la place vide ou décaler toutes les séances suivantes pour combler la place
+  // demande de confirmation (avec le choix de faire remonter les suivantes)
   async function demanderRetrait(m, w) {
     const suite = estSuite(m, w), x = seanceDe(m, w), c = caseDe(m, w) || {};
+    const remonter = h('input', { type: 'checkbox' });
     const quoi = suite ? `la semaine de suite (${libSemaine(w)}) de la séance ${x ? num(x) : '« ' + c.texte + ' »'}`
       : x ? `la séance ${num(x)}${x.titre ? ' « ' + x.titre + ' »' : ''} de la progression (toutes ses semaines)` : `le texte « ${c.texte} »`;
-    const choix = await fenetre(suite ? 'Supprimer une semaine de suite' : 'Retirer de la progression', h('div', { class: 'formulaire etroit' },
+    const ok = await fenetre(suite ? 'Supprimer une semaine de suite' : 'Retirer de la progression', h('div', { class: 'formulaire etroit' },
       h('p', {}, `Retirer ${quoi} ?`),
       x && !suite ? h('p', { class: 'aide' }, 'La séance reste dans le séquençage et retourne dans « Séances à placer ».') : null,
-      h('ul', { class: 'aide' },
-        h('li', {}, h('b', {}, 'Laisser la place vide'), ' : les séances suivantes ne bougent pas.'),
-        h('li', {}, h('b', {}, 'Décaler les séances suivantes'), ' : toutes les séances suivantes de la matière avancent pour combler la place libérée.'))),
-    [{ texte: 'Annuler', valeur: false },
-      { texte: 'Laisser la place vide', classe: 'danger', valeur: 'vide' },
-      { texte: 'Décaler les séances suivantes', classe: 'danger', valeur: 'decaler' }]);
-    if (!choix) return false;
-    await retirer(m, w, { suite, decaler: choix === 'decaler' });
-    return true;
+      h('label', { class: 'interrupteur' }, remonter, 'Faire remonter les séances suivantes pour combler la place')),
+    [{ texte: 'Annuler', valeur: false }, { texte: suite ? 'Supprimer la suite' : 'Retirer', classe: 'danger', valeur: true }]);
+    if (ok) await retirer(m, w, { suite, decaler: remonter.checked });
+    return !!ok;
   }
 
   async function inserer(m, w, cle, message = 'Séance placée') {
@@ -185,6 +181,7 @@ export async function pageProgression(zone, arg, ctx) {
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); garde.t = 0; garde.x = 0; dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
         boutonAnnuler(ctx, 'progression'),
         h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
+        h('button', { class: 'btn', onclick: () => telechargerPDF(mats) }, '⬇  PDF A3'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
           h('option', { value: 'toutes', selected: filtre === 'toutes' }, 'Toutes les matières'),
           ctx.matieres.map((m) => h('option', { value: m.id, selected: String(m.id) === filtre }, m.nom)))));
@@ -242,6 +239,40 @@ export async function pageProgression(zone, arg, ctx) {
     vider(zone, entete, legende, detail ? aPlacer(mats[0]) : null, tableau);
     tableau.scrollLeft = garde.x; tableau.scrollTop = garde.t;
     window.scrollTo(0, garde.y);
+  }
+
+  // ------------------------------------------------------------------------------------- PDF A3 paysage
+  async function telechargerPDF(mats) {
+    const coche = (t, v) => { const el = h('input', { type: 'checkbox', checked: v }); return { el, l: h('label', { class: 'interrupteur' }, el, t) }; };
+    const vF = coche('Frise (une page par année)', vue === 'frise'), vT = coche('Tableau (deux pages par année)', vue === 'tableau');
+    const a1 = coche(`1re année (${Y}-${Y + 1})`, annee === 0), a2 = coche(`2e année (${Y + 1}-${Y + 2})`, annee === 1);
+    const ok = await fenetre('Télécharger la progression en PDF', h('div', { class: 'formulaire choix-pdf' },
+      h('p', { class: 'aide' }, `A3 paysage · ${mats.length === ctx.matieres.length ? 'toutes les matières' : mats.map((m) => m.nom).join(', ')} (le choix des matières suit le menu de la page).`),
+      h('b', {}, 'Vues'), vF.l, vT.l, h('b', {}, 'Années'), a1.l, a2.l),
+    [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger', classe: 'principal', action: () => {
+      if (!vF.el.checked && !vT.el.checked) throw new Error('Cochez au moins une vue.');
+      if (!a1.el.checked && !a2.el.checked) throw new Error('Cochez au moins une année.');
+      return true;
+    } }]);
+    if (!ok) return;
+    try {
+      toast('Préparation du PDF…');
+      const [{ chargerOutils }, { creerPDFProgression }, { telecharger, nomFichier }] = await Promise.all([import('../pdf.js'), import('../pdfProgression.js'), import('../echange.js')]);
+      await chargerOutils();
+      const logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
+      const octets = await creerPDFProgression({
+        promo: P.libelle, Y, annees: [a1.el.checked ? 0 : null, a2.el.checked ? 1 : null].filter((x) => x !== null),
+        vues: [vF.el.checked ? 'frise' : null, vT.el.checked ? 'tableau' : null].filter(Boolean),
+        mats: mats.map((m) => ({ ...m, code: ctx.codeMat(m) })),
+        vacances: (w) => semaines.get(w)?.vacances || '', apprentis: (w) => semaines.get(w)?.apprentis || '',
+        evenements: (w) => JOURS.map((_, k) => ({ k, ev: jours.get(w * 7 + k) || '' })).filter((x) => x.ev),
+        cle: (m, w) => cleDe(m, w), suite: (m, w) => estSuite(m, w), texte: (m, w) => caseDe(m, w)?.texte || '',
+        seance: (m, w) => { const x = seanceDe(m, w); return x ? { num: num(x), titre: x.titre, seq: x.seq } : null; },
+        compte: (m) => { const t = seancesDe(m), pl = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id)); return [t.filter((x) => pl.has(x.id)).length, t.length]; },
+      }, logo);
+      telecharger(nomFichier(`Progression_${P.libelle}.pdf`), new Blob([octets], { type: 'application/pdf' }));
+      toast('PDF téléchargé');
+    } catch (e) { erreur(e); }
   }
 
   // ------------------------------------------------------------------------------------- vue « frise »
@@ -520,11 +551,6 @@ export async function pageProgression(zone, arg, ctx) {
       boutons.push({ texte: 'Annuler', valeur: false });
       boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
         const nv = choix.value ? { seance_id: Number(choix.value), texte: '' } : { seance_id: null, texte: libre.value.trim() };
-        // case vidée (plus de séance ni de texte) : même choix que « Retirer » (place vide ou décalage des suivantes)
-        if ((c.seance_id || c.texte) && !nv.seance_id && !nv.texte) {
-          if (note.value.trim() !== (c.note || '')) await enregistrerCases(m, [{ semaine: w, seance_id: c.seance_id || null, texte: c.texte || '', note: note.value.trim() }]);
-          return (await demanderRetrait(m, w)) ? true : false;
-        }
         await enregistrerCases(m, [{ semaine: w, ...nv, note: note.value.trim() }]);
         toast('Enregistré'); dessiner(); return true;
       } });

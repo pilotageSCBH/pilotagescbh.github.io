@@ -2,6 +2,7 @@
 import { db, emailDe, identifiantDe } from '../api.js';
 import { DOMAINE } from '../../config.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
+import { telecharger } from '../echange.js';
 import { rafraichirMenu, verifierSite } from '../app.js';
 import { colonnes, barresH, carteGraph } from '../graphiques.js';
 
@@ -10,7 +11,7 @@ const ROLES = [['enseignant', 'Enseignant'], ['lecture', 'Lecture seule (DDFPT�
 const nomRole = (r) => (ROLES.find((x) => x[0] === r) || ROLES[0])[1];
 
 const initiales = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('');
-const ONGLETS = [['comptes', '👥  Comptes'], ['admins', '🛡  Administrateurs'], ['maintenance', '🛠  Maintenance'], ['connexions', '📊  Connexions'], ['reprise', '📋  Reprendre une promotion']];
+const ONGLETS = [['comptes', '👥  Comptes'], ['admins', '🛡  Administrateurs'], ['maintenance', '🛠  Maintenance'], ['connexions', '📊  Connexions'], ['reprise', '📋  Reprendre une promotion'], ['sauvegarde', '💾  Sauvegarde']];
 
 export async function pageAdmin(zone, arg, ctx) {
   let onglet = ONGLETS.some(([k]) => k === arg) ? arg : 'comptes';
@@ -36,7 +37,7 @@ export async function pageAdmin(zone, arg, ctx) {
       onglet === 'comptes' ? ongletComptes(profils, invitations, demandes)
         : onglet === 'admins' ? ongletAdmins(profils)
           : onglet === 'maintenance' ? ongletMaintenance(etat, actifs)
-            : onglet === 'connexions' ? connexions(profils) : reprise());
+            : onglet === 'connexions' ? connexions(profils) : onglet === 'sauvegarde' ? sauvegarde() : reprise());
   }
 
   // ------------------------------------------------------------------------------------- comptes
@@ -239,6 +240,49 @@ export async function pageAdmin(zone, arg, ctx) {
       h('p', { class: 'aide' }, 'Une connexion = une période d’utilisation de l’application ; elle est comptée comme nouvelle après 30 minutes sans activité. '
         + 'Le temps n’est compté que lorsque l’application est affichée et utilisée (pas quand l’onglet reste ouvert sans rien faire). Visible par l’administrateur seulement.'),
       corps);
+  }
+
+  // ------------------------------------------------------------------------------------- sauvegarde et restauration
+  async function telechargerSauvegarde() {
+    const d = await db.rpc('sauvegarde');
+    const n = Object.values(d.tables).reduce((a, t) => a + t.length, 0);
+    const t = new Date(), z = (n) => String(n).padStart(2, '0'), date = `${t.getFullYear()}-${z(t.getMonth() + 1)}-${z(t.getDate())}_${z(t.getHours())}h${z(t.getMinutes())}`;
+    telecharger(`sauvegarde_pilotage_scbh_${date}.json`, JSON.stringify(d), 'application/json');
+    return n;
+  }
+  function sauvegarde() {
+    const fichier = h('input', { type: 'file', accept: '.json,application/json', class: 'champ' });
+    const etat = h('p', { class: 'aide' });
+    return h('div', { class: 'grille-sauvegarde' },
+      h('section', { class: 'bloc sauvegarde' }, h('div', { class: 'tete-carte' }, h('span', { class: 'gros' }, '💾'), h('h2', {}, 'Télécharger une sauvegarde')),
+        h('p', {}, 'Un fichier contenant toutes les données du site : promotions, élèves, matières et équipe, séquençages, progression, fiches, contrats, notes, résultats, appréciations, commentaires et référentiel.'),
+        h('p', { class: 'aide' }, 'Les comptes de connexion et leurs codes ne sont pas dans le fichier. Conseil : une sauvegarde par mois, et avant chaque grosse modification. Gardez le fichier en lieu sûr : il contient des données personnelles des élèves.'),
+        h('button', { class: 'btn principal', onclick: async (e) => {
+          e.target.disabled = true;
+          try { const n = await telechargerSauvegarde(); toast(`Sauvegarde téléchargée (${n} lignes)`); } catch (x) { erreur(x); } finally { e.target.disabled = false; }
+        } }, '⬇  Télécharger la sauvegarde complète')),
+      h('section', { class: 'bloc sauvegarde restauration' }, h('div', { class: 'tete-carte' }, h('span', { class: 'gros' }, '♻'), h('h2', {}, 'Restaurer une sauvegarde')),
+        h('p', {}, 'Remet le site exactement dans l’état du fichier choisi. ', h('b', {}, 'Toutes les données actuelles sont remplacées'), ' (les comptes de connexion sont conservés ; l’historique des modifications est vidé).'),
+        h('p', { class: 'aide' }, 'Par sécurité, une sauvegarde de l’état actuel est d’abord téléchargée automatiquement. Fermez le site pour maintenance pendant l’opération si des collègues sont connectés.'),
+        h('div', { class: 'ligne-actions' }, fichier, h('button', { class: 'btn danger', onclick: async (e) => {
+          const f = fichier.files[0];
+          if (!f) return erreur(new Error('Choisissez d’abord un fichier de sauvegarde (.json).'));
+          let d;
+          try { d = JSON.parse(await f.text()); } catch { return erreur(new Error('Ce fichier n’est pas lisible.')); }
+          if (d?.format !== 'pilotage-scbh-sauvegarde' || !d.tables) return erreur(new Error('Ce fichier n’est pas une sauvegarde du site.'));
+          const quand = new Date(d.date).toLocaleString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const resume = `${d.tables.promotions?.length || 0} promotion(s), ${d.tables.eleves?.length || 0} élève(s), ${d.tables.sequences?.length || 0} séquence(s), ${d.tables.seances?.length || 0} séance(s), ${d.tables.notes?.length || 0} note(s)`;
+          if (!(await confirmer('Restaurer une sauvegarde', `Remplacer TOUTES les données actuelles par la sauvegarde du ${quand} (${resume}) ? Une sauvegarde de l’état actuel va d’abord être téléchargée.`, 'Restaurer'))) return;
+          e.target.disabled = true; etat.textContent = 'Sauvegarde de l’état actuel…';
+          try {
+            await telechargerSauvegarde();
+            etat.textContent = 'Restauration en cours…';
+            const r = await db.rpc('restaurer', { d });
+            const n = Object.values(r).reduce((a, x) => a + x, 0);
+            etat.textContent = `Restauration terminée : ${n} lignes remises en place.`;
+            toast('Sauvegarde restaurée : la page va se recharger'); setTimeout(() => location.reload(), 1800);
+          } catch (x) { etat.textContent = ''; erreur(x); } finally { e.target.disabled = false; }
+        } }, '♻  Restaurer ce fichier')), etat));
   }
 
   // recopier une promotion précédente dans une nouvelle (rien n'est écrasé : seules les parties encore vides sont remplies)
