@@ -2,10 +2,9 @@
 // et son contrat formatif. Sans séquence choisie : liste des séquences de chaque matière.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr } from '../ui.js';
-import { dessinerContrat } from './contrat.js';
-import { boutonPartage, contenuNonPartage } from '../partage.js';
-import { qrSvg } from '../qrcode.js?v=20261025f';
+import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre } from '../ui.js';
+import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
+import { telecharger, nomFichier, exportSequence, enTeteEchange, documentWord, echapper, FORMAT } from '../echange.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -22,11 +21,6 @@ export async function pageFiches(zone, arg, ctx) {
   const sq = (await db.lire('sequences', `id=eq.${sid}`))[0];
   if (!sq) { vider(zone, h('p', {}, 'Séquence introuvable.')); return; }
   const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
-  if (!ctx.voit(m.id)) {
-    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }),
-      `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`), h('p', { class: 'sous-titre' }, m.nom))), contenuNonPartage(m, ctx));
-    return;
-  }
   const ref = await ctx.referentiel();
   const modif = ctx.peutMatiere(m.id);
   const [seances, toutes, eleves, fs] = await Promise.all([
@@ -61,8 +55,9 @@ export async function pageFiches(zone, arg, ctx) {
         h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
         modif ? boutonAnnuler(ctx, 'fiches') : null,
-        boutonPartage(ctx, m, () => ctx.recharger()),
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
+        h('button', { class: 'btn', onclick: () => menuTelecharger() }, '⬇  Télécharger'),
+        modif ? h('button', { class: 'btn', onclick: () => importer() }, '⬆  Importer') : null,
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet || k === onglet.replace(/^(formatif|avant|apres)-/, 'seance-') ? 'actif' : '' }, t))),
     // séance : travail avant (option), fiche de déroulement, travail après (option), contrat formatif
@@ -91,6 +86,7 @@ export async function pageFiches(zone, arg, ctx) {
       zoneTexte('Activités et tâches du référentiel visées', ficheSeq.activites, maj('activites'), sugg ? 'Tâches citées dans les séances :\n' + sugg : ''),
       modif && sugg && !ficheSeq.activites ? h('button', { class: 'lien petit', onclick: async (e) => {
         try { await maj('activites')(sugg); ficheSeq.activites = sugg; preparation(); } catch (x) { erreur(x); } } }, '＋ reprendre les tâches citées dans les séances') : null,
+      zoneTexte('Situation professionnelle / support', ficheSeq.situation, maj('situation'), 'ex. chantier fil rouge, dossier d’une affaire réelle…'),
       zoneTexte('Prérequis', ficheSeq.prerequis, maj('prerequis')),
       h('div', { class: 'rubrique' }, h('h3', {}, 'Séances de la séquence'),
         h('table', { class: 'table-fiche auto' }, h('thead', {}, h('tr', {}, ['N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Compétences', 'Savoirs'].map((t) => h('th', {}, t)))),
@@ -122,20 +118,14 @@ export async function pageFiches(zone, arg, ctx) {
       : Array.from({ length: NB_PHASES }, phaseVide);
     const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
     const tablePhases = h('tbody', {});
-    // insertion, déplacement ou retrait d'une phase, puis enregistrement et nouveau dessin du tableau
-    const modifierPhases = async (action) => { action(); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } };
     const dessinerPhases = () => {
       vider(tablePhases, phases.map((p, i) => h('tr', {},
         h('td', { class: 'num-phase' }, i + 1),
         COLS_PHASES.map(([k]) => h('td', { class: k },
           champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
             { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase' }[k] || '' : '' }))),
-        modif ? h('td', { class: 'ecran actions-phase' }, h('div', { class: 'boutons-phase' },
-          h('button', { class: 'icone', type: 'button', title: 'Insérer une phase au-dessus', onclick: () => modifierPhases(() => phases.splice(i, 0, phaseVide())) }, '↥'),
-          h('button', { class: 'icone', type: 'button', title: 'Monter cette phase', disabled: i === 0, onclick: () => modifierPhases(() => phases.splice(i - 1, 0, ...phases.splice(i, 1))) }, '▲'),
-          h('button', { class: 'icone', type: 'button', title: 'Insérer une phase en dessous', onclick: () => modifierPhases(() => phases.splice(i + 1, 0, phaseVide())) }, '↧'),
-          h('button', { class: 'icone', type: 'button', title: 'Descendre cette phase', disabled: i === phases.length - 1, onclick: () => modifierPhases(() => phases.splice(i + 1, 0, ...phases.splice(i, 1))) }, '▼'),
-          h('button', { class: 'icone suppr', type: 'button', title: 'Retirer cette phase', onclick: () => modifierPhases(() => phases.splice(i, 1)) }, '✖'))) : null)));
+        modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
+          phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null)));
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});
@@ -183,7 +173,8 @@ export async function pageFiches(zone, arg, ctx) {
       echeance: 'À faire pour le', rubriques: [
         ['objectif', 'Objectif du travail préparatoire', 'Ce que l’élève doit avoir découvert ou compris en arrivant en classe…'],
         ['consignes', 'Travail demandé', '1. Regarder la vidéo…\n2. Lire le document…\n3. Répondre aux questions…'],
-        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…']] },
+        ['ressources', 'Ressources (vidéos, documents, liens)', 'Liens, pages du manuel, documents déposés sur l’ENT…'],
+        ['exploitation', 'Exploitation en classe', 'Comment le travail est repris en début de séance : questions flash, mise en commun, QCM…']] },
     apres: { col: 'maison_apres', titre: '📚  Après la séance : travail à la maison (devoirs)', ajout: '＋  Ajouter un travail à la maison après la séance (devoirs)',
       echeance: 'À rendre le', rubriques: [
         ['consignes', 'Travail demandé', 'Exercices, recherche, rédaction, révision…'],
@@ -191,67 +182,6 @@ export async function pageFiches(zone, arg, ctx) {
         ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
         ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
-  // impression d'un cadre seul (document élève) : en-tête de la séance, échéance, durée, nom de l'élève et rubriques remplies
-  function imprimerCadre(x, cle, o) {
-    const C = CHAMPS_MAISON[cle];
-    document.getElementById('impression-cadre')?.remove();
-    const z = h('div', { id: 'impression-cadre', class: 'feuille' },
-      entete(cle === 'avant' ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`),
-      h('div', { class: 'grille-infos' }, info('Matière', m.nom), info(C.echeance, o.echeance ? dateFr(o.echeance) : '—'),
-        info('Durée estimée', o.duree || '—'), info('Nom et prénom', '')),
-      C.rubriques.filter(([k]) => k !== 'exploitation' && (k === 'ressources' ? lireLiens(o).length : String(o[k] || '').trim()))
-        .map(([k, lib]) => h('div', { class: 'rubrique' }, h('h3', {}, lib),
-          k === 'ressources' ? ressourcesQr(lireLiens(o)) : h('p', { class: 'pre' }, o[k]))));
-    document.body.append(z);
-    document.body.classList.add('impression-cadre');
-    const fin = () => { z.remove(); document.body.classList.remove('impression-cadre'); window.removeEventListener('afterprint', fin); };
-    window.addEventListener('afterprint', fin);
-    imprimer('A4 portrait');
-  }
-  // ---------------------------------------------------------------- ressources du travail à la maison
-  // liste o.liens = [{ titre, url, qr }] ; l'ancienne rubrique texte (o.ressources) est convertie à la première lecture
-  const RE_URL = /https?:\/\/[^\s<>"]+/;
-  function lireLiens(o) {
-    if (Array.isArray(o.liens)) return o.liens;
-    return String(o.ressources || '').split('\n').map((l) => l.trim())
-      .filter((l) => l && !/^(à consulter|sources à consulter)/i.test(l))
-      .map((l) => {
-        const u = (l.match(RE_URL) || [''])[0].replace(/[.,;:)\]»]+$/, '');
-        return { titre: l.replace(RE_URL, '').replace(/^[•\-\s]+/, '').replace(/[\s:–-]+$/, ''), url: u, qr: !!u };
-      });
-  }
-  const texteLiens = (liens) => liens.map((l) => '• ' + [l.titre, l.url].filter(Boolean).join(' : ')).join('\n');
-  const blocQr = (url, taille) => { const d = document.createElement('div'); d.className = 'qr-code'; d.innerHTML = qrSvg(url, taille); return d; };
-  // affichage (écran et sujet imprimé) : QR code seulement pour les ressources cochées qui ont une adresse
-  function ressourcesQr(liens) {
-    return h('div', { class: 'qr-liste' }, liens.filter((l) => l.titre || l.url).map((l) => (l.qr && l.url
-      ? h('div', { class: 'qr-item' }, blocQr(l.url, 96), h('div', { class: 'qr-texte' }, h('div', {}, l.titre || l.url), h('div', { class: 'qr-url' }, l.url)))
-      : h('div', { class: 'qr-seul' }, '• ', l.titre || '', l.url ? h('span', { class: 'qr-url' }, ' ' + l.url) : null))));
-  }
-  // éditeur : une ligne par ressource (titre, adresse, case « QR code », retrait) + ajout
-  function editeurLiens(o, sauver, apres) {
-    const liens = lireLiens(o).map((l) => ({ ...l }));
-    const zone = h('div', { class: 'liens-maison' });
-    const enregistrer = async () => { o.liens = liens; o.ressources = texteLiens(liens); await sauver(); apres(); };
-    const dessiner = () => {
-      vider(zone,
-        liens.length ? h('table', { class: 'table-liens' },
-          h('thead', {}, h('tr', {}, h('th', {}, 'Ressource (titre, éditeur)'), h('th', {}, 'Adresse internet (facultative)'), h('th', { class: 'centre' }, 'QR code'), modif ? h('th', { class: 'ecran' }) : null)),
-          h('tbody', {}, liens.map((l, i) => h('tr', {},
-            h('td', {}, champ(l.titre || '', async (v) => { l.titre = v; await enregistrer(); }, { multi: true, lecture: !modif, placeholder: 'ex. Vidéo AQC – La responsabilité décennale' })),
-            h('td', {}, champ(l.url || '', async (v) => { l.url = v.trim(); if (l.url && l.qr === undefined) l.qr = true; await enregistrer(); dessiner(); },
-              { lecture: !modif, placeholder: 'https://…' })),
-            h('td', { class: 'centre' }, h('input', { type: 'checkbox', checked: !!l.qr, disabled: !modif || !l.url, title: l.url ? 'Imprimer un QR code pour cette ressource' : 'Indiquer d’abord une adresse',
-              onchange: async (e) => { l.qr = e.target.checked; try { await enregistrer(); } catch (x) { erreur(x); } } })),
-            modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', type: 'button', title: 'Retirer cette ressource', onclick: async () => {
-              liens.splice(i, 1); try { await enregistrer(); dessiner(); } catch (x) { erreur(x); } } }, '✖')) : null)))) : h('p', { class: 'gris' }, 'Aucune ressource.'),
-        modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
-          liens.push({ titre: '', url: '', qr: true }); try { await enregistrer(); dessiner(); } catch (x) { erreur(x); } } }, '＋ ajouter une ressource') : null);
-      ajusterTout(zone);
-    };
-    dessiner();
-    return zone;
-  }
   // cadre « travail à la maison » de la fiche de déroulement (optionnel) : avant le tableau (classe inversée) ou après (devoirs)
   function cadreMaison(x, f, cle) {
     const C = CHAMPS_MAISON[cle];
@@ -265,27 +195,16 @@ export async function pageFiches(zone, arg, ctx) {
         return;
       }
       const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
-      // QR codes des ressources, visibles à l'écran sous le cadre et repris sur le sujet élève imprimé
-      const zoneQr = h('div', { class: 'qr-ecran' });
-      const majQr = () => vider(zoneQr, lireLiens(o).some((l) => l.qr && l.url)
-        ? [h('h3', {}, '📱  Aperçu des QR codes imprimés sur le sujet élève'), ressourcesQr(lireLiens(o).filter((l) => l.qr && l.url))] : null);
-      majQr();
-      const sauverO = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id');
       vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
         h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
-          h('span', { class: 'actions-maison ecran' },
-          h('button', { class: 'btn petit', type: 'button', title: 'Imprimer ce cadre seul : sujet à distribuer aux élèves, avec les QR codes des ressources', onclick: () => imprimerCadre(x, cle, o) }, '🖶  Imprimer le sujet élève'),
           modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
             if (!(await confirmer('Retirer le cadre', 'Retirer ce travail à la maison et son contenu ? (« Annuler » permet de revenir en arrière.)', 'Retirer'))) return;
             try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); f[C.col] = null; dessinerC(); } catch (e) { erreur(e); }
-          } }, '✖ retirer') : null)),
+          } }, '✖ retirer') : null),
         h('div', { class: 'grille-infos' },
           h('div', { class: 'info' }, h('span', { class: 'lib' }, C.echeance), champ(o.echeance || '', enreg('echeance'), { type: 'date', lecture: !modif })),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Durée estimée'), champ(o.duree || '', enreg('duree'), { lecture: !modif, placeholder: modif ? 'ex. 45 min' : '' }))),
-        h('div', { class: 'deux' }, C.rubriques.filter(([k]) => k !== 'ressources').map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide))),
-        C.rubriques.some(([k]) => k === 'ressources') ? h('div', { class: 'rubrique' }, h('h3', {}, C.rubriques.find(([k]) => k === 'ressources')[1]),
-          editeurLiens(o, sauverO, majQr)) : null,
-        zoneQr));
+        h('div', { class: 'deux' }, C.rubriques.map(([k, lib, aide]) => zoneTexte(lib, o[k], enreg(k), aide)))));
       ajusterTout(zoneC);
     };
     dessinerC();
@@ -302,6 +221,152 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire évalué'), h('p', { class: 'fort' }, x.objectif_inter || '—')), corps));
     await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }) });
+  }
+
+  // ------------------------------------------------------------------------------------- téléchargements
+  async function menuTelecharger() {
+    const x = idSeance ? seances.find((y) => String(y.id) === idSeance) : null;
+    const carte = (v, ...enfants) => h('button', { class: 'carte-choix' + (v.startsWith('json') ? ' echange' : ''), type: 'button',
+      onclick: (e) => { e.target.closest('.fond-fenetre')?.remove(); lancerTelechargement(v); } }, enfants);
+    await fenetre('Télécharger', h('div', { class: 'choix-telecharger' },
+      h('p', { class: 'aide' }, 'Documents Word : à ouvrir dans Word (ou LibreOffice) pour les modifier, les imprimer ou les enregistrer en PDF. '
+        + 'Fichier d’échange : pour faire rédiger les fiches suivantes (par exemple par Claude) puis les réimporter avec « ⬆ Importer ».'),
+      x ? carte('seance', h('b', {}, `📄  Documents de la séance ${sq.numero}.${x.numero}`),
+        h('span', {}, 'Fiche de déroulement (avec le travail à la maison) et contrat d’évaluation formative, en un seul fichier Word')) : null,
+      carte('sequence', h('b', {}, `📚  Toute la séquence ${sq.numero}`),
+        h('span', {}, 'Préparation de séquence, contrat sommatif, puis chaque séance : fiche de déroulement et contrat formatif (un seul fichier Word)')),
+      carte('json', h('b', {}, `🔄  Fichier d’échange de la séquence ${sq.numero}`),
+        h('span', {}, 'Toutes les fiches et contrats de la séquence (.json), à compléter puis à réimporter')),
+      carte('json-matiere', h('b', {}, `🔄  Fichier d’échange de toute la matière (${m.nom})`),
+        h('span', {}, `Toutes les séquences de la promotion ${promo} (.json)`))), [{ texte: 'Fermer', valeur: null }]);
+  }
+  async function lancerTelechargement(v) {
+    try {
+      toast('Préparation du fichier…');
+      if (v === 'seance') await wordSeances([seances.find((y) => String(y.id) === idSeance)], false);
+      else if (v === 'sequence') await wordSeances(seances, true);
+      else if (v === 'json') {
+        const d = { ...enTeteEchange(ctx, m, promo), sequence: await exportSequence(sq) };
+        telecharger(nomFichier(`fiches_${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.json`), JSON.stringify(d, null, 2), 'application/json');
+      } else if (v === 'json-matiere') {
+        const d = { ...enTeteEchange(ctx, m, promo), sequences: await Promise.all(toutes.map((y) => exportSequence(y))) };
+        telecharger(nomFichier(`fiches_${ctx.codeMat(m)}_toutes_sequences_${promo}.json`), JSON.stringify(d, null, 2), 'application/json');
+      }
+      toast('Fichier téléchargé');
+    } catch (x) { erreur(x); }
+  }
+
+  // documents Word construits à partir des données (fiches et contrats)
+  async function wordSeances(liste, avecSequence) {
+    const d = await exportSequence(sq);
+    const elevesL = actifs.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
+    const t = (v) => echapper(v || '—').replace(/\n/g, '<br>');
+    const TABLE = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;border:1px solid #A9B5B2">';
+    const infos = (paires) => `${TABLE}${paires.reduce((r, p, i) => (i % 2 ? (r[r.length - 1].push(p), r) : (r.push([p]), r)), [])
+      .map((l) => `<tr>${l.map(([a, b]) => `<td class="lib" bgcolor="#E3F1EF" width="18%"><b>${echapper(a)}</b></td><td width="32%">${t(b)}</td>`).join('')}${l.length < 2 ? '<td class="lib"></td><td></td>' : ''}</tr>`).join('')}</table>`;
+    const rub = (titre, v) => `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" style="color:#ffffff"><b>${echapper(titre).toUpperCase()}</b></td></tr><tr><td>${t(v)}</td></tr></table>`;
+    const tete = (titre, sous) => `<h1>${echapper(titre)}</h1><h2 class="sous">${echapper(sous)}</h2>`;
+    const codes = (l, idx) => (l || []).map((c) => `${c} ${idx[c]?.libelle || ''}`).join('\n');
+    const maison = (o, cle) => {
+      if (!o) return '';
+      const C = cle === 'avant'
+        ? ['🏠 Avant la séance : travail préparatoire à la maison (classe inversée)', 'À faire pour le', [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]]
+        : ['📚 Après la séance : travail à la maison (devoirs)', 'À rendre le', [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]];
+      return `<p style="margin-top:10pt"></p><table width="100%" border="2" cellspacing="0" cellpadding="6" style="border-collapse:collapse;border:2px solid ${cle === 'avant' ? '#E8893A' : '#3D84C6'}"><tr><td bgcolor="${cle === 'avant' ? '#FFF3E6' : '#EAF2FB'}"><b style="color:${cle === 'avant' ? '#A2561A' : '#245F96'}">${C[0]}</b>${infos([[C[1], o.echeance ? new Date(o.echeance + 'T12:00').toLocaleDateString('fr-FR') : ''], ['Durée estimée', o.duree]])}`
+        + C[2].map(([k, l]) => rub(l, o[k])).join('') + '</td></tr></table>';
+    };
+    const contrat = async (type, c, titre, groupeLib) => {
+      if (!c) return null;
+      const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${c}`))[0];
+      if (!ct) return null;
+      const ks = (await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`)).filter((k) => k.actif);
+      const nl = ks.length ? await db.lire('notes', `critere_id=in.(${ks.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
+      const notes = new Map(nl.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
+      const groupes = [...new Set(ks.map((k) => k.groupe))];
+      const finale = (e) => {
+        if (type === 'sommatif') { const ms = groupes.map((g) => moyenne(ks.filter((k) => k.groupe === g), notes, e.id)).filter((v) => v !== null); return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null; }
+        return moyenne(ks, notes, e.id);
+      };
+      const tetes = elevesL.map((e) => `<th bgcolor="#E3F1EF" class="centre">${echapper(e.nom)}<br>${echapper(e.prenom)}</th>`).join('');
+      const lignes = groupes.map((g) => `<tr class="groupe"><td bgcolor="#1E8F86" style="color:#ffffff" colspan="${2 + elevesL.length}">${echapper(groupeLib(g))}</td></tr>`
+        + ks.filter((k) => k.groupe === g).map((k) => `<tr><td>${t(k.texte)}</td><td class="centre">${arrondi(Number(k.coefficient))}</td>${elevesL.map((e) => `<td class="centre">${echapper(notes.get(`${k.id}:${e.id}`) || '')}</td>`).join('')}</tr>`).join('')
+        + `<tr><td><i>Niveau (note / 5)</i></td><td></td>${elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return `<td class="centre"><b>${n === null ? '' : niveau(n).code}</b></td>`; }).join('')}</tr>`).join('');
+      const fin = `<tr><td><b>NOTE FINALE / 20</b></td><td></td>${elevesL.map((e) => { const f = finale(e); return `<td class="centre"><b>${f === null ? '' : arrondi(f * 4)}</b></td>`; }).join('')}</tr>`;
+      return { paysage: true, html: tete(`CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, titre)
+        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Date', ct.date_eval ? new Date(ct.date_eval + 'T12:00').toLocaleDateString('fr-FR') : ''],
+          ['Forme', ct.forme], ['Lieu', ct.lieu], ['Organisation', ct.organisation], ['Durée', ct.duree]])
+        + `<p style="margin-top:8pt"></p>${TABLE}<tr><th bgcolor="#E3F1EF" width="30%">${type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères'}</th><th bgcolor="#E3F1EF" class="centre">Coef.</th>${tetes}</tr>${lignes}${fin}</table>`
+        + '<p style="margin-top:4pt;font-size:8.5pt">NA : non acquis (0 à moins de 2 / 5) · EVA : en voie d’acquisition (2 à moins de 4) · A : acquis (4 à 5) · NE : non évalué</p>' };
+    };
+    const sections = [];
+    if (avecSequence) {
+      const p = d.preparation;
+      sections.push({ html: tete('FICHE DE PRÉPARATION DE SÉQUENCE', `Séquence ${sq.numero} · ${sq.intitule || ''}`)
+        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Volume', volume]])
+        + rub('Objectif principal', sq.objectif) + rub('Activités et tâches du référentiel visées', p.activites) + rub('Situation professionnelle / support', p.situation)
+        + rub('Prérequis', p.prerequis)
+        + `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" colspan="6" style="color:#ffffff"><b>SÉANCES DE LA SÉQUENCE</b></td></tr><tr>${['N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Compétences', 'Savoirs'].map((x) => `<th bgcolor="#E3F1EF">${x}</th>`).join('')}</tr>${seances.map((x) =>
+          `<tr><td>${sq.numero}.${x.numero}</td><td><b>${t(x.titre)}</b></td><td>${heures(x.duree == null ? null : Number(x.duree))}</td><td>${t(x.objectif_inter)}</td><td>${(x.competences || []).join(' ')}</td><td>${(x.savoirs || []).join(' ')}</td></tr>`).join('')}</table>`
+        + rub('Modalités d’évaluation', p.modalites) + rub('Ressources et supports', p.ressources) + rub('Bilan de la séquence', p.bilan) });
+      const cs = await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`);
+      if (cs) sections.push(cs);
+    }
+    for (const x of liste) {
+      const ds = d.seances.find((y) => y.numero === x.numero), f = ds?.fiche || {};
+      const ids = (x.prerequis || []).map(Number);
+      const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
+      const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
+      const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
+      if (x.prerequis_texte) lPre.push(x.prerequis_texte);
+      const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
+      sections.push({ html: tete('FICHE DE DÉROULEMENT DE SÉANCE', titre)
+        + infos([['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
+          ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]])
+        + rub('Objectif intermédiaire', x.objectif_inter) + rub('Objectifs opérationnels', x.objectifs_ops) + rub('Cours mobilisés', x.cours)
+        + rub('Compétences', codes(x.competences, ref.comp)) + rub('Savoirs associés', codes(x.savoirs, ref.sav))
+        + (lPre.length ? rub('Prérequis (séquençage)', lPre.join('\n')) : '') + rub(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis) + rub('Matériel et ressources', f.materiel)
+        + maison(f.maison_avant, 'avant')
+        + `<p style="margin-top:8pt"></p>${TABLE}<tr><td bgcolor="#146B63" colspan="6" style="color:#ffffff"><b>DÉROULEMENT</b></td></tr><tr>${['N°', 'Phase', 'Activité proposée', 'Activités de l’enseignant', 'Activités des élèves', 'Durée'].map((x) => `<th bgcolor="#E3F1EF">${x}</th>`).join('')}</tr>${(f.phases || []).map((p, i) =>
+          `<tr><td class="centre"><b>${i + 1}</b></td><td><b>${echapper(p.phase)}</b></td><td>${t(p.activite)}</td><td>${t(p.enseignant)}</td><td>${t(p.eleves)}</td><td>${t(p.duree)}</td></tr>`).join('')}</table>`
+        + maison(f.maison_apres, 'apres')
+        + rub('Évaluation', f.evaluation) + rub('Différenciation scolaires / apprentis', f.differenciation) + rub('Bilan de séance / remédiation', f.bilan) });
+      const cf = await contrat('formatif', x.id, titre, (g) => g);
+      if (cf) sections.push(cf);
+    }
+    const nom = liste.length === 1 && !avecSequence ? `seance_${sq.numero}.${liste[0].numero}` : `sequence_${sq.numero}`;
+    telecharger(nomFichier(`${ctx.codeMat(m)}_${nom}_${promo}.doc`), documentWord(`${m.nom} · ${nom}`, sections), 'application/msword');
+  }
+
+  // ------------------------------------------------------------------------------------- import d'un fichier d'échange
+  async function importer() {
+    const entree = h('input', { type: 'file', accept: '.json,application/json' });
+    entree.addEventListener('change', async () => {
+      const fichier = entree.files[0];
+      if (!fichier) return;
+      let d;
+      try { d = JSON.parse(await fichier.text()); } catch { return erreur(new Error('Ce fichier n’est pas un fichier d’échange valide (JSON illisible).')); }
+      if (d.format !== FORMAT) return erreur(new Error('Ce fichier n’est pas un fichier d’échange de l’application.'));
+      // une séquence (la séquence affichée) ou plusieurs (retrouvées par leur numéro dans la matière)
+      const lots = d.sequences ? d.sequences.map((x) => ({ x, cible: toutes.find((y) => y.numero === x.numero) })) : [{ x: d.sequence, cible: sq }];
+      const ok = lots.filter((l) => l.cible && l.x), ko = lots.filter((l) => !l.cible);
+      const resume = ok.map((l) => `Séquence ${l.cible.numero} : ${(l.x.seances || []).length} séance(s)` + (l.x.contrat_sommatif ? ', contrat sommatif' : '') + (l.x.preparation ? ', préparation' : ''));
+      if (d.sequence && d.sequence.numero !== sq.numero) resume.unshift(`⚠ Le fichier vient de la séquence ${d.sequence.numero} : il sera importé dans la séquence affichée (${sq.numero}).`);
+      if (ko.length) resume.push(`Ignoré (séquence absente de la promotion) : ${ko.map((l) => l.x.numero).join(', ')}`);
+      const go = await fenetre('Importer des fiches', h('div', {},
+        h('p', {}, `Fichier « ${fichier.name} »${d.matiere ? ` · ${d.matiere}` : ''}${d.matiere && d.matiere !== m.nom ? ' (⚠ autre matière)' : ''}`),
+        h('ul', {}, resume.map((r) => h('li', {}, r))),
+        h('p', { class: 'aide' }, 'Les fiches et les contrats sont complétés ou remplacés par le contenu du fichier ; le séquençage et les notes des élèves ne sont pas modifiés. '
+          + '« ↶ Annuler » permet de revenir en arrière (un clic par séquence importée).')),
+      [{ texte: 'Annuler', valeur: false }, { texte: 'Importer', classe: 'principal', valeur: true }]);
+      if (!go) return;
+      try {
+        let n = { fiches: 0, contrats: 0 };
+        for (const l of ok) { const r = await db.rpc('importer_fiches', { s: l.cible.id, d: l.x }); n.fiches += r.fiches; n.contrats += r.contrats; }
+        toast(`Import terminé : ${n.fiches} fiche(s), ${n.contrats} contrat(s)`);
+        await ctx.recharger();
+      } catch (x) { erreur(x); }
+    });
+    entree.click();
   }
 
   try {
@@ -325,8 +390,7 @@ async function index(zone, ctx) {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },
         h('div', { class: 'bandeau' }, h('h3', {}, m.nom)),
-        !ctx.voit(m.id) ? h('p', { class: 'profs' }, '🔒  Contenus non partagés')
-          : sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
+        sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
           : h('p', { class: 'profs' }, 'Aucune séquence pour cette promotion.'));
     })));
 }

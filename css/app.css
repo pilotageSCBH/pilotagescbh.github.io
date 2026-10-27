@@ -330,10 +330,8 @@ table.progression .col-jours { min-width: 172px; }
 .table-fiche td.petit { font-size: 11.5px; }
 .table-fiche .centre { text-align: center; }
 .phases td { padding: 0; }
-.phases td.phase { width: 11%; font-weight: 700; }
-.phases td.phase .champ { font-size: 11.5px; }
-.phases td.activite { width: 36%; }
-.phases td.duree { width: 6%; }
+.phases td.phase { width: 16%; font-weight: 700; }
+.phases td.duree { width: 7%; }
 .phases td.num-phase, .phases th.num-phase { width: 34px; text-align: center; font-weight: 800; color: var(--fonce); }
 .phases td.num-phase { background: var(--auto); vertical-align: middle; }
 .phases .champ { border-radius: 0; min-height: 60px; }
@@ -937,44 +935,10 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .cadre-maison .grille-infos { background: #fff; }
 .cadre-maison .rubrique { margin: 8px 0; }
 @media print { .cadre-maison { break-inside: avoid; } }
-
-/* impression d'un cadre « travail à la maison » seul (document élève) */
-.actions-maison { display: flex; gap: 10px; align-items: center; }
-#impression-cadre { display: none; }
-@media print {
-  body.impression-cadre > *:not(#impression-cadre) { display: none !important; }
-  body.impression-cadre #impression-cadre { display: block; }
-  #impression-cadre .info .val { min-width: 40mm; }
-}
-/* ressources avec QR codes (cadre imprimé) */
-.qr-liste { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
-.qr-seul { grid-column: 1 / -1; margin: 0; }
-.qr-item { display: flex; gap: 3mm; align-items: center; border: 1px solid #ccc; border-radius: 3mm; padding: 2mm; break-inside: avoid; }
-.qr-code svg { width: 26mm; height: 26mm; display: block; }
-.qr-texte { font-size: 9pt; line-height: 1.3; }
-.qr-url { font-size: 7pt; color: #555; word-break: break-all; margin-top: 1mm; }
-.qr-ecran { margin-top: 10px; }
-.qr-ecran h3 { font-size: 13px; color: #A2561A; margin-bottom: 6px; }
-.cadre-maison.apres .qr-ecran h3 { color: #245F96; }
-.qr-ecran .qr-item { background: #fff; }
-@media (max-width: 700px) { .qr-liste { grid-template-columns: 1fr; } }
-.table-liens { width: 100%; border-collapse: collapse; background: #fff; }
-.table-liens th { font-size: 11px; text-align: left; color: var(--gris, #666); padding: 3px 4px; }
-.table-liens td { border-top: 1px solid var(--ligne); padding: 3px 4px; vertical-align: middle; }
-.table-liens td:first-child { width: 45%; }
-.table-liens .centre { text-align: center; width: 60px; }
-.liens-maison .lien { margin-top: 4px; }
-@media print { .table-liens .ecran { display: none; } }
-.phases td.actions-phase, .phases th.ecran { width: 46px; padding: 2px; vertical-align: middle; }
-.boutons-phase { display: grid; grid-template-columns: 20px 20px; gap: 1px; justify-content: center; }
-.boutons-phase .icone { font-size: 11px; line-height: 16px; width: 20px; height: 18px; padding: 0; text-align: center; }
-.boutons-phase .icone:disabled { opacity: .25; cursor: default; }
-.boutons-phase .icone.suppr { grid-column: 1 / -1; width: 100%; }
-/* partage des contenus */
-.non-partage { margin: 24px auto; max-width: 640px; padding: 20px 24px; border: 2px dashed var(--ligne); border-radius: 14px; background: #fff; text-align: center; }
-.non-partage .fort { font-size: 17px; color: var(--fonce); }
-.choix-partage { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; cursor: pointer; }
-.choix-partage input { margin-top: 4px; }
-.liste-partage { margin: 4px 0 0 28px; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
-.liste-partage.inactive { opacity: .45; }
-.case-partage { display: flex; gap: 8px; align-items: center; }
+/* fiches : télécharger */
+.choix-telecharger { display: grid; gap: 10px; }
+.carte-choix { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--ligne);
+  border-left: 5px solid var(--teal); background: #fff; cursor: pointer; }
+.carte-choix:hover { box-shadow: 0 0 0 2px var(--teal); }
+.carte-choix b { color: var(--fonce); font-size: 14px; } .carte-choix span { color: var(--gris); font-size: 12.5px; }
+.carte-choix.echange { border-left-color: #6B4FA0; }
