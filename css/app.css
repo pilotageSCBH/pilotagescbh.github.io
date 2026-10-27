@@ -54,19 +54,8 @@ h1, h2, h3 { margin: 0; }
 .aide { color: var(--gris); font-size: 12.5px; margin: 0 0 10px; }
 
 /* ------------------------------------------------------------------ cadre et menu */
-.cadre { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
-.menu { background: var(--fonce); color: #fff; display: flex; flex-direction: column; padding: 14px 10px; gap: 2px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-.marque { display: flex; flex-direction: column; gap: 8px; color: #fff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 6px 8px 2px; }
-.marque img { width: 150px; background: #fff; border-radius: 6px; padding: 4px; }
-.promo-menu { font-size: 12px; opacity: .8; padding: 0 8px 8px; border-bottom: 1px solid rgba(255,255,255,.15); margin-bottom: 6px; }
-.titre-menu { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .6; padding: 12px 8px 4px; }
-.lien-menu { display: block; color: #fff; text-decoration: none; padding: 7px 10px; border-radius: 7px; font-size: 13.5px; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; width: 100%; }
-.lien-menu.matiere::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--pastille); margin-right: 8px; }
-.lien-menu:hover { background: rgba(255,255,255,.1); }
-.lien-menu.actif { background: #fff; color: var(--fonce); font-weight: 700; }
-.lien-menu.inactif { opacity: .45; cursor: default; font-size: 12.5px; padding: 4px 10px; }
-.lien-menu.inactif:hover { background: none; }
-.bas-menu { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.15); }
+.cadre { display: grid; grid-template-columns: 264px 1fr; min-height: 100vh; transition: grid-template-columns .2s; }
+.cadre.menu-reduit { grid-template-columns: 66px 1fr; }
 .contenu { padding: 24px 28px 60px; min-width: 0; }
 
 /* ------------------------------------------------------------------ pages */
@@ -211,10 +200,8 @@ dl.infos dd { margin: 0; }
 /* ------------------------------------------------------------------ petits écrans */
 @media (max-width: 900px) {
   .cadre { grid-template-columns: 1fr; }
-  .menu { position: static; height: auto; flex-direction: row; flex-wrap: wrap; }
-  .menu .titre-menu, .menu .promo-menu, .lien-menu.inactif { display: none; }
-  .lien-menu { width: auto; }
-  .bas-menu { margin: 0; border: 0; display: flex; }
+  .menu { position: static; height: auto; }
+  .cadre.menu-reduit { grid-template-columns: 1fr; }
   .contenu { padding: 16px; }
   .formulaire.ligne { grid-template-columns: 1fr; }
   .objectif-sequence { grid-template-columns: 1fr; }
@@ -1089,3 +1076,78 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .frise-evals th.lib .pastille { margin-right: 6px; }
 .choix-pdf { display: grid; gap: 6px; } .choix-pdf b { margin-top: 6px; color: var(--fonce); }
 .tete-sequence .btn.petit { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- menu de gauche */
+.menu { background: linear-gradient(180deg, #0F5A53 0%, #12645C 55%, #0E544D 100%); color: #fff; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
+  box-shadow: 2px 0 10px rgba(0,0,0,.12); z-index: 5; }
+.tete-menu { display: flex; align-items: flex-start; gap: 6px; padding: 12px 10px 6px 12px; }
+.marque { display: flex; flex-direction: column; gap: 6px; color: #fff; text-decoration: none; font-weight: 800; font-size: 15px; flex: 1; min-width: 0; }
+.marque img { width: 148px; background: #fff; border-radius: 8px; padding: 4px 6px; }
+.reduire-menu { flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; line-height: 1; }
+.reduire-menu:hover { background: rgba(255,255,255,.2); }
+.promo-menu { padding: 4px 12px 8px; }
+.promo-menu label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #9FD3CB; font-weight: 700; margin-bottom: 4px; }
+.promo-menu .choix-promo { background: #fff; color: var(--fonce); border: 0; font-weight: 800; padding: 7px 8px; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.promo-courte { display: none; }
+.zone-recherche { padding: 0 12px 8px; }
+.recherche-menu { width: 100%; font: inherit; font-size: 13px; padding: 7px 10px 7px 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.22); color: #fff;
+  background: rgba(255,255,255,.1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23CFE9E5' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 10px center; }
+.recherche-menu::placeholder { color: #B6DCD6; }
+.recherche-menu:focus { outline: none; background-color: rgba(255,255,255,.18); border-color: #fff; }
+.defile-menu { flex: 1; overflow-y: auto; padding: 4px 8px 10px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.3) transparent; }
+.lien-menu { display: flex; align-items: center; gap: 10px; color: #EAF6F4; text-decoration: none; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; background: none; border: 0; font: inherit;
+  text-align: left; cursor: pointer; width: 100%; position: relative; line-height: 1.25; }
+.lien-menu .ico { flex: none; width: 20px; text-align: center; font-size: 14px; }
+.lien-menu .txt { flex: 1; min-width: 0; }
+.lien-menu:hover { background: rgba(255,255,255,.12); color: #fff; }
+.lien-menu.actif { background: #fff; color: var(--fonce); font-weight: 800; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.lien-menu.actif::before { content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 4px; border-radius: 0 4px 4px 0; background: #C9E265; }
+.lien-menu.fixe { font-weight: 700; font-size: 14px; }
+.puce-mat-menu { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--pastille); box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+.lien-menu.actif .puce-mat-menu { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pastille) 35%, #fff); }
+.marque-mat { font-size: 11px; opacity: .75; }
+.badge-menu { flex: none; min-width: 20px; height: 19px; padding: 0 6px; border-radius: 10px; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; background: #fff; color: var(--fonce); }
+.badge-menu.rouge { background: #E3191E; color: #fff; }
+.badge-menu.vide { display: none; }
+.rubrique-menu { margin-top: 6px; }
+.titre-menu { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: #9FD3CB; font: inherit; font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .09em; padding: 8px 10px 5px; cursor: pointer; border-radius: 6px; }
+.titre-menu:hover { color: #fff; background: rgba(255,255,255,.06); }
+.titre-menu .ico { width: 20px; text-align: center; font-size: 12px; filter: saturate(.6); }
+.titre-menu .txt { flex: 1; text-align: left; }
+.titre-menu .nb { font-size: 10px; background: rgba(255,255,255,.12); border-radius: 8px; padding: 0 6px; letter-spacing: 0; opacity: 0; transition: opacity .2s; }
+.rubrique-menu:not(.ouverte) .titre-menu .nb { opacity: 1; }
+.titre-menu .chevron { transition: transform .2s; font-size: 11px; }
+.rubrique-menu:not(.ouverte) .chevron { transform: rotate(-90deg); }
+.rubrique-menu .corps-rubrique { display: none; }
+.rubrique-menu.ouverte .corps-rubrique, .menu.en-recherche .rubrique-menu .corps-rubrique { display: block; }
+.rubrique-menu.active:not(.ouverte) .titre-menu { color: #fff; }
+.bas-menu { margin-top: 0; padding: 8px; border-top: 1px solid rgba(255,255,255,.15); display: grid; grid-template-columns: 1fr auto; gap: 6px; background: rgba(0,0,0,.12); }
+.raccourcis-bas { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.raccourcis-bas .lien-menu { font-size: 13px; padding: 6px 8px; gap: 6px; }
+.carte-moi { display: flex; align-items: center; gap: 9px; text-decoration: none; color: #fff; padding: 6px 8px; border-radius: 8px; min-width: 0; }
+.carte-moi:hover, .carte-moi.actif { background: rgba(255,255,255,.14); }
+.avatar-menu { flex: none; width: 32px; height: 32px; border-radius: 50%; background: #C9E265; color: #0F4F49; display: grid; place-items: center; font-weight: 800; font-size: 12.5px; }
+.carte-moi .txt { display: flex; flex-direction: column; min-width: 0; }
+.carte-moi b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carte-moi small { font-size: 11px; color: #B6DCD6; }
+.deconnexion { width: 38px; border-radius: 8px; border: 1px solid rgba(255,255,255,.22); background: none; color: #fff; font-size: 16px; cursor: pointer; }
+.deconnexion:hover { background: #B03A2E; border-color: #B03A2E; }
+/* mode réduit : icônes seules */
+.menu.reduit .marque span, .menu.reduit .promo-menu label, .menu.reduit .choix-promo, .menu.reduit .zone-recherche, .menu.reduit .txt,
+.menu.reduit .titre-menu .nb, .menu.reduit .titre-menu .chevron, .menu.reduit .marque-mat { display: none; }
+.menu.reduit .tete-menu { flex-direction: column; align-items: center; padding: 10px 6px; }
+.menu.reduit .marque img { width: 44px; height: 44px; object-fit: cover; object-position: left; }
+.menu.reduit .promo-courte { display: block; text-align: center; font-weight: 800; font-size: 12px; background: #fff; color: var(--fonce); border-radius: 6px; padding: 3px 0; }
+.menu.reduit .promo-menu { padding: 0 8px 8px; }
+.menu.reduit .defile-menu { padding: 4px 6px; }
+.menu.reduit .lien-menu { justify-content: center; padding: 8px 0; }
+.menu.reduit .lien-menu .ico { width: auto; font-size: 16px; }
+.menu.reduit .titre-menu { height: 0; padding: 0; margin: 6px 6px; border-top: 1px solid rgba(255,255,255,.22); border-radius: 0; pointer-events: none; overflow: hidden; }
+.menu.reduit .rubrique-menu .corps-rubrique { display: block; }
+.menu.reduit .badge-menu { position: absolute; top: 1px; right: 2px; min-width: 16px; height: 15px; font-size: 9.5px; padding: 0 4px; }
+.menu.reduit .bas-menu { grid-template-columns: 1fr; justify-items: center; }
+.menu.reduit .raccourcis-bas { grid-template-columns: 1fr; }
+.menu.reduit .carte-moi { padding: 4px; }
+.menu.reduit .lien-menu.actif::before { left: -6px; }
+@media (max-width: 900px) { .menu { position: static; height: auto; } .defile-menu { max-height: 50vh; } }

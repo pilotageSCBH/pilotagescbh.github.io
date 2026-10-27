@@ -218,41 +218,125 @@ function ecranNouveauCode() {
 }
 
 // ------------------------------------------------------------------------------------------- cadre
+// menu de gauche : rubriques repliables (état mémorisé), recherche, mode réduit (icônes seules), badges
+const CLE_MENU_FERME = 'pilotage-scbh-menu-replie', CLE_MENU_REDUIT = 'pilotage-scbh-menu-reduit';
+const lireL = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const ecrireL = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
+const sansAccent = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const initialesMenu = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('');
+
 function menu(route) {
-  const lien = (href, texte, actif, extra = {}) => h('a', { href, class: 'lien-menu' + (actif ? ' actif' : ''), ...extra }, texte);
   const [page, arg] = route;
-  return h('nav', { class: 'menu' },
-    h('a', { href: '#/accueil', class: 'marque' }, h('img', { src: 'img/logo.jpg', alt: '' }), h('span', {}, NOM_APPLI)),
-    h('div', { class: 'promo-menu' }, choixPromotion()),
-    lien('#/accueil', '⌂  Tableau de bord', page === 'accueil'),
-    lien('#/semaine', '🗓  Ma semaine', page === 'semaine'),
-    h('div', { class: 'titre-menu' }, 'Promotion'),
-    lien('#/equipe', 'Matières et équipe', page === 'equipe'),
-    lien('#/eleves', 'Élèves', page === 'eleves'),
-    h('div', { class: 'titre-menu' }, 'Séquençages'),
-    ctx.matieres.map((m) => { const a = lien('#/sequencage/' + m.id, m.nom, page === 'sequencage' && String(arg) === String(m.id),
-      { style: { '--pastille': m.couleur } }); a.classList.add('matiere'); return a; }),
-    h('div', { class: 'titre-menu' }, 'Suivi'),
-    lien('#/progression', 'Progression', page === 'progression'),
-    lien('#/fiches', 'Fiches et contrats', page === 'fiches'),
-    lien('#/evaluations', 'Calendrier des évaluations', page === 'evaluations'),
-    lien('#/alertes', 'Alertes de pilotage', page === 'alertes'),
-    lien('#/validation', 'Validation des compétences', page === 'validation'),
-    lien('#/resultats', 'Résultats et moyennes', page === 'resultats'),
-    lien('#/eleve', 'Fiche élève et livret', page === 'eleve'),
-    lien('#/synthese', 'Synthèse des séquençages', page === 'synthese'),
-    lien('#/couverture/competences', 'Couverture des compétences', page === 'couverture' && arg !== 'savoirs'),
-    lien('#/couverture/savoirs', 'Couverture des savoirs', page === 'couverture' && arg === 'savoirs'),
-    lien('#/historique', 'Historique des modifications', page === 'historique'),
-    h('div', { class: 'titre-menu' }, 'Référentiel'),
-    lien('#/referentiel/competences', 'Compétences', page === 'referentiel' && arg !== 'savoirs' && arg !== 'taches'),
-    lien('#/referentiel/savoirs', 'Savoirs associés', page === 'referentiel' && arg === 'savoirs'),
-    lien('#/referentiel/taches', 'Activités et tâches', page === 'referentiel' && arg === 'taches'),
+  const reduit = lireL(CLE_MENU_REDUIT, 'non') === 'oui';
+  let fermees = new Set(JSON.parse(lireL(CLE_MENU_FERME, '["referentiel"]') || '[]'));
+  const lien = ({ href, icone, texte, actif, badge = null, titre = '', pastille = null, marque = null }) =>
+    h('a', { href, class: 'lien-menu' + (actif ? ' actif' : '') + (pastille ? ' matiere' : ''), title: titre || texte, 'data-texte': sansAccent(texte),
+      style: pastille ? { '--pastille': pastille } : {} },
+      h('span', { class: 'ico' }, pastille ? h('i', { class: 'puce-mat-menu' }) : icone),
+      h('span', { class: 'txt' }, texte),
+      marque ? h('span', { class: 'marque-mat', title: 'Vous enseignez cette matière : modifiable' }, marque) : null,
+      badge ? h('span', { class: 'badge-menu ' + (badge.classe || ''), 'data-badge': badge.cle || '' }, badge.texte) : null);
+  const S = [
+    { cle: 'promotion', titre: 'Promotion', icone: '🎓', items: [
+      { href: '#/equipe', icone: '👥', texte: 'Matières et équipe', actif: page === 'equipe' },
+      { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' }] },
+    { cle: 'sequencages', titre: 'Séquençages', icone: '🧱', items: ctx.matieres.map((m) => ({ href: '#/sequencage/' + m.id, texte: m.nom, pastille: m.couleur,
+      actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })) },
+    { cle: 'planifier', titre: 'Planifier', icone: '📅', items: [
+      { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
+      { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
+      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' },
+      { href: '#/alertes', icone: '⚠️', texte: 'Alertes de pilotage', actif: page === 'alertes',
+        badge: ctx.badgeAlertes?.promo === ctx.promo?.id && ctx.badgeAlertes.n ? { texte: ctx.badgeAlertes.n, cle: 'alertes', classe: 'rouge' } : { texte: '', cle: 'alertes', classe: 'vide' } }] },
+    { cle: 'evaluer', titre: 'Évaluer', icone: '✅', items: [
+      { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
+      { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
+      { href: '#/eleve', icone: '🪪', texte: 'Fiche élève et livret', actif: page === 'eleve' }] },
+    { cle: 'bilans', titre: 'Bilans', icone: '📊', items: [
+      { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' },
+      { href: '#/couverture/competences', icone: '🧩', texte: 'Couverture des compétences', actif: page === 'couverture' && arg !== 'savoirs' },
+      { href: '#/couverture/savoirs', icone: '📚', texte: 'Couverture des savoirs', actif: page === 'couverture' && arg === 'savoirs' },
+      { href: '#/historique', icone: '🕘', texte: 'Historique des modifications', actif: page === 'historique' }] },
+    { cle: 'referentiel', titre: 'Référentiel', icone: '📖', items: [
+      { href: '#/referentiel/competences', icone: '🎯', texte: 'Compétences', actif: page === 'referentiel' && arg !== 'savoirs' && arg !== 'taches' },
+      { href: '#/referentiel/savoirs', icone: '📘', texte: 'Savoirs associés', actif: page === 'referentiel' && arg === 'savoirs' },
+      { href: '#/referentiel/taches', icone: '🛠', texte: 'Activités et tâches', actif: page === 'referentiel' && arg === 'taches' }] },
+  ];
+  const sections = S.map((sec) => {
+    const active = sec.items.some((x) => x.actif);
+    const ouverte = active || !fermees.has(sec.cle);
+    const corps = h('div', { class: 'corps-rubrique' }, sec.items.map(lien));
+    const el = h('div', { class: 'rubrique-menu' + (ouverte ? ' ouverte' : '') + (active ? ' active' : '') },
+      h('button', { class: 'titre-menu', type: 'button', title: sec.titre, 'aria-expanded': String(ouverte), onclick: () => {
+        const o = !el.classList.contains('ouverte');
+        el.classList.toggle('ouverte', o); el.querySelector('.titre-menu').setAttribute('aria-expanded', String(o));
+        o ? fermees.delete(sec.cle) : fermees.add(sec.cle);
+        ecrireL(CLE_MENU_FERME, JSON.stringify([...fermees]));
+      } }, h('span', { class: 'ico' }, sec.icone), h('span', { class: 'txt' }, sec.titre), h('span', { class: 'nb' }, sec.items.length), h('span', { class: 'chevron' }, '▾')),
+      corps);
+    return el;
+  });
+  // recherche dans le menu
+  const recherche = h('input', { class: 'recherche-menu', type: 'search', placeholder: 'Rechercher une page…', 'aria-label': 'Rechercher une page',
+    oninput: () => {
+      const q = sansAccent(recherche.value.trim());
+      nav.classList.toggle('en-recherche', !!q);
+      nav.querySelectorAll('.rubrique-menu').forEach((r) => {
+        let n = 0;
+        r.querySelectorAll('.lien-menu').forEach((a) => { const ok = !q || a.dataset.texte.includes(q); a.classList.toggle('cache', !ok); if (ok) n++; });
+        r.classList.toggle('cache', !!q && !n);
+      });
+      nav.querySelectorAll('.lien-menu.fixe').forEach((a) => a.classList.toggle('cache', !!q && !a.dataset.texte.includes(q)));
+    },
+    onkeydown: (e) => {
+      if (e.key === 'Enter') { const a = nav.querySelector('.lien-menu:not(.cache)[href]' + (recherche.value ? ':not(.fixe)' : '')) || nav.querySelector('.lien-menu:not(.cache)[href]'); if (a) { location.hash = a.getAttribute('href'); recherche.value = ''; recherche.dispatchEvent(new Event('input')); } }
+      if (e.key === 'Escape') { recherche.value = ''; recherche.dispatchEvent(new Event('input')); recherche.blur(); }
+    } });
+  const fixe = (x) => { const a = lien(x); a.classList.add('fixe'); return a; };
+  const nom = ctx.profil?.nom || emailConnecte();
+  const role = ctx.estAdmin() ? 'Administrateur' : ctx.peutEcrire() ? 'Enseignant' : 'Consultation';
+  const nav = h('nav', { class: 'menu' + (reduit ? ' reduit' : '') },
+    h('div', { class: 'tete-menu' },
+      h('a', { href: '#/accueil', class: 'marque', title: NOM_APPLI }, h('img', { src: 'img/logo.jpg', alt: '' }), h('span', {}, NOM_APPLI)),
+      h('button', { class: 'reduire-menu', type: 'button', title: reduit ? 'Déplier le menu' : 'Réduire le menu (icônes seules)', onclick: () => {
+        ecrireL(CLE_MENU_REDUIT, reduit ? 'non' : 'oui'); rafraichirMenu();
+      } }, reduit ? '»' : '«')),
+    h('div', { class: 'promo-menu' }, h('label', {}, 'Promotion affichée'), choixPromotion(), h('span', { class: 'promo-courte', title: 'Promotion ' + (ctx.promo?.libelle || '') }, ctx.promo ? String(ctx.promo.annee_debut).slice(2) + '-' + String(ctx.promo.annee_debut + 2).slice(2) : '')),
+    h('div', { class: 'zone-recherche' }, recherche),
+    h('div', { class: 'defile-menu' },
+      fixe({ href: '#/accueil', icone: '🏠', texte: 'Tableau de bord', actif: page === 'accueil' }),
+      fixe({ href: '#/semaine', icone: '🗓', texte: 'Ma semaine', actif: page === 'semaine' }),
+      sections),
     h('div', { class: 'bas-menu' },
-      lien('#/aide', '?  Aide', page === 'aide'),
-      ctx.estAdmin() ? lien('#/admin', '⚙  Administration' + (ctx.demandes ? `  (${ctx.demandes} demande${ctx.demandes > 1 ? 's' : ''})` : ''), page === 'admin') : null,
-      lien('#/compte', '👤  ' + (ctx.profil?.nom || emailConnecte()) + (ctx.peutEcrire() ? '' : '  (consultation)'), page === 'compte'),
-      h('button', { class: 'lien-menu', type: 'button', onclick: async () => { await deconnexion(); ecranConnexion('Vous êtes déconnecté.'); } }, '⏻  Se déconnecter')));
+      h('div', { class: 'raccourcis-bas' },
+        fixe({ href: '#/aide', icone: '❓', texte: 'Aide', actif: page === 'aide' }),
+        ctx.estAdmin() ? fixe({ href: '#/admin', icone: '⚙️', texte: 'Administration', actif: page === 'admin',
+          badge: ctx.demandes ? { texte: ctx.demandes, classe: 'rouge' } : null, titre: 'Administration' + (ctx.demandes ? ` : ${ctx.demandes} demande(s) de code` : '') }) : null),
+      h('a', { href: '#/compte', class: 'carte-moi' + (page === 'compte' ? ' actif' : ''), title: 'Mon compte' },
+        h('span', { class: 'avatar-menu' }, initialesMenu(nom)), h('span', { class: 'txt' }, h('b', {}, nom), h('small', {}, role))),
+      h('button', { class: 'deconnexion', type: 'button', title: 'Se déconnecter', onclick: async () => { await deconnexion(); ecranConnexion('Vous êtes déconnecté.'); } }, '⏻')));
+  if (!reduit) document.querySelector('.cadre')?.classList.remove('menu-reduit'); else document.querySelector('.cadre')?.classList.add('menu-reduit');
+  setTimeout(() => { nav.querySelector('.lien-menu.actif')?.scrollIntoView({ block: 'nearest' }); document.querySelector('.cadre')?.classList.toggle('menu-reduit', reduit); }, 0);
+  majBadgeAlertes();
+  return nav;
+}
+
+// nombre d'alertes importantes (mes matières), recalculé au plus toutes les 2 minutes
+let calculAlertes = null;
+async function majBadgeAlertes() {
+  const p = ctx.promo?.id;
+  if (!p || calculAlertes) return;
+  const b = ctx.badgeAlertes;
+  if (b && b.promo === p && Date.now() - b.t < 120000) return;
+  calculAlertes = (async () => {
+    try {
+      const { chargerSuivi, calculerAlertes, mesMatieres } = await import('./pilotage.js');
+      const [D, ref] = await Promise.all([chargerSuivi(ctx), ctx.referentiel()]);
+      const n = calculerAlertes(D, ctx, ref, mesMatieres(ctx).map((m) => m.id)).filter((a) => a.gravite === 3).reduce((s, a) => s + a.elements.length, 0);
+      ctx.badgeAlertes = { promo: p, n, t: Date.now() };
+      document.querySelectorAll('.badge-menu[data-badge="alertes"]').forEach((el) => { el.textContent = n || ''; el.className = 'badge-menu ' + (n ? 'rouge' : 'vide'); el.title = n ? `${n} alerte(s) importante(s)` : ''; });
+    } catch { /* badge facultatif */ } finally { calculAlertes = null; }
+  })();
 }
 
 function route() {
@@ -269,7 +353,7 @@ async function afficher() {
   if (r[0] === 'admin' && !ctx.estAdmin()) { location.hash = '#/accueil'; return; }
   const n = ++rendu;
   const zone = h('main', { class: 'contenu' }, h('div', { class: 'chargement' }, 'Chargement…'));
-  vider(app, h('div', { class: 'cadre' }, menu(r), zone));
+  vider(app, h('div', { class: 'cadre' + (lireL(CLE_MENU_REDUIT, 'non') === 'oui' ? ' menu-reduit' : '') }, menu(r), zone));
   try {
     await PAGES[r[0]](zone, r[1], ctx);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
