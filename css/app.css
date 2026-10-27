@@ -1151,3 +1151,4 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .menu.reduit .carte-moi { padding: 4px; }
 .menu.reduit .lien-menu.actif::before { left: -6px; }
 @media (max-width: 900px) { .menu { position: static; height: auto; } .defile-menu { max-height: 50vh; } }
+.carte-matiere .btn.classeur { margin: 10px 14px 0; }

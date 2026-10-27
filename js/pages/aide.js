@@ -57,10 +57,11 @@ const SECTIONS = [
     ['Calendrier des évaluations', "Suivi → « Calendrier des évaluations » : contrats sommatifs (S) et résultats intermédiaires (R) de toutes les matières, semaine par semaine. La ligne « Total » passe en orange à 2 évaluations la même semaine et en rouge à 3. Les contrats formatifs (F) peuvent être affichés, mais ne comptent pas dans la charge. Une évaluation sans date n'apparaît pas : renseignez la date dans le contrat."],
     ['Alertes de pilotage', "Suivi → « Alertes de pilotage » : prérequis non respectés, notes à saisir, semaines chargées, séquences sans contrat sommatif, contrats sans date, séances non placées, compétences prévues sans séance ou non couvertes (plus grave après la mi-parcours), séances sans fiche… Cliquez une ligne pour aller la corriger. Le menu choisit vos matières ou toutes."],
   ]],
-  ['dupliquer', 'Dupliquer, sauvegarder, PDF A3', [
+  ['dupliquer', 'Dupliquer, sauvegarder, PDF', [
     ['Dupliquer une séquence', "Dans un séquençage, bouton « ⧉ Dupliquer » d'une séquence : elle est recopiée (séances, fiches, contrats, sans les notes ni les dates) dans une de vos matières, dans cette promotion ou une autre. On peut ainsi reprendre la séquence d'un collègue dans sa propre matière."],
     ['Dupliquer une séance', "Survolez le numéro d'une séance puis cliquez ⧉ : la séance (avec sa fiche de déroulement et son contrat formatif) est ajoutée à la fin de la séquence choisie."],
     ['Sauvegarde', "Administration → « Sauvegarde » (administrateur) : télécharge un fichier contenant toutes les données. « Restaurer » remet le site dans l'état d'un fichier : toutes les données actuelles sont remplacées (une sauvegarde de l'état actuel est d'abord téléchargée). Les comptes de connexion ne changent pas."],
+    ['Classeur PDF d’une matière', "Dans le séquençage d'une matière (ou dans « Fiches et contrats »), bouton « 📘 Classeur PDF » : un seul PDF A4 avec page de garde, sommaire, séquençage, puis pour chaque séquence la fiche de préparation, le contrat sommatif, les fiches de déroulement et les contrats formatifs. On choisit les parties et les séquences à inclure."],
     ['PDF de la progression', "Progression → « ⬇ PDF A3 » : frise (une page par année) et/ou tableau (deux pages par année), en A3 paysage, pour les matières affichées."],
   ]],
   ['eleve', 'Fiche élève et livret', [

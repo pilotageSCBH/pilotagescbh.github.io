@@ -31,7 +31,7 @@ export function nettoyer(t) {
 const A4 = [595.28, 841.89], MARGE = 40;
 const coul = (hex) => { const n = parseInt(hex.slice(1), 16); return window.PDFLib.rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); };
 
-export async function creerPDF(doc, logoOctets) {
+export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
   const { PDFDocument, StandardFonts, degrees } = window.PDFLib;
   const pdf = await PDFDocument.create();
   pdf.setTitle(nettoyer(doc.titre)); pdf.setCreator('Pilotage BTS SCBH');
@@ -192,7 +192,7 @@ export async function creerPDF(doc, logoOctets) {
   };
   for (const b of doc.blocs) B[b.t](b);
   // pied de page : titre du document et numéro de page
-  pages.forEach((p, i) => {
+  if (pied) pages.forEach((p, i) => {
     p.drawText(nettoyer(doc.pied || doc.titre).slice(0, 110), { x: MARGE, y: 22, size: 7, font: F, color: GRIS });
     const n = `${i + 1} / ${pages.length}`;
     p.drawText(n, { x: A4[0] - MARGE - F.widthOfTextAtSize(n, 7), y: 22, size: 7, font: F, color: GRIS });

@@ -257,95 +257,11 @@ export async function pageFiches(zone, arg, ctx) {
       const [{ chargerOutils, zipDePDF }] = await Promise.all([import('../pdf.js')]);
       await chargerOutils();
       const logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
-      const modeles = await modelesPDF(choisis);
+      const modeles = await modelesSequence({ sq, m, ref, seances, actifs, effectif, profs, promo, volume }, ctx, choisis);
       const zip = await zipDePDF(modeles, logo);
       telecharger(nomFichier(`${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.zip`), zip);
       toast(`${modeles.length} document(s) téléchargé(s)`);
     } catch (x) { erreur(x); }
-  }
-
-  // contenu des documents (blocs mis en page par js/pdf.js)
-  async function modelesPDF(choisis) {
-    const d = await exportSequence(sq);
-    const elevesL = actifs.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
-    const dt = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR') : '');
-    const codes = (l, idx) => (l || []).map((c) => `${c}  ${idx[c]?.libelle || ''}`).join('\n');
-    const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
-    const pied = `${m.nom} · Séquence ${sq.numero} · Promotion ${promo}`;
-    const num = (n) => String(n).padStart(2, '0');
-    const maison = (o, cle) => (!o ? null : { t: 'cadre', couleur: cle === 'avant' ? '#E8893A' : '#3D84C6',
-      titre: cle === 'avant' ? 'Avant la séance : travail préparatoire à la maison (classe inversée)' : 'Après la séance : travail à la maison (devoirs)',
-      blocs: [{ t: 'infos', paires: [[cle === 'avant' ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree]] },
-        ...(cle === 'avant' ? [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]
-          : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]).map(([k, l]) => R(l, o[k]))] });
-    // contrat : critères (lignes) × élèves (colonnes), notes saisies, niveau par rubrique et note finale
-    const contrat = async (type, idObjet, titre, groupeLib) => {
-      const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${idObjet}`))[0];
-      const ks = ct ? (await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`)).filter((k) => k.actif) : [];
-      const nl = ks.length ? await db.lire('notes', `critere_id=in.(${ks.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
-      const notes = new Map(nl.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
-      const groupes = [...new Set(ks.map((k) => k.groupe))];
-      const finale = (e) => {
-        if (type === 'sommatif') { const ms = groupes.map((g) => moyenne(ks.filter((k) => k.groupe === g), notes, e.id)).filter((v) => v !== null); return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null; }
-        return moyenne(ks, notes, e.id);
-      };
-      const lignes = [];
-      for (const g of groupes) {
-        lignes.push({ groupe: groupeLib(g) });
-        ks.filter((k) => k.groupe === g).forEach((k) => lignes.push([k.texte, arrondi(Number(k.coefficient)), ...elevesL.map((e) => notes.get(`${k.id}:${e.id}`) || '')]));
-        lignes.push({ fond: '#EFF1F0', cellules: ['Niveau (note / 5)', '', ...elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return n === null ? '' : niveau(n).code; })] });
-      }
-      lignes.push({ fond: '#D9DEDC', gras: true, cellules: ['NOTE FINALE / 20', '', ...elevesL.map((e) => { const f = finale(e); return f === null ? '' : arrondi(f * 4); })] });
-      return [{ t: 'titre', texte: `CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, sous: titre, couleur: m.couleur },
-        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Date', dt(ct?.date_eval)], ['Forme', ct?.forme],
-          ['Lieu', ct?.lieu], ['Organisation', ct?.organisation], ['Durée', ct?.duree]] },
-        ks.length ? { t: 'table', taille: 7.5, teteVerticale: 2,
-          colonnes: [{ titre: type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères', part: 34 }, { titre: 'Coef.', part: 5.5, centre: true },
-            ...elevesL.map((e) => ({ titre: `${e.nom} ${e.prenom}`, part: Math.max(3, 62 / Math.max(1, elevesL.length)), centre: true }))], lignes }
-          : R('Critères', 'Contrat pas encore créé.'),
-        { t: 'note', texte: 'NA : non acquis (0 à moins de 2 / 5) · EVA : en voie d’acquisition (2 à moins de 4) · A : acquis (4 à 5) · NE : non évalué' }];
-    };
-    const out = [];
-    for (const [k, , x] of choisis) {
-      if (k === 'preparation') {
-        const p = d.preparation;
-        out.push({ fichier: `${num(0)}_Fiche_de_preparation_sequence_${sq.numero}.pdf`, titre: `Fiche de préparation · séquence ${sq.numero}`, pied, blocs: [
-          { t: 'titre', texte: 'FICHE DE PRÉPARATION DE SÉQUENCE', sous: `Séquence ${sq.numero} · ${sq.intitule || ''}`, couleur: m.couleur },
-          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Volume', volume]] },
-          R('Objectif principal', sq.objectif, { gras: true, gris: true }), R('Activités et tâches du référentiel visées', p.activites), R('Situation professionnelle / support', p.situation), R('Prérequis', p.prerequis),
-          { t: 'table', titre: 'Séances de la séquence', colonnes: [{ titre: 'N°', part: 5, gras: true }, { titre: 'Séance', part: 22, gras: true }, { titre: 'Durée', part: 7 },
-            { titre: 'Objectif intermédiaire', part: 34 }, { titre: 'Compétences', part: 14 }, { titre: 'Savoirs', part: 18 }],
-          lignes: seances.map((y) => [`${sq.numero}.${y.numero}`, y.titre, heures(y.duree == null ? null : Number(y.duree)), y.objectif_inter, (y.competences || []).join(' '), (y.savoirs || []).join(' ')]) },
-          R('Modalités d’évaluation', p.modalites), R('Ressources et supports', p.ressources), R('Bilan de la séquence', p.bilan)] });
-      } else if (k === 'sommatif') {
-        out.push({ fichier: `${num(1)}_Contrat_sommatif_sequence_${sq.numero}.pdf`, titre: `Contrat sommatif · séquence ${sq.numero}`, pied,
-          blocs: await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`) });
-      } else if (k.startsWith('seance-')) {
-        const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
-        const ids = (x.prerequis || []).map(Number);
-        const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
-        const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
-        const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
-        if (x.prerequis_texte) lPre.push(x.prerequis_texte);
-        out.push({ fichier: `S${sq.numero}.${x.numero}_a_Fiche_de_deroulement.pdf`, titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`, pied, blocs: [
-          { t: 'titre', texte: 'FICHE DE DÉROULEMENT DE SÉANCE', sous: `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: m.couleur },
-          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
-            ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
-          R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', x.cours, { gris: true }),
-          R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
-          lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
-          maison(f.maison_avant, 'avant'),
-          { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true }, { titre: 'Activité proposée', part: 21 },
-            { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
-          lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
-          maison(f.maison_apres, 'apres'),
-          R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
-      } else if (k.startsWith('formatif-')) {
-        out.push({ fichier: `S${sq.numero}.${x.numero}_b_Contrat_formatif.pdf`, titre: `Contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
-          blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
-      }
-    }
-    return out;
   }
 
   try {
@@ -359,6 +275,106 @@ export async function pageFiches(zone, arg, ctx) {
   } catch (e) { erreur(e); throw e; }
 }
 
+
+// données communes aux documents d'une séquence (en-têtes des PDF)
+export async function contexteSequence(sq, ctx) {
+  const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
+  const [ref, seances, eleves] = await Promise.all([ctx.referentiel(), db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`), db.lire('eleves', `promotion_id=eq.${sq.promotion_id}`)]);
+  const actifs = eleves.filter((e) => !e.arret), app = actifs.filter((e) => e.statut === 'Apprenti').length;
+  const remplies = seances.filter((x) => x.titre || x.objectif_inter);
+  return { sq, m, ref, seances, actifs,
+    effectif: `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires)`,
+    profs: ctx.enseignantsDe(m.id).join(', ') || '—',
+    promo: ctx.promotions.find((p) => p.id === sq.promotion_id)?.libelle || '',
+    volume: `${remplies.length} séance(s) · ${heures(remplies.reduce((a, x) => a + (Number(x.duree) || 0), 0)) || '0 h'}` };
+}
+
+// contenu des documents (blocs mis en page par js/pdf.js)
+export async function modelesSequence(S, ctx, choisis) {
+  const { sq, m, ref, seances, actifs, effectif, profs, promo, volume } = S;
+  const d = await exportSequence(sq);
+  const elevesL = actifs.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
+  const dt = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR') : '');
+  const codes = (l, idx) => (l || []).map((c) => `${c}  ${idx[c]?.libelle || ''}`).join('\n');
+  const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
+  const pied = `${m.nom} · Séquence ${sq.numero} · Promotion ${promo}`;
+  const num = (n) => String(n).padStart(2, '0');
+  const maison = (o, cle) => (!o ? null : { t: 'cadre', couleur: cle === 'avant' ? '#E8893A' : '#3D84C6',
+    titre: cle === 'avant' ? 'Avant la séance : travail préparatoire à la maison (classe inversée)' : 'Après la séance : travail à la maison (devoirs)',
+    blocs: [{ t: 'infos', paires: [[cle === 'avant' ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree]] },
+      ...(cle === 'avant' ? [['objectif', 'Objectif du travail préparatoire'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['exploitation', 'Exploitation en classe']]
+        : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']]).map(([k, l]) => R(l, o[k]))] });
+  // contrat : critères (lignes) × élèves (colonnes), notes saisies, niveau par rubrique et note finale
+  const contrat = async (type, idObjet, titre, groupeLib) => {
+    const ct = (await db.lire('contrats', `type=eq.${type}&${type === 'sommatif' ? 'sequence_id' : 'seance_id'}=eq.${idObjet}`))[0];
+    const ks = ct ? (await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`)).filter((k) => k.actif) : [];
+    const nl = ks.length ? await db.lire('notes', `critere_id=in.(${ks.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
+    const notes = new Map(nl.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
+    const groupes = [...new Set(ks.map((k) => k.groupe))];
+    const finale = (e) => {
+      if (type === 'sommatif') { const ms = groupes.map((g) => moyenne(ks.filter((k) => k.groupe === g), notes, e.id)).filter((v) => v !== null); return ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null; }
+      return moyenne(ks, notes, e.id);
+    };
+    const lignes = [];
+    for (const g of groupes) {
+      lignes.push({ groupe: groupeLib(g) });
+      ks.filter((k) => k.groupe === g).forEach((k) => lignes.push([k.texte, arrondi(Number(k.coefficient)), ...elevesL.map((e) => notes.get(`${k.id}:${e.id}`) || '')]));
+      lignes.push({ fond: '#EFF1F0', cellules: ['Niveau (note / 5)', '', ...elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return n === null ? '' : niveau(n).code; })] });
+    }
+    lignes.push({ fond: '#D9DEDC', gras: true, cellules: ['NOTE FINALE / 20', '', ...elevesL.map((e) => { const f = finale(e); return f === null ? '' : arrondi(f * 4); })] });
+    return [{ t: 'titre', texte: `CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, sous: titre, couleur: m.couleur },
+      { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Date', dt(ct?.date_eval)], ['Forme', ct?.forme],
+        ['Lieu', ct?.lieu], ['Organisation', ct?.organisation], ['Durée', ct?.duree]] },
+      ks.length ? { t: 'table', taille: 7.5, teteVerticale: 2,
+        colonnes: [{ titre: type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères', part: 34 }, { titre: 'Coef.', part: 5.5, centre: true },
+          ...elevesL.map((e) => ({ titre: `${e.nom} ${e.prenom}`, part: Math.max(3, 62 / Math.max(1, elevesL.length)), centre: true }))], lignes }
+        : R('Critères', 'Contrat pas encore créé.'),
+      { t: 'note', texte: 'NA : non acquis (0 à moins de 2 / 5) · EVA : en voie d’acquisition (2 à moins de 4) · A : acquis (4 à 5) · NE : non évalué' }];
+  };
+  const out = [];
+  for (const [k, , x] of choisis) {
+    if (k === 'preparation') {
+      const p = d.preparation;
+      out.push({ fichier: `${num(0)}_Fiche_de_preparation_sequence_${sq.numero}.pdf`, titre: `Fiche de préparation · séquence ${sq.numero}`, pied, blocs: [
+        { t: 'titre', texte: 'FICHE DE PRÉPARATION DE SÉQUENCE', sous: `Séquence ${sq.numero} · ${sq.intitule || ''}`, couleur: m.couleur },
+        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Volume', volume]] },
+        R('Objectif principal', sq.objectif, { gras: true, gris: true }), R('Activités et tâches du référentiel visées', p.activites), R('Situation professionnelle / support', p.situation), R('Prérequis', p.prerequis),
+        { t: 'table', titre: 'Séances de la séquence', colonnes: [{ titre: 'N°', part: 5, gras: true }, { titre: 'Séance', part: 22, gras: true }, { titre: 'Durée', part: 7 },
+          { titre: 'Objectif intermédiaire', part: 34 }, { titre: 'Compétences', part: 14 }, { titre: 'Savoirs', part: 18 }],
+        lignes: seances.map((y) => [`${sq.numero}.${y.numero}`, y.titre, heures(y.duree == null ? null : Number(y.duree)), y.objectif_inter, (y.competences || []).join(' '), (y.savoirs || []).join(' ')]) },
+        R('Modalités d’évaluation', p.modalites), R('Ressources et supports', p.ressources), R('Bilan de la séquence', p.bilan)] });
+    } else if (k === 'sommatif') {
+      out.push({ fichier: `${num(1)}_Contrat_sommatif_sequence_${sq.numero}.pdf`, titre: `Contrat sommatif · séquence ${sq.numero}`, pied,
+        blocs: await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`) });
+    } else if (k.startsWith('seance-')) {
+      const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
+      const ids = (x.prerequis || []).map(Number);
+      const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
+      const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
+      const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
+      if (x.prerequis_texte) lPre.push(x.prerequis_texte);
+      out.push({ fichier: `S${sq.numero}.${x.numero}_a_Fiche_de_deroulement.pdf`, titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`, pied, blocs: [
+        { t: 'titre', texte: 'FICHE DE DÉROULEMENT DE SÉANCE', sous: `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: m.couleur },
+        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
+          ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
+        R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', x.cours, { gris: true }),
+        R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
+        lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
+        maison(f.maison_avant, 'avant'),
+        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true }, { titre: 'Activité proposée', part: 21 },
+          { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
+        lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
+        maison(f.maison_apres, 'apres'),
+        R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
+    } else if (k.startsWith('formatif-')) {
+      out.push({ fichier: `S${sq.numero}.${x.numero}_b_Contrat_formatif.pdf`, titre: `Contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
+        blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
+    }
+  }
+  return out;
+}
+
+
 // ------------------------------------------------------------------------------------- liste des séquences
 async function index(zone, ctx) {
   const sequences = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`);
@@ -369,6 +385,8 @@ async function index(zone, ctx) {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },
         h('div', { class: 'bandeau' }, h('h3', {}, m.nom)),
+        sq.length ? h('button', { class: 'btn petit classeur', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats', onclick: async () => {
+          const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF de la matière') : null,
         sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
           : h('p', { class: 'profs' }, 'Aucune séquence pour cette promotion.'));
     })));

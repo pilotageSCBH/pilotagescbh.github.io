@@ -43,6 +43,8 @@ export async function pageSequencage(zone, id, ctx) {
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
+          sequences.length ? h('button', { class: 'btn', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats de la matière', onclick: async () => {
+            const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF') : null,
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),
       sequences.map((s) => carteSequence(s, seances.filter((x) => x.sequence_id === s.id))),
