@@ -947,3 +947,26 @@ tr.vac-stage td:not(.col-sem) { background: #B5E0A0; }
 .groupe-docs legend { font-weight: 800; color: var(--fonce); font-size: 13px; padding: 0 4px; }
 .groupe-docs legend label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .choix-doc { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+/* ---------------------------------------------------------------- fiche élève et livret */
+.profil-carte.eleve { grid-template-columns: auto 1fr auto; margin-bottom: 18px; }
+.profil-carte.eleve .gris { margin: 6px 0 0; font-size: 13px; }
+.moy-eleve { display: flex; flex-direction: column; align-items: center; padding: 12px 22px; border-radius: 14px; min-width: 150px; }
+.moy-eleve span { font-size: 12px; font-weight: 700; color: var(--fonce); text-transform: uppercase; letter-spacing: .04em; }
+.moy-eleve strong { font-size: 34px; color: var(--fonce); line-height: 1.15; }
+.moy-eleve strong.faible { color: var(--rouge); }
+.moy-eleve small { color: #5B6764; }
+.resultats-eleve td.faible b, .liste td.faible b { color: var(--rouge); }
+.resultats-eleve td.st-ok { color: #2E6B0E; font-weight: 700; } .resultats-eleve td.st-non { color: #8E1C10; font-weight: 700; }
+.resultats-eleve td.appr { width: 45%; }
+.resultats-eleve td.appr textarea, .appr-generale textarea { width: 100%; min-height: 30px; }
+.appr-generale { margin-top: 12px; display: grid; gap: 6px; }
+.livret .categorie-livret { margin-top: 14px; border-left: 4px solid var(--teal); padding-left: 12px; }
+.livret .categorie-livret.transversale { border-left-color: #6B4FA0; }
+.livret h3 { margin: 4px 0 8px; color: var(--fonce); }
+.famille-livret { margin-bottom: 10px; }
+.titre-famille { background: var(--clair); padding: 5px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 4px; }
+.ligne-livret { display: grid; grid-template-columns: 62px 1fr 56px 170px; gap: 10px; align-items: center; padding: 4px 10px; border-bottom: 1px solid var(--ligne); font-size: 13px; }
+.ligne-livret .code { font-weight: 800; color: var(--fonce); }
+.ligne-livret .niv { text-align: center; font-weight: 800; border-radius: 6px; padding: 2px 0; }
+.ligne-livret .quand { font-size: 12px; }

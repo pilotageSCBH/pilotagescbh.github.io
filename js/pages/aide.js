@@ -51,6 +51,12 @@ const SECTIONS = [
     ['Coefficients et moyennes', "La ligne jaune « Coefficient » règle le poids de chaque contrat ou résultat (0 = non compté). Moyenne de la matière = moyenne pondérée ; moyenne générale = moyenne des matières pondérée par leurs coefficients (réglés par l'administrateur dans la vue « Toutes les matières »). En bas : moyenne de la classe, notes la plus basse et la plus haute."],
     ['Périodes', "Le menu choisit toute la formation, une année ou un semestre (septembre → janvier, février → juillet). Une évaluation sans date n'est comptée que dans « Toute la formation »."],
   ]],
+  ['eleve', 'Fiche élève et livret', [
+    ['La fiche', "Menu Suivi → « Fiche élève et livret ». Choisissez l'élève (◀ ▶ pour passer au précédent ou au suivant) et la période. La fiche reprend sa moyenne par matière comparée à celle de la classe, sa moyenne générale, le détail de ses notes et leur évolution."],
+    ['Appréciations', "Une appréciation par matière (rédigée par les enseignants de la matière) et une appréciation générale (tout enseignant). Elles s'enregistrent en quittant la case."],
+    ['Livret de compétences', "Pour chaque compétence C1 à C6, séparées en cœur de métier et transversales : le meilleur niveau obtenu dans les contrats sommatifs (A, EVA, NA ou NE), avec la date et la matière."],
+    ['PDF', "« PDF de l'élève » télécharge sa fiche et son livret (A4 portrait) ; « Toute la classe » télécharge un .zip contenant une fiche par élève."],
+  ]],
   ['couverture', 'Couvertures et synthèse', [
     ['Couvertures', "Pour chaque compétence (ou savoir) et chaque matière : cochez « Prévue » ; le nombre de séances qui la traitent est calculé d'après les séquençages. Vert = prévue et traitée, jaune = prévue sans séance, bleu = traitée sans être prévue. Le menu permet de n'afficher que les non couvertes."],
     ['Synthèse', "Toutes les séquences de toutes les matières sur une page, avec leurs séances et leur volume."],
@@ -80,7 +86,7 @@ const SECTIONS = [
   ]],
 ];
 
-const ICONES = { demarrer: '🚀', sequencage: '🧱', progression: '📅', fiches: '📝', validation: '✅', resultats: '📈', couverture: '🧩',
+const ICONES = { demarrer: '🚀', sequencage: '🧱', progression: '📅', fiches: '📝', validation: '✅', resultats: '📈', eleve: '🎓', couverture: '🧩',
   impressions: '🖨', admin: '🛡', historique: '🕘', questions: '❓' };
 const normaliser = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 

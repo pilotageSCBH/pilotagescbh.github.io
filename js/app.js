@@ -6,17 +6,18 @@ import { pageAccueil } from './pages/accueil.js';
 import { pageEquipe } from './pages/equipe.js';
 import { pageEleves } from './pages/eleves.js';
 import { pageReferentiel } from './pages/referentiel.js';
-import { pageSequencage } from './pages/sequencage.js?v=20261026a';
+import { pageSequencage } from './pages/sequencage.js';
 import { pageAdmin } from './pages/admin.js';
 import { pageCompte } from './pages/compte.js';
-import { pageProgression } from './pages/progression.js?v=20261026a';
-import { pageFiches } from './pages/fiches.js?v=20261026a';
+import { pageProgression } from './pages/progression.js';
+import { pageFiches } from './pages/fiches.js';
 import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';
-import { pageSynthese } from './pages/synthese.js?v=20261026a';
+import { pageSynthese } from './pages/synthese.js';
 import { pageHistorique } from './pages/historique.js';
 import { pageAide } from './pages/aide.js';
 import { pageResultats } from './pages/resultats.js';
+import { pageEleve } from './pages/eleve.js';
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';
@@ -36,22 +37,12 @@ export const ctx = {
   // séquençage et progression : seulement les enseignants de la matière (le rôle administrateur ne suffit pas)
   enseigne: (id) => ctx.peutEcrire() && (ctx.profil?.matieres || []).includes(Number(id)),
   maintenance: null,
-  // partage des contenus par matière (séquençage, fiches, contrats) ; sans réglage : partagé avec tous
-  partages: new Map(),
-  monEnseignant: () => ctx.enseignants.find((e) => e.profil_id && e.profil_id === ctx.profil?.id)?.id ?? null,
-  voit: (id) => {
-    if (ctx.estAdmin() || (ctx.profil?.matieres || []).includes(Number(id))) return true;
-    const p = ctx.partages.get(Number(id));
-    return !p || p.mode === 'tous' || (p.mode === 'choisis' && (p.lecteurs || []).map(Number).includes(Number(ctx.monEnseignant())));
-  },
   recharger: () => afficher(),
   async chargerBase() {
     const [matieres, enseignants, promo] = await Promise.all([
       db.lire('matieres', 'order=ordre'), db.lire('enseignants', 'order=ordre,nom'), db.lire('promotions', 'order=annee_debut'),
     ]);
     ctx.matieres = matieres; ctx.enseignants = enseignants; ctx.promotions = promo;
-    // réglages de partage (table créée par la mise à jour 14_partage.sql ; absente : tout reste partagé)
-    try { ctx.partages = new Map((await db.lire('partages')).map((p) => [Number(p.matiere_id), p])); } catch { ctx.partages = new Map(); }
     // promotion affichée : celle choisie la dernière fois sur ce poste, sinon celle qui commence cette année scolaire
     let choix = null;
     try { choix = Number(localStorage.getItem(CLE_PROMO)); } catch { /* sans stockage */ }
@@ -87,7 +78,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -242,6 +233,7 @@ function menu(route) {
     lien('#/fiches', 'Fiches et contrats', page === 'fiches'),
     lien('#/validation', 'Validation des compétences', page === 'validation'),
     lien('#/resultats', 'Résultats et moyennes', page === 'resultats'),
+    lien('#/eleve', 'Fiche élève et livret', page === 'eleve'),
     lien('#/synthese', 'Synthèse des séquençages', page === 'synthese'),
     lien('#/couverture/competences', 'Couverture des compétences', page === 'couverture' && arg !== 'savoirs'),
     lien('#/couverture/savoirs', 'Couverture des savoirs', page === 'couverture' && arg === 'savoirs'),
@@ -276,7 +268,7 @@ async function afficher() {
     await PAGES[r[0]](zone, r[1], ctx);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches',
-      validation: 'validation', resultats: 'resultats', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+      validation: 'validation', resultats: 'resultats', eleve: 'eleve', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
