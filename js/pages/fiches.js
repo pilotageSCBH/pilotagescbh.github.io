@@ -181,6 +181,44 @@ export async function pageFiches(zone, arg, ctx) {
         ['rendu', 'Modalités de rendu', 'Sur papier, dépôt sur l’ENT, par mail…'],
         ['correction', 'Correction / évaluation', 'Correction en classe, notation, critères…']] },
   };
+  // feuille élève d'un travail à la maison (A4 portrait) : téléchargée en PDF ou envoyée à l'imprimante
+  async function sortieMaison(x, cle, o, mode) {
+    try {
+      toast(mode === 'pdf' ? 'Préparation du PDF…' : 'Préparation de l’impression…');
+      const [{ chargerOutils, creerPDF }] = await Promise.all([import('../pdf.js')]);
+      await chargerOutils();
+      const logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
+      const avant = cle === 'avant', dt = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '');
+      const R = (titre, texte) => ({ t: 'rubrique', titre, texte });
+      const rub = avant ? [['objectif', 'Objectif'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources']]
+        : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']];
+      const liens = liensLibelles(o.ressources);
+      const doc = {
+        fichier: nomFichier(`${ctx.codeMat(m)}_S${sq.numero}.${x.numero}_${avant ? 'travail_preparatoire' : 'travail_a_la_maison'}.pdf`),
+        titre: `${avant ? 'Travail préparatoire' : 'Travail à la maison'} · séance ${sq.numero}.${x.numero}`,
+        pied: `${m.nom} · Séance ${sq.numero}.${x.numero} · Promotion ${promo}`,
+        blocs: [
+          { t: 'titre', texte: avant ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', sous: `${m.nom} · Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: avant ? '#E8893A' : '#3D84C6' },
+          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], [avant ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree], ['Promotion', promo], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`]] },
+          ...rub.flatMap(([k, l]) => [o[k] ? R(l, o[k]) : null, k === 'ressources' && liens.length ? { t: 'qr', liens } : null]).filter(Boolean),
+          { t: 'note', texte: liens.length ? 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' : '' },
+        ] };
+      const octets = await creerPDF(doc, logo);
+      const blob = new Blob([octets], { type: 'application/pdf' });
+      if (mode === 'pdf') { telecharger(doc.fichier, blob); toast('PDF téléchargé'); return; }
+      // impression : le PDF est chargé dans un cadre invisible puis envoyé à l'imprimante (imprimante du réseau ou « Enregistrer en PDF »)
+      const url = URL.createObjectURL(blob);
+      document.getElementById('cadre-impression')?.remove();
+      const ifr = h('iframe', { id: 'cadre-impression', src: url, style: { position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px', border: '0', opacity: '0' } });
+      ifr.onload = () => {
+        try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
+        catch { window.open(url, '_blank'); }               // navigateur qui refuse : le PDF s'ouvre dans un onglet, Ctrl+P pour imprimer
+      };
+      document.body.append(ifr);
+      setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+    } catch (e) { erreur(e); }
+  }
+
   // cadre « travail à la maison » de la fiche de déroulement (optionnel) : avant le tableau (classe inversée) ou après (devoirs)
   function cadreMaison(x, f, cle) {
     const C = CHAMPS_MAISON[cle];
@@ -196,6 +234,9 @@ export async function pageFiches(zone, arg, ctx) {
       const enreg = (k) => async (v) => { o[k] = v; await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: o }], 'seance_id'); };
       vider(zoneC, h('section', { class: 'cadre-maison ' + cle },
         h('div', { class: 'tete-maison' }, h('h3', {}, C.titre),
+          h('span', { class: 'actions-maison ecran' },
+            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer ce travail seul (feuille A4 à distribuer aux élèves)', onclick: () => sortieMaison(x, cle, o, 'imprimer') }, '🖶  Imprimer'),
+            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger ce travail seul en PDF (A4)', onclick: () => sortieMaison(x, cle, o, 'pdf') }, '⬇  PDF')),
           modif ? h('button', { class: 'lien petit ecran', type: 'button', onclick: async () => {
             if (!(await confirmer('Retirer le cadre', 'Retirer ce travail à la maison et son contenu ? (« Annuler » permet de revenir en arrière.)', 'Retirer'))) return;
             try { await db.enregistrer('fiches_seance', [{ seance_id: x.id, [C.col]: null }], 'seance_id'); f[C.col] = null; dessinerC(); } catch (e) { erreur(e); }

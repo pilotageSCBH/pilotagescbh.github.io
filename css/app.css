@@ -1179,3 +1179,5 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .form-qr { display: grid; grid-template-columns: 1fr 130px; gap: 16px; align-items: start; }
 .form-qr label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .qr-apercu { width: 130px; height: 130px; border: 1px solid var(--ligne); border-radius: 10px; display: grid; place-items: center; text-align: center; font-size: 11px; padding: 6px; }
+.tete-maison h3 { flex: 1; }
+.actions-maison { display: flex; gap: 6px; margin-right: 12px; }
