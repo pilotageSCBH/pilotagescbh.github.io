@@ -207,8 +207,38 @@ export async function pageFiches(zone, arg, ctx) {
           if (k !== 'ressources') return zoneTexte(lib, o[k], enreg(k), aide);
           // ressources : les liens repris avec leur adresse et un QR code (accès direct depuis un téléphone)
           const zqr = h('div', { class: 'qr-liens' });
-          const majQR = (t) => vider(zqr, liensLibelles(t).map(({ url, lib }) => h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' },
-            lib ? h('b', {}, lib) : null, qrSVG(url, 96), h('span', {}, url))));
+          const majQR = (t) => vider(zqr, liensLibelles(t).map(({ url, lib }) => h('div', { class: 'qr-carte' },
+            h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' }, lib ? h('b', {}, lib) : null, qrSVG(url, 96), h('span', {}, url)),
+            modif ? h('button', { class: 'qr-retirer ecran', type: 'button', title: 'Retirer ce lien des ressources', onclick: () => retirerLien(url) }, '✖') : null)),
+          modif ? h('button', { class: 'qr-ajout ecran', type: 'button', onclick: ajouterLien }, h('span', { class: 'plus' }, '＋'), 'Ajouter un lien', h('small', {}, 'avec son QR code')) : null);
+          // ajout d'un lien (titre + adresse) : une ligne « Titre : adresse » dans les ressources
+          async function ajouterLien() {
+            const titre = h('input', { class: 'champ', placeholder: 'ex. Vidéo de présentation' });
+            const adr = h('input', { class: 'champ', type: 'url', placeholder: 'https://…' });
+            const apercu = h('div', { class: 'qr-apercu' });
+            adr.addEventListener('input', () => { const u = liensLibelles(adr.value.trim())[0]?.url; vider(apercu, u ? qrSVG(u, 110) : h('span', { class: 'gris' }, 'Le QR code apparaît ici')); });
+            vider(apercu, h('span', { class: 'gris' }, 'Le QR code apparaît ici'));
+            const r = await fenetre('Ajouter un lien et son QR code', h('div', { class: 'formulaire form-qr' },
+              h('div', {}, h('label', {}, 'Titre (facultatif)', titre), h('label', {}, 'Adresse du lien', adr),
+                h('p', { class: 'aide' }, 'Collez l’adresse complète (vidéo, document de l’ENT, site…). Le lien est ajouté aux ressources avec son QR code, à l’écran et dans le PDF.')), apercu),
+            [{ texte: 'Annuler', valeur: null }, { texte: '＋  Ajouter', classe: 'principal', action: () => {
+              let u = adr.value.trim();
+              if (u && !/^(https?:\/\/|www\.)/i.test(u)) u = 'https://' + u;
+              if (!liensLibelles(u).length) throw new Error('Adresse invalide : elle doit commencer par https://, http:// ou www.');
+              return { u, t: titre.value.trim().replace(/:$/, '') };
+            } }]);
+            if (!r) return;
+            const v = String(o[k] || '').replace(/\s+$/, '');
+            await enreg(k)((v ? v + '\n' : '') + (r.t ? `${r.t} : ` : '') + r.u);
+            dessinerC();
+          }
+          async function retirerLien(url) {
+            if (!(await confirmer('Retirer le lien', `Retirer ce lien (et son QR code) des ressources ?\n${url}`, 'Retirer'))) return;
+            const court = url.replace(/^https:\/\/(?=www\.)/i, '');
+            const lignes = String(o[k] || '').split('\n').filter((l) => !(l.includes(url) || l.includes(court)));
+            await enreg(k)(lignes.join('\n'));
+            dessinerC();
+          }
           majQR(o[k]);
           const z = zoneTexte(lib, o[k], async (v) => { await enreg(k)(v); majQR(v); }, aide);
           z.append(zqr); z.classList.add('pleine');
