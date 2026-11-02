@@ -1278,3 +1278,11 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .legende-barres i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
 @media (max-width: 1100px) { .graphiques-val { grid-template-columns: 1fr; } .ligne-bilan { grid-template-columns: 1fr; } }
 @media print { .barre-niv, .seg-a, .seg-eva, .seg-na, .jauge-ev i { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+/* bouton « revenir à la page précédente » : toujours en bas à gauche de la page */
+.retour-flottant { position: fixed; left: calc(264px + 24px); bottom: 22px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 20px 0 14px;
+  border-radius: 23px; border: 0; background: var(--fonce); color: #fff; font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.retour-flottant .fleche { width: 28px; height: 28px; border-radius: 50%; background: #C9E265; color: var(--fonce); display: grid; place-items: center; font-size: 17px; }
+.retour-flottant:hover { background: var(--teal); }
+.cadre.menu-reduit .retour-flottant { left: calc(66px + 24px); }
+.contenu { padding-bottom: 90px; }
+@media (max-width: 900px) { .retour-flottant { left: 16px; } }

@@ -364,6 +364,7 @@ async function afficher() {
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
+    if (n === rendu) zone.append(boutonRetour());
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
       h('button', { class: 'btn', onclick: afficher }, 'Réessayer')));
@@ -420,6 +421,18 @@ async function demarrer() {
   }
 }
 
+// « Revenir à la page précédente » : profondeur de navigation dans l'application (pour ne jamais quitter le site)
+const CLE_PROF = 'pilotage-scbh-profondeur';
+let enRetour = false;
+const profondeur = () => { try { return Number(sessionStorage.getItem(CLE_PROF)) || 0; } catch { return 0; } };
+const fixerProfondeur = (n) => { try { sessionStorage.setItem(CLE_PROF, String(Math.max(0, n))); } catch { /* sans stockage */ } };
+window.addEventListener('hashchange', () => { fixerProfondeur(profondeur() + (enRetour ? -1 : 1)); enRetour = false; });
+function boutonRetour() {
+  const possible = profondeur() > 0;
+  return h('button', { class: 'retour-flottant ecran', type: 'button', title: possible ? 'Revenir à la page précédente' : 'Revenir au tableau de bord',
+    onclick: () => { if (profondeur() > 0) { enRetour = true; history.back(); } else location.hash = '#/accueil'; } },
+  h('span', { class: 'fleche' }, '←'), possible ? 'Page précédente' : 'Tableau de bord');
+}
 window.addEventListener('hashchange', afficher);
 window.addEventListener(SESSION_EXPIREE, () => { ctx.profil = null; ecranConnexion('Votre session a expiré : reconnectez-vous.'); });
 window.addEventListener('unhandledrejection', (e) => erreur(e.reason));
