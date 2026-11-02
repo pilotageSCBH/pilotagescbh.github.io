@@ -244,14 +244,14 @@ function menu(route) {
       actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })).concat(
       { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' }) },
     { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
-      { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
-      { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
-      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
+      { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' }] },
     { cle: 'evaluer', titre: 'Évaluation', icone: '✅', items: [
+      { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
+      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' },
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
       { href: '#/eleve', icone: '🪪', texte: 'Fiche élève et livret', actif: page === 'eleve' }] },
-    { cle: 'bilans', titre: 'Bilans', icone: '📊', items: [
+    { cle: 'bilans', titre: 'Couverture référentiel', icone: '📊', items: [
       { href: '#/couverture/competences', icone: '🧩', texte: 'Couverture des compétences', actif: page === 'couverture' && arg !== 'savoirs' },
       { href: '#/couverture/savoirs', icone: '📚', texte: 'Couverture des savoirs', actif: page === 'couverture' && arg === 'savoirs' }] },
     { cle: 'referentiel', titre: 'Référentiel', icone: '📖', items: [
