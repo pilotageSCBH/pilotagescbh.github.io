@@ -45,6 +45,7 @@ const SECTIONS = [
   ['validation', 'Validation des compétences', [
     ['Cœur de métier et transversales', "Les compétences C1 à C4 sont les compétences cœur de métier ; à partir de C5-1 (C5 et C6), ce sont les compétences transversales. Les deux catégories sont séparées dans le tableau de validation (bandeau violet pour les transversales), dans la couverture des compétences, dans les graphiques et sur le tableau de bord."],
     ['Le tableau', "Élèves × compétences, rempli à partir des contrats sommatifs de toutes les matières. Si une compétence est évaluée plusieurs fois, la meilleure évaluation est retenue (à égalité, la plus récente). Chaque case indique le niveau, la date du contrat et la matière."],
+    ['Graphiques', "Sous le tableau : « Bilan de la promotion » (pour le cœur de métier et les transversales, le nombre de compétences déjà évaluées puis la répartition A / EVA / NA des résultats), « Résultats par famille » (une barre par famille C1-1, C1-2…) et « Résultats par élève » (classés du meilleur taux d'acquisition au plus faible, % acquis à droite). Les compétences non évaluées ne comptent pas dans les pourcentages."],
   ]],
   ['resultats', 'Résultats et moyennes', [
     ['Ce qui est automatique', "Chaque contrat sommatif donne une note / 20 par élève (moyenne des niveaux des compétences × 4), reprise automatiquement dans la colonne « Contrat séq. … » de la matière."],

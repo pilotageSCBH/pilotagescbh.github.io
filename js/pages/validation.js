@@ -4,7 +4,6 @@
 import { db } from '../api.js';
 import { h, vider, imprimer } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
-import { anneau, empileH, carteGraph } from '../graphiques.js';
 
 const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
 
@@ -68,23 +67,53 @@ export async function pageValidation(zone, _arg, ctx) {
     eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'),
     eleves.length ? graphiques() : null);
 
-  // niveaux : effectifs par élève et par famille de compétences
+  // graphiques : seules les compétences réellement évaluées comptent dans les répartitions (les non évaluées sont à part)
   function graphiques() {
-    const SERIES = [{ nom: 'Acquis (A)', couleur: 'var(--g-a)' }, { nom: 'En voie (EVA)', couleur: 'var(--g-eva)' }, { nom: 'Non acquis (NA)', couleur: 'var(--g-na)' }, { nom: 'Non évaluée', couleur: 'var(--g-ne)' }];
+    const NIV = [['A', 'Acquis', 'a'], ['EVA', 'En voie', 'eva'], ['NA', 'Non acquis', 'na']];
     const compte = (es, cs) => {
-      const r = [0, 0, 0, 0];
-      for (const e of es) for (const c of cs) { const b = best.get(`${e.id}:${c.code}`); const k = b ? ['A', 'EVA', 'NA'].indexOf(niveau(b.n).code) : 3; r[k]++; }
+      const r = { A: 0, EVA: 0, NA: 0, NE: 0 };
+      for (const e of es) for (const c of cs) { const b = best.get(`${e.id}:${c.code}`); r[b ? niveau(b.n).code : 'NE']++; }
       return r;
     };
-    const parts = [['Compétences cœur de métier', 'C1 à C4', comps.filter((c) => !ctx.transversale(c.code))],
-      ['Compétences transversales', 'C5 et C6', comps.filter((c) => ctx.transversale(c.code))]];
-    return h('section', { class: 'graphiques ecran-et-impression' },
-      parts.map(([titre, codes, cs]) => { const t = compte(eleves, cs);
-        return carteGraph(titre, `${codes} · bilan de la promotion (${cs.length} compétences × ${eleves.length} élèves)`, anneau(SERIES.map((x, i) => ({ ...x, valeur: t[i] })),
-          { centre: `${Math.round((t[0] / Math.max(1, t.reduce((a, b) => a + b, 0))) * 100)} %`, sous: 'acquises' })); }),
-      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par famille`, `${codes} · répartition des niveaux (tous élèves)`,
-        empileH([...new Set(cs.map((c) => c.famille))].map((f) => ({ label: f, valeurs: compte(eleves, cs.filter((c) => c.famille === f)) })), SERIES, { pourcent: true }))),
-      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par élève`, `${codes} · nombre de compétences à chaque niveau`,
-        empileH(eleves.map((e) => ({ label: `${e.nom} ${e.prenom}`, valeurs: compte([e], cs) })), SERIES))));
+    // barre 100 % A / EVA / NA avec les pourcentages écrits dans la barre
+    const barre = (r, titre = '') => {
+      const t = r.A + r.EVA + r.NA;
+      if (!t) return h('div', { class: 'barre-niv vide' }, 'non évaluée');
+      return h('div', { class: 'barre-niv', title: titre || `A ${r.A} · EVA ${r.EVA} · NA ${r.NA}` }, NIV.map(([k, lib, cl]) => {
+        const p = Math.round((r[k] / t) * 100);
+        return r[k] ? h('span', { class: 'seg seg-' + cl, style: { flex: r[k] }, title: `${lib} : ${r[k]} (${p} %)` }, p >= 8 ? `${p} %` : '') : null;
+      }));
+    };
+    const pcA = (r) => { const t = r.A + r.EVA + r.NA; return t ? Math.round((r.A / t) * 100) : null; };
+    const parts = [['Cœur de métier', 'C1 à C4', comps.filter((c) => !ctx.transversale(c.code)), ''], ['Transversales', 'C5 et C6', comps.filter((c) => ctx.transversale(c.code)), 'trans']];
+    const legendeNiv = h('div', { class: 'legende-barres' }, NIV.map(([k, lib, cl]) => h('span', {}, h('i', { class: 'seg-' + cl }), `${lib} (${k})`)), h('span', { class: 'gris' }, 'Les compétences non évaluées ne sont pas comptées dans les pourcentages.'));
+
+    return h('section', { class: 'graphiques-val ecran-et-impression' },
+      // 1. bilan de la promotion
+      h('article', { class: 'carte-val large' }, h('h3', {}, 'Bilan de la promotion'),
+        h('p', { class: 'sous' }, 'Pour chaque catégorie : combien de compétences ont déjà été évaluées, puis comment se répartissent les résultats obtenus.'),
+        parts.map(([titre, codes, cs, cl]) => {
+          const r = compte(eleves, cs), ev = cs.filter((c) => eleves.some((e) => best.has(`${e.id}:${c.code}`))).length;
+          return h('div', { class: 'ligne-bilan ' + cl },
+            h('div', { class: 'lib' }, h('b', {}, titre), h('small', {}, codes)),
+            h('div', { class: 'avance' }, h('div', { class: 'jauge-ev' }, h('i', { style: { width: (cs.length ? (ev / cs.length) * 100 : 0) + '%' } })),
+              h('small', {}, `${ev} / ${cs.length} compétences évaluées`)),
+            h('div', { class: 'resultat' }, barre(r), h('small', {}, `${r.A + r.EVA + r.NA} résultat(s) · ${pcA(r) ?? 0} % acquis`)));
+        }), legendeNiv),
+      // 2. par famille
+      h('article', { class: 'carte-val' }, h('h3', {}, 'Résultats par famille de compétences'),
+        h('p', { class: 'sous' }, 'Répartition des niveaux obtenus par toute la classe dans chaque famille. Plus la barre est verte, mieux la famille est acquise.'),
+        parts.map(([titre, , cs, cl]) => [h('div', { class: 'sous-titre-val ' + cl }, titre),
+          [...new Set(cs.map((c) => c.famille))].map((f) => {
+            const cf = cs.filter((c) => c.famille === f), r = compte(eleves, cf);
+            return h('div', { class: 'ligne-barre' }, h('span', { class: 'lib', title: cf[0]?.famille_libelle || '' }, f), barre(r, `${f} · ${cf[0]?.famille_libelle || ''}`),
+              h('span', { class: 'val' }, pcA(r) === null ? '—' : `${pcA(r)} %`));
+          })])),
+      // 3. par élève
+      h('article', { class: 'carte-val' }, h('h3', {}, 'Résultats par élève'),
+        h('p', { class: 'sous' }, 'Répartition des niveaux de chaque élève sur les compétences évaluées, du meilleur taux d’acquisition au plus faible. À droite : % de compétences acquises.'),
+        eleves.map((e) => ({ e, r: compte([e], comps) })).sort((a, b) => (pcA(b.r) ?? -1) - (pcA(a.r) ?? -1)).map(({ e, r }) =>
+          h('div', { class: 'ligne-barre' }, h('span', { class: 'lib eleve' }, h('b', {}, e.nom), ' ', e.prenom), barre(r, `${e.nom} ${e.prenom} · A ${r.A} · EVA ${r.EVA} · NA ${r.NA} · non évaluées ${r.NE}`),
+            h('span', { class: 'val' }, pcA(r) === null ? '—' : `${pcA(r)} %`)))));
   }
 }
