@@ -75,7 +75,7 @@ export async function pageSemaine(zone, arg, ctx) {
             x ? h('h3', {}, x.titre || 'Séance sans titre') : h('h3', {}, c.texte),
             x?.objectif_inter ? h('p', {}, resume(x.objectif_inter, 220)) : null,
             c.note ? h('p', { class: 'note-sem' }, '🗒  ' + c.note) : null,
-            x ? h('div', { class: 'liens' }, h('a', { href: lienFiche(x) }, '▶ Fiche de déroulement'), h('a', { href: `#/fiches/${x.seq.id}:formatif-${x.id}` }, '▶ Contrat formatif'),
+            x ? h('div', { class: 'liens' }, h('a', { href: lienFiche(x) }, '▶ Fiche de déroulement'), h('a', { href: `#/fiches/${x.seq.id}:formatif-${x.id}` }, '▶ Fiche contrat formatif'),
               h('a', { href: '#/progression/' + m.id }, '▶ Progression')) : null))
             : h('p', { class: 'vide' }, sem.vacances ? 'Pas de cours cette semaine.' : 'Aucune séance placée dans la progression cette semaine.')),
         notesASaisir()), h('div', { class: 'col-semaine' },

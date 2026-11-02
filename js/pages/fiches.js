@@ -39,15 +39,21 @@ export async function pageFiches(zone, arg, ctx) {
   const lien = (o) => `#/fiches/${sq.id}:${o}`;
   const RE_SEANCE = /^(seance|formatif|avant|apres)-/;
   const idSeance = RE_SEANCE.test(onglet) ? onglet.split('-')[1] : null;
-  // sous-onglets d'une séance : travail avant (option), déroulement, travail après (option), contrat formatif
+  // trois onglets : fiche de préparation · fiches de déroulement (une par séance) · fiches contrats (sommatif + formatifs)
+  const groupe = onglet === 'preparation' || !onglet ? 'preparation' : onglet.startsWith('seance-') || onglet.startsWith('avant-') || onglet.startsWith('apres-') ? 'deroulement' : 'contrats';
+  const premiereSeance = seances[0] ? `seance-${seances[0].id}` : 'preparation';
   const sousOnglets = () => {
-    const tab = (k, t) => h('a', { href: lien(`${k}-${idSeance}`), class: onglet.startsWith(k + '-') ? 'actif' : '' }, t);
-    return h('nav', { class: 'sous-onglets ecran' }, tab('seance', '📝  Fiche de déroulement'), tab('formatif', '✅  Contrat d’évaluation formative'));
+    const tab = (k, t, titre = '') => h('a', { href: lien(k), class: k === onglet ? 'actif' : '', title: titre }, t);
+    if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, `Séance ${sq.numero}.${x.numero}`, x.titre || '')));
+    if (groupe === 'contrats') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiche contrat sommatif :'), tab('sommatif', `Séquence ${sq.numero}`),
+      h('span', { class: 'lib-sous sep' }, 'Fiches contrats formatifs :'),
+      seances.map((x) => tab(`formatif-${x.id}`, `Séance ${sq.numero}.${x.numero}`, `Fiche contrat formatif · séance ${sq.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''}`)));
+    return null;
   };
 
   // ------------------------------------------------------------------------------------- en-tête et onglets
-  const onglets = [['preparation', 'Préparation de séquence'], ['sommatif', 'Contrat sommatif'],
-    ...seances.map((x) => [`seance-${x.id}`, `Séance ${sq.numero}.${x.numero}`])];
+  const onglets = [['preparation', '📋  Fiche de préparation', 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
+    ['sommatif', `✅  Fiches contrats (${seances.length + 1})`, 'contrats']];
   vider(zone,
     h('header', { class: 'entete-page ecran' },
       h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`),
@@ -59,9 +65,8 @@ export async function pageFiches(zone, arg, ctx) {
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('button', { class: 'btn', onclick: () => menuTelecharger() }, '⬇  Télécharger'),
         h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
-    h('nav', { class: 'onglets ecran' }, onglets.map(([k, t]) => h('a', { href: lien(k), class: k === onglet || k === onglet.replace(/^(formatif|avant|apres)-/, 'seance-') ? 'actif' : '' }, t))),
-    // séance : travail avant (option), fiche de déroulement, travail après (option), contrat formatif
-    idSeance ? sousOnglets() : null,
+    h('nav', { class: 'onglets ecran' }, onglets.map(([k, t, g]) => h('a', { href: lien(k), class: g === groupe ? 'actif' : '' }, t))),
+    sousOnglets(),
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
     h('div', { id: 'fiche' }, h('div', { class: 'chargement' }, 'Chargement…')));
   const fiche = zone.querySelector('#fiche');
@@ -103,7 +108,7 @@ export async function pageFiches(zone, arg, ctx) {
   async function sommatif() {
     const corps = h('div', {});
     vider(fiche, h('article', { class: 'feuille large' },
-      entete('CONTRAT · ÉVALUATION SOMMATIVE', `Séquence ${sq.numero} · ${sq.intitule || ''}`),
+      entete('FICHE CONTRAT SOMMATIF', `Séquence ${sq.numero} · ${sq.intitule || ''}`),
       h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
       h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif principal'), h('p', { class: 'fort' }, sq.objectif || '—')), corps));
     await dessinerContrat(corps, { type: 'sommatif', id: sq.id, modif, ctx,
@@ -162,7 +167,7 @@ export async function pageFiches(zone, arg, ctx) {
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
-      h('p', { class: 'aide ecran' }, 'Le contrat d’évaluation formative de cette séance est dans l’onglet « Contrat d’évaluation formative » ci-dessus.'));
+      h('p', { class: 'aide ecran' }, 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
     dessinerPhases();
     ajusterTout(fiche);
   }
@@ -297,7 +302,7 @@ export async function pageFiches(zone, arg, ctx) {
     const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
     vider(fiche,
       h('article', { class: 'feuille large' },
-        entete('CONTRAT · ÉVALUATION FORMATIVE', titre),
+        entete('FICHE CONTRAT FORMATIF', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire évalué'), h('p', { class: 'fort' }, x.objectif_inter || '—')), corps));
     await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }) });
@@ -306,8 +311,8 @@ export async function pageFiches(zone, arg, ctx) {
   // ------------------------------------------------------------------------------------- téléchargement (PDF A4 portrait dans un .zip)
   // choix des documents : préparation et contrat sommatif de la séquence, fiche de déroulement et contrat formatif de chaque séance
   async function menuTelecharger() {
-    const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Contrat d’évaluation sommative', null],
-      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Contrat d’évaluation formative`, x]])];
+    const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Fiche contrat sommatif', null],
+      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
     const coche = (k) => (idSeance ? k.endsWith('-' + idSeance) : true);
     const cases = new Map(docs.map(([k]) => [k, h('input', { type: 'checkbox', checked: coche(k) })]));
     const compte = h('b', {});
@@ -321,12 +326,12 @@ export async function pageFiches(zone, arg, ctx) {
       h('div', { class: 'ligne-com' }, compte, h('span', {},
         h('button', { class: 'lien petit', type: 'button', onclick: () => tous(true) }, 'tout cocher'), '  ·  ',
         h('button', { class: 'lien petit', type: 'button', onclick: () => tous(false) }, 'tout décocher'))),
-      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Contrat d’évaluation sommative')),
+      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Fiche contrat sommatif')),
       seances.map((x) => h('fieldset', { class: 'groupe-docs' + (String(x.id) === idSeance ? ' courante' : '') },
         h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
           cases.get(`seance-${x.id}`).checked = e.target.checked; cases.get(`formatif-${x.id}`).checked = e.target.checked; majCompte(); } }),
         `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
-        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Contrat d’évaluation formative')))),
+        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
     [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
       if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
       return true;
@@ -404,7 +409,7 @@ export async function modelesSequence(S, ctx, choisis) {
       lignes.push({ fond: '#EFF1F0', cellules: ['Niveau (note / 5)', '', ...elevesL.map((e) => { const n = moyenne(ks.filter((k) => k.groupe === g), notes, e.id); return n === null ? '' : niveau(n).code; })] });
     }
     lignes.push({ fond: '#D9DEDC', gras: true, cellules: ['NOTE FINALE / 20', '', ...elevesL.map((e) => { const f = finale(e); return f === null ? '' : arrondi(f * 4); })] });
-    return [{ t: 'titre', texte: `CONTRAT · ÉVALUATION ${type === 'sommatif' ? 'SOMMATIVE' : 'FORMATIVE'}`, sous: titre, couleur: m.couleur },
+    return [{ t: 'titre', texte: `FICHE CONTRAT ${type === 'sommatif' ? 'SOMMATIF' : 'FORMATIF'}`, sous: titre, couleur: m.couleur },
       { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Date', dt(ct?.date_eval)], ['Forme', ct?.forme],
         ['Lieu', ct?.lieu], ['Organisation', ct?.organisation], ['Durée', ct?.duree]] },
       ks.length ? { t: 'table', taille: 7.5, teteVerticale: 2,
@@ -426,7 +431,7 @@ export async function modelesSequence(S, ctx, choisis) {
         lignes: seances.map((y) => [`${sq.numero}.${y.numero}`, y.titre, heures(y.duree == null ? null : Number(y.duree)), y.objectif_inter, (y.competences || []).join(' '), (y.savoirs || []).join(' ')]) },
         R('Modalités d’évaluation', p.modalites), R('Ressources et supports', p.ressources), R('Bilan de la séquence', p.bilan)] });
     } else if (k === 'sommatif') {
-      out.push({ fichier: `${num(1)}_Contrat_sommatif_sequence_${sq.numero}.pdf`, titre: `Contrat sommatif · séquence ${sq.numero}`, pied,
+      out.push({ fichier: `${num(1)}_Fiche_contrat_sommatif_sequence_${sq.numero}.pdf`, titre: `Fiche contrat sommatif · séquence ${sq.numero}`, pied,
         blocs: await contrat('sommatif', sq.id, `Séquence ${sq.numero} · ${sq.intitule || ''}`, (g) => `${g} · ${ref.comp[g]?.libelle || ''}`) });
     } else if (k.startsWith('seance-')) {
       const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
@@ -449,7 +454,7 @@ export async function modelesSequence(S, ctx, choisis) {
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
     } else if (k.startsWith('formatif-')) {
-      out.push({ fichier: `S${sq.numero}.${x.numero}_b_Contrat_formatif.pdf`, titre: `Contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
+      out.push({ fichier: `S${sq.numero}.${x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
         blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
     }
   }

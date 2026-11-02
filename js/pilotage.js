@@ -86,7 +86,7 @@ export function listeEvaluations(D, ctx) {
     if (!s) continue;
     const m = ctx.matieres.find((y) => y.id === s.matiere_id);
     l.push({ type: c.type, id: c.id, date: c.date_eval, mat: m, notee: c.type === 'sommatif' ? D.noteesContrats.has(c.id) : null,
-      titre: c.type === 'sommatif' ? `Contrat sommatif · séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}` : `Contrat formatif · séance ${s.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''}`,
+      titre: c.type === 'sommatif' ? `Fiche contrat sommatif · séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}` : `Fiche contrat formatif · séance ${s.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''}`,
       lien: c.type === 'sommatif' ? `#/fiches/${s.id}:sommatif` : `#/fiches/${s.id}:formatif-${x.id}`, forme: c.forme });
   }
   for (const v of D.evaluations) {

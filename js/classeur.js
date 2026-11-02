@@ -7,7 +7,7 @@ import { contexteSequence, modelesSequence } from './pages/fiches.js';
 import { telecharger, nomFichier } from './echange.js';
 
 const PARTIES = [['sequencage', 'Séquençage de la matière (toutes les séquences et séances)'], ['preparation', 'Fiches de préparation de séquence'],
-  ['sommatif', 'Contrats d’évaluation sommative'], ['seance', 'Fiches de déroulement de séance (avec le travail à la maison)'], ['formatif', 'Contrats d’évaluation formative']];
+  ['sommatif', 'Fiches contrats sommatifs'], ['seance', 'Fiches de déroulement de séance (avec le travail à la maison)'], ['formatif', 'Fiches contrats formatifs']];
 
 // fenêtre de choix puis fabrication du classeur
 export async function telechargerClasseur(m, ctx) {
@@ -67,8 +67,8 @@ async function fabriquer(m, ctx, sequences, parties, logo) {
     if (!choix.length) continue;
     const modeles = await modelesSequence(S, ctx, choix);
     const groupe = `Séquence ${S.sq.numero} · ${S.sq.intitule || 'sans intitulé'}`;
-    const nom = ([k, , x]) => (k === 'preparation' ? 'Fiche de préparation de séquence' : k === 'sommatif' ? 'Contrat d’évaluation sommative'
-      : `Séance ${S.sq.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''} : ${k.startsWith('seance-') ? 'fiche de déroulement' : 'contrat formatif'}`);
+    const nom = ([k, , x]) => (k === 'preparation' ? 'Fiche de préparation de séquence' : k === 'sommatif' ? 'Fiche contrat sommatif'
+      : `Séance ${S.sq.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''} : ${k.startsWith('seance-') ? 'fiche de déroulement' : 'fiche contrat formatif'}`);
     modeles.forEach((d, i) => docs.push({ titre: nom(choix[i]), groupe, doc: { ...d, pied } }));
   }
   const contenus = [];

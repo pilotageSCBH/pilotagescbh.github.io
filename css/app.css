@@ -1198,3 +1198,5 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .corps-rubrique .lien-menu.actif::before { left: -13px; }
 .menu.reduit .rubrique-menu .corps-rubrique { margin: 0; padding: 0; border: 0; }
 .menu.reduit .titre-menu { box-shadow: none; background: none; }
+.sous-onglets .lib-sous { align-self: center; font-size: 12px; font-weight: 800; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
+.sous-onglets .lib-sous.sep { margin-left: 14px; padding-left: 14px; border-left: 2px solid var(--ligne); }
