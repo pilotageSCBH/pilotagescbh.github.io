@@ -44,9 +44,7 @@ const SECTIONS = [
   ]],
   ['validation', 'Validation des compétences', [
     ['Cœur de métier et transversales', "Les compétences C1 à C4 sont les compétences cœur de métier ; à partir de C5-1 (C5 et C6), ce sont les compétences transversales. Les deux catégories sont séparées dans le tableau de validation (bandeau violet pour les transversales), dans la couverture des compétences, dans les graphiques et sur le tableau de bord."],
-    ['Le tableau', "Élèves × compétences, rempli à partir des fiches contrats sommatifs de toutes les matières. Si une compétence est évaluée plusieurs fois, la meilleure évaluation est retenue (à égalité, la plus récente). Chaque case colorée indique le niveau (A vert, EVA orange, NA rouge), la date et la matière ; une case vide = non évaluée. À droite : le nombre de A, EVA, NA de l'élève et son % de compétences acquises parmi celles évaluées."],
-    ['Filtres et chiffres clés', "En haut : nombre de compétences déjà évaluées, et part des résultats en A, EVA et NA. Les boutons affichent toutes les compétences, le cœur de métier (C1 à C4) ou les transversales (C5, C6). Par défaut seules les compétences déjà évaluées sont en colonnes ; cochez « Afficher aussi les compétences jamais évaluées » pour voir tout le référentiel."],
-    ['Graphiques', "« Résultats par famille » : pour chaque famille (C1-1, C1-2…), la répartition A / EVA / NA des évaluations réalisées (les non évaluées ne comptent pas). « Résultats par élève » : le nombre de compétences de chaque niveau, les élèves étant classés du meilleur taux d'acquisition au plus faible."],
+    ['Le tableau', "Élèves × compétences, rempli à partir des contrats sommatifs de toutes les matières. Si une compétence est évaluée plusieurs fois, la meilleure évaluation est retenue (à égalité, la plus récente). Chaque case indique le niveau, la date du contrat et la matière."],
   ]],
   ['resultats', 'Résultats et moyennes', [
     ['Ce qui est automatique', "Chaque contrat sommatif donne une note / 20 par élève (moyenne des niveaux des compétences × 4), reprise automatiquement dans la colonne « Contrat séq. … » de la matière."],
