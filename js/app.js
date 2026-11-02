@@ -241,19 +241,19 @@ function menu(route) {
       { href: '#/equipe', icone: '👥', texte: 'Matières et équipe', actif: page === 'equipe' },
       { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' }] },
     { cle: 'sequencages', titre: 'Séquençages', icone: '🧱', items: ctx.matieres.map((m) => ({ href: '#/sequencage/' + m.id, texte: m.nom, pastille: m.couleur,
-      actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })) },
-    { cle: 'planifier', titre: 'Planifier', icone: '📅', items: [
+      actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })).concat(
+      { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' }) },
+    { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
       { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
       { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
       { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' },
       { href: '#/alertes', icone: '⚠️', texte: 'Alertes de pilotage', actif: page === 'alertes',
         badge: ctx.badgeAlertes?.promo === ctx.promo?.id && ctx.badgeAlertes.n ? { texte: ctx.badgeAlertes.n, cle: 'alertes', classe: 'rouge' } : { texte: '', cle: 'alertes', classe: 'vide' } }] },
-    { cle: 'evaluer', titre: 'Évaluer', icone: '✅', items: [
+    { cle: 'evaluer', titre: 'Évaluation', icone: '✅', items: [
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
       { href: '#/eleve', icone: '🪪', texte: 'Fiche élève et livret', actif: page === 'eleve' }] },
     { cle: 'bilans', titre: 'Bilans', icone: '📊', items: [
-      { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' },
       { href: '#/couverture/competences', icone: '🧩', texte: 'Couverture des compétences', actif: page === 'couverture' && arg !== 'savoirs' },
       { href: '#/couverture/savoirs', icone: '📚', texte: 'Couverture des savoirs', actif: page === 'couverture' && arg === 'savoirs' },
       { href: '#/historique', icone: '🕘', texte: 'Historique des modifications', actif: page === 'historique' }] },
