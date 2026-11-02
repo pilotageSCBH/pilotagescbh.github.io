@@ -116,11 +116,12 @@ export async function pageSequencage(zone, id, ctx) {
       const remplir = () => {
         const q = recherche.value.trim().toLowerCase();
         let fam = null;
-        vider(corps, liste.filter((r) => !q || (r.code + ' ' + r.libelle).toLowerCase().includes(q)).flatMap((r) => {
+        vider(corps, liste.filter((r) => !q || (r.code + ' ' + r.libelle + ' ' + (r.contenus || []).join(' ')).toLowerCase().includes(q)).flatMap((r) => {
           const out = [];
           if (col === 'competences' && r.famille !== fam) { fam = r.famille; out.push(h('div', { class: 'groupe' }, `${r.famille} – ${r.famille_libelle}`)); }
           out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.code),
-            onchange: (e) => (e.target.checked ? choix.add(r.code) : choix.delete(r.code)) }), h('b', {}, r.code), ' ', r.libelle));
+            onchange: (e) => (e.target.checked ? choix.add(r.code) : choix.delete(r.code)) }), h('b', {}, r.code), ' ', r.libelle,
+            col === 'savoirs' && (r.contenus || []).length ? h('small', { class: 'detail-choix' }, r.contenus.join(' · ')) : null));
           return out;
         }));
       };
