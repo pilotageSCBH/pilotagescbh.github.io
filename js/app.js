@@ -247,7 +247,8 @@ function menu(route) {
       { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' }] },
     { cle: 'evaluer', titre: 'Évaluation', icone: '✅', items: [
       { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
-      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' },
+      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
+    { cle: 'resultats', titre: 'Résultats', icone: '🏆', items: [
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
       { href: '#/eleve', icone: '🪪', texte: 'Fiche élève et livret', actif: page === 'eleve' }] },
