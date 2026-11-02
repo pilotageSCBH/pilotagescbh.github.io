@@ -86,7 +86,7 @@ const SECTIONS = [
     ['Maintenance', "Administration → onglet « Maintenance » : « Fermer le site pour maintenance » bloque l'accès à tous les comptes sauf les administrateurs ; le message saisi s'affiche sur l'écran de connexion et à la place des pages. Un bandeau rouge rappelle aux administrateurs que le site est fermé. « Rouvrir le site » rétablit l'accès."],
     ['Compte en lecture seule', "Pour le DDFPT (ou une inspection) : autorisez le compte avec le rôle « Lecture seule ». Il voit toutes les pages et peut imprimer, mais ne peut rien modifier."],
     ['Élèves', "Seul l'administrateur ajoute, modifie ou supprime les élèves (page Élèves) ; « Imprimer la liste » imprime la liste de la promotion."],
-    ['Équipe et matières', "« Matières et équipe » : couleurs et noms des matières, enseignants et matières qu'ils peuvent modifier."],
+    ['Équipe et matières', "« Matières et équipe » : en haut, une carte par matière (nom, abréviation, couleur, nombre d'enseignants, avancement du séquençage ; cliquer les chiffres ouvre le séquençage). En bas, le tableau des attributions : une ligne par enseignant, une colonne par matière ; l'administrateur coche qui enseigne quoi. La dernière ligne compte les enseignants de chaque matière (en rouge : aucun)."],
     ['Reprendre une promotion', "Administration → « Reprendre une promotion » : recopie séquençages, calendrier, progression, fiches et contrats (sans les notes) d'une promotion vers une autre. Seules les parties encore vides sont remplies."],
   ]],
   ['historique', 'Historique des modifications', [
