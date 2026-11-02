@@ -1249,3 +1249,22 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .legende-taxo { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 12.5px; color: var(--gris); margin: 10px 0 0; }
 .legende-taxo > span { display: inline-flex; align-items: center; gap: 4px; }
 .liste-choix .detail-choix { display: block; margin: 2px 0 0 24px; color: var(--gris); font-size: 11.5px; }
+/* validation des compétences (v2) */
+.kpi-validation { grid-template-columns: repeat(4, 1fr); }
+.kpi.vert .kpi-jauge i { background: #4E9A2F; } .kpi.rouge .kpi-jauge i { background: #D2483B; }
+.filtres-validation { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 14px 0 6px; }
+.legende-niv { display: flex; gap: 6px; align-items: center; margin-left: auto; font-size: 12px; }
+.legende-niv span { padding: 2px 8px; border-radius: 6px; font-weight: 800; }
+.legende-niv span.gris { font-weight: 400; }
+table.validation.v2 td.vide { background: #FAFBFB; }
+table.validation.v2 td { min-width: 38px; height: 34px; }
+table.validation.v2 th.comp { height: 30px; }
+table.validation.v2 th.comp span { writing-mode: horizontal-tb; transform: none; font-size: 11px; }
+table.validation.v2 th.famille { top: 0; }
+table.validation.v2 th.comp { top: 22px; }
+table.validation.v2 th.famille.trans, table.validation.v2 th.comp.trans { background: var(--trans, #6B4FA0); }
+table.validation.v2 .total.pc { min-width: 48px; color: var(--fonce); }
+.graphiques-validation { grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); }
+.note-graph { font-size: 11.5px; color: var(--gris); margin: 6px 0 0; }
+.vide-validation { text-align: center; padding: 30px; }
+table.validation.v2 th.total { color: var(--texte); }

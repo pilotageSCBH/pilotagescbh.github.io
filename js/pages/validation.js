@@ -4,9 +4,12 @@
 import { db } from '../api.js';
 import { h, vider, imprimer } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
-import { anneau, empileH, carteGraph } from '../graphiques.js';
+import { empileH, carteGraph } from '../graphiques.js';
 
-const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
+const CLE_CAT = 'pilotage-scbh-validation-categorie', CLE_TOUT = 'pilotage-scbh-validation-toutes';
+const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const ecrire = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
+const SERIES = [{ nom: 'Acquis (A)', couleur: 'var(--g-a)' }, { nom: 'En voie d’acquisition (EVA)', couleur: 'var(--g-eva)' }, { nom: 'Non acquis (NA)', couleur: 'var(--g-na)' }];
 
 export async function pageValidation(zone, _arg, ctx) {
   const ref = await ctx.referentiel();
@@ -16,7 +19,6 @@ export async function pageValidation(zone, _arg, ctx) {
   const criteres = contrats.length ? (await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&order=id`)).filter((k) => k.actif) : [];
   const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
   const notes = new Map(notesL.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
-  const codeMat = (m) => CODES_MAT[m.abreviation] || (m.abreviation || m.nom).slice(0, 2).toUpperCase();
 
   // meilleure évaluation par élève et par compétence
   const best = new Map();
@@ -28,63 +30,98 @@ export async function pageValidation(zone, _arg, ctx) {
       const n = moyenne(ks, notes, e.id);
       if (n === null) continue;
       const cle = `${e.id}:${code}`, b = best.get(cle);
-      if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(cle, { n, date: c.date_eval, mat: m ? codeMat(m) : '' });
+      if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(cle, { n, date: c.date_eval, mat: m ? ctx.codeMat(m) : '', matNom: m?.nom || '' });
     }
   }
-  const comps = ref.competences;
-  const familles = [];
-  for (const c of comps) { const f = familles[familles.length - 1]; if (f && f.code === c.famille) f.n++; else familles.push({ code: c.famille, lib: c.famille_libelle, n: 1 }); }
-  // séparation cœur de métier (C1 à C4) / transversales (à partir de C5-1)
-  const premiereTransCode = comps.find((c) => ctx.transversale(c.code))?.code;
-  const premiereTrans = (famille) => comps.find((c) => c.famille === famille)?.code === premiereTransCode;
+  const nv = (e, c) => { const b = best.get(`${e.id}:${c.code}`); return b ? niveau(b.n).code : 'NE'; };
+  const evaluee = (c) => eleves.some((e) => best.has(`${e.id}:${c.code}`));
   const jj = (d) => (d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '');
 
-  vider(zone,
-    h('header', { class: 'entete-page ecran' }, h('div', {}, h('h1', {}, 'Validation des compétences'),
-      h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ${eleves.length} élèves  ·  ${contrats.length} contrat(s) sommatif(s)`)),
-      h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer (A3 paysage)'))),
-    h('p', { class: 'aide ecran' }, 'Meilleure évaluation obtenue dans les contrats sommatifs de toutes les matières (à égalité, la plus récente). Dans chaque case : niveau, date et matière ('
-      + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'),
-    h('div', { class: 'tableau-validation' }, h('table', { class: 'validation' },
-      h('thead', {},
-        h('tr', { class: 'categories' }, h('th', { rowspan: 3, class: 'nom' }, 'Élève'),
-          [false, true].map((tr) => { const n = comps.filter((c) => ctx.transversale(c.code) === tr).length;
-            return n ? h('th', { colspan: n, class: 'categorie' + (tr ? ' transversale' : '') }, tr ? 'Compétences transversales (C5 · C6)' : 'Compétences cœur de métier (C1 à C4)') : null; }),
-          ['A', 'EVA', 'NA'].map((t) => h('th', { rowspan: 3, class: 'total niv-' + t.toLowerCase() }, t))),
-        h('tr', {}, familles.map((f) => h('th', { colspan: f.n, class: 'famille' + (premiereTrans(f.code) ? ' debut-trans' : ''), title: f.lib }, f.code))),
-        h('tr', {}, comps.map((c) => h('th', { class: 'comp' + (c.code === premiereTransCode ? ' debut-trans' : ''), title: `${c.code} · ${c.libelle}` }, h('span', {}, c.code))))),
-      h('tbody', {}, eleves.map((e) => {
-        const cpt = { A: 0, EVA: 0, NA: 0 };
-        const cells = comps.map((c) => {
-          const b = best.get(`${e.id}:${c.code}`);
-          const nv = niveau(b ? b.n : null);
-          if (b) cpt[nv.code]++;
-          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : ''), title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)` : `${c.code} : non évaluée` },
-            h('b', {}, nv.code), b ? h('small', {}, jj(b.date)) : null, b ? h('small', {}, b.mat) : null);
-        });
-        return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom), cells,
-          h('td', { class: 'total' }, cpt.A), h('td', { class: 'total' }, cpt.EVA), h('td', { class: 'total' }, cpt.NA));
-      })))),
-    eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'),
-    eleves.length ? graphiques() : null);
+  let categorie = ['coeur', 'trans', 'toutes'].includes(lire(CLE_CAT, 'toutes')) ? lire(CLE_CAT, 'toutes') : 'toutes';
+  let toutes = lire(CLE_TOUT, 'non') === 'oui';
 
-  // niveaux : effectifs par élève et par famille de compétences
-  function graphiques() {
-    const SERIES = [{ nom: 'Acquis (A)', couleur: 'var(--g-a)' }, { nom: 'En voie (EVA)', couleur: 'var(--g-eva)' }, { nom: 'Non acquis (NA)', couleur: 'var(--g-na)' }, { nom: 'Non évaluée', couleur: 'var(--g-ne)' }];
-    const compte = (es, cs) => {
-      const r = [0, 0, 0, 0];
-      for (const e of es) for (const c of cs) { const b = best.get(`${e.id}:${c.code}`); const k = b ? ['A', 'EVA', 'NA'].indexOf(niveau(b.n).code) : 3; r[k]++; }
-      return r;
-    };
-    const parts = [['Compétences cœur de métier', 'C1 à C4', comps.filter((c) => !ctx.transversale(c.code))],
-      ['Compétences transversales', 'C5 et C6', comps.filter((c) => ctx.transversale(c.code))]];
-    return h('section', { class: 'graphiques ecran-et-impression' },
-      parts.map(([titre, codes, cs]) => { const t = compte(eleves, cs);
-        return carteGraph(titre, `${codes} · bilan de la promotion (${cs.length} compétences × ${eleves.length} élèves)`, anneau(SERIES.map((x, i) => ({ ...x, valeur: t[i] })),
-          { centre: `${Math.round((t[0] / Math.max(1, t.reduce((a, b) => a + b, 0))) * 100)} %`, sous: 'acquises' })); }),
-      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par famille`, `${codes} · répartition des niveaux (tous élèves)`,
-        empileH([...new Set(cs.map((c) => c.famille))].map((f) => ({ label: f, valeurs: compte(eleves, cs.filter((c) => c.famille === f)) })), SERIES, { pourcent: true }))),
-      parts.map(([titre, codes, cs]) => carteGraph(`${titre} · par élève`, `${codes} · nombre de compétences à chaque niveau`,
-        empileH(eleves.map((e) => ({ label: `${e.nom} ${e.prenom}`, valeurs: compte([e], cs) })), SERIES))));
+  function dessiner() {
+    const dansCat = ref.competences.filter((c) => categorie === 'toutes' || (categorie === 'trans') === ctx.transversale(c.code));
+    const comps = toutes ? dansCat : dansCat.filter(evaluee);
+    const nbEval = dansCat.filter(evaluee).length;
+    // compteurs (cases élève × compétence évaluées)
+    const cpt = { A: 0, EVA: 0, NA: 0 };
+    for (const e of eleves) for (const c of dansCat) { const k = nv(e, c); if (k !== 'NE') cpt[k]++; }
+    const totEval = cpt.A + cpt.EVA + cpt.NA, pc = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+    const familles = [];
+    for (const c of comps) { const f = familles[familles.length - 1]; if (f && f.code === c.famille) f.n++; else familles.push({ code: c.famille, lib: c.famille_libelle, n: 1, trans: ctx.transversale(c.code) }); }
+    const premiereTrans = comps.find((c) => ctx.transversale(c.code))?.code;
+    const bouton = (v, t) => h('button', { class: 'btn' + (categorie === v ? ' principal' : ''), onclick: () => { categorie = v; ecrire(CLE_CAT, v); dessiner(); } }, t);
+
+    vider(zone,
+      h('header', { class: 'entete-page ecran' }, h('div', {}, h('h1', {}, 'Validation des compétences'),
+        h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ${eleves.length} élèves  ·  ${contrats.length} fiche(s) contrat(s) sommatif(s)`)),
+        h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer (A3 paysage)'))),
+
+      // ---------------------------------------------------------------- chiffres clés
+      h('section', { class: 'kpi-ligne kpi-validation' },
+        tuile('🧩', `${nbEval} / ${dansCat.length}`, 'compétences déjà évaluées', 'au moins une fois, pour au moins un élève', pc(nbEval, dansCat.length)),
+        tuile('✅', `${pc(cpt.A, totEval)} %`, 'des évaluations sont « Acquis »', `${cpt.A} sur ${totEval} résultat(s)`, pc(cpt.A, totEval), 'vert'),
+        tuile('🟠', `${pc(cpt.EVA, totEval)} %`, 'en voie d’acquisition', `${cpt.EVA} résultat(s)`, pc(cpt.EVA, totEval), 'orange'),
+        tuile('🔴', `${pc(cpt.NA, totEval)} %`, 'non acquis', `${cpt.NA} résultat(s)`, pc(cpt.NA, totEval), 'rouge')),
+
+      // ---------------------------------------------------------------- filtres
+      h('div', { class: 'filtres-validation ecran' },
+        h('div', { class: 'bascule' }, bouton('toutes', 'Toutes les compétences'), bouton('coeur', 'Cœur de métier (C1 à C4)'), bouton('trans', 'Transversales (C5 · C6)')),
+        h('label', { class: 'interrupteur' }, h('input', { type: 'checkbox', checked: toutes, onchange: (e) => { toutes = e.target.checked; ecrire(CLE_TOUT, toutes ? 'oui' : 'non'); dessiner(); } }),
+          'Afficher aussi les compétences jamais évaluées'),
+        h('div', { class: 'legende-niv' }, ['A', 'EVA', 'NA'].map((k) => h('span', { class: 'niv-' + k.toLowerCase() }, k)), h('span', { class: 'gris' }, 'case vide = non évaluée'))),
+      h('p', { class: 'aide ecran' }, 'Chaque case reprend la meilleure évaluation obtenue dans les fiches contrats sommatifs de toutes les matières (à égalité, la plus récente), avec sa date et la matière ('
+        + ctx.matieres.map((m) => `${ctx.codeMat(m)} ${m.nom}`).join(' · ') + '). Survolez une case ou un code pour le détail.'),
+
+      // ---------------------------------------------------------------- tableau
+      comps.length ? h('div', { class: 'tableau-validation' }, h('table', { class: 'validation v2' },
+        h('thead', {},
+          h('tr', { class: 'familles' }, h('th', { rowspan: 2, class: 'nom' }, 'Élève'),
+            familles.map((f) => h('th', { colspan: f.n, class: 'famille' + (f.trans ? ' trans' : '') + (comps.find((c) => c.famille === f.code)?.code === premiereTrans ? ' debut-trans' : ''), title: `${f.code} · ${f.lib}` }, f.code)),
+            h('th', { rowspan: 2, class: 'total niv-a', title: 'Compétences acquises' }, 'A'), h('th', { rowspan: 2, class: 'total niv-eva', title: 'En voie d’acquisition' }, 'EVA'),
+            h('th', { rowspan: 2, class: 'total niv-na', title: 'Non acquises' }, 'NA'), h('th', { rowspan: 2, class: 'total pc', title: 'Part des compétences évaluées qui sont acquises' }, '% A')),
+          h('tr', {}, comps.map((c) => h('th', { class: 'comp' + (ctx.transversale(c.code) ? ' trans' : '') + (c.code === premiereTrans ? ' debut-trans' : ''), title: `${c.code} · ${c.libelle}` },
+            h('span', {}, c.code.replace(/^C\d-\d/, '').trim() || c.code))))),
+        h('tbody', {}, eleves.map((e) => {
+          const t = { A: 0, EVA: 0, NA: 0 };
+          const cells = comps.map((c) => {
+            const b = best.get(`${e.id}:${c.code}`), k = nv(e, c);
+            if (b) t[k]++;
+            return h('td', { class: (b ? 'niv-' + k.toLowerCase() : 'vide') + (c.code === premiereTrans ? ' debut-trans' : ''),
+              title: b ? `${e.nom} ${e.prenom} · ${c.code} : ${niveau(b.n).lib} (${arrondi(b.n)} / 5) · ${b.matNom} · ${jj(b.date)}` : `${e.nom} ${e.prenom} · ${c.code} : non évaluée` },
+            b ? [h('b', {}, k), h('small', {}, `${jj(b.date)} ${b.mat}`)] : null);
+          });
+          const n = t.A + t.EVA + t.NA;
+          return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom), cells,
+            h('td', { class: 'total' }, t.A), h('td', { class: 'total' }, t.EVA), h('td', { class: 'total' }, t.NA),
+            h('td', { class: 'total pc' }, n ? `${pc(t.A, n)} %` : '—'));
+        }))))
+        : h('section', { class: 'bloc vide-validation' }, h('p', {}, 'Aucune compétence évaluée pour l’instant dans cette catégorie.'),
+          h('p', { class: 'aide' }, 'Les niveaux apparaissent dès que des notes sont saisies dans les fiches contrats sommatifs. Cochez « Afficher aussi les compétences jamais évaluées » pour voir tout le référentiel.')),
+
+      // ---------------------------------------------------------------- graphiques
+      totEval ? h('section', { class: 'graphiques graphiques-validation ecran-et-impression' },
+        carteGraph('Résultats par famille de compétences', 'Pour chaque famille : répartition des niveaux obtenus (compétences non évaluées exclues). Plus la barre est verte, mieux la famille est acquise.',
+          empileH(familles.filter((f) => comps.some((c) => c.famille === f.code && evaluee(c))).map((f) => {
+            const cs = comps.filter((c) => c.famille === f.code); const v = [0, 0, 0];
+            for (const e of eleves) for (const c of cs) { const k = nv(e, c); if (k !== 'NE') v[['A', 'EVA', 'NA'].indexOf(k)]++; }
+            return { label: `${f.code}`, valeurs: v };
+          }), SERIES, { pourcent: true, largeur: 520 }),
+          h('p', { class: 'note-graph' }, 'Familles jamais évaluées non représentées.')),
+        carteGraph('Résultats par élève', 'Nombre de compétences à chaque niveau pour chaque élève, du meilleur taux d’acquisition au plus faible.',
+          empileH(eleves.map((e) => { const v = [0, 0, 0]; for (const c of dansCat) { const k = nv(e, c); if (k !== 'NE') v[['A', 'EVA', 'NA'].indexOf(k)]++; } return { label: `${e.nom} ${e.prenom}`, valeurs: v }; })
+            .sort((a, b) => (b.valeurs[0] / Math.max(1, b.valeurs[0] + b.valeurs[1] + b.valeurs[2])) - (a.valeurs[0] / Math.max(1, a.valeurs[0] + a.valeurs[1] + a.valeurs[2]))), SERIES, { largeur: 520 })))
+        : null);
   }
+
+  function tuile(icone, valeur, libelle, detail, pourcent, teinte = '') {
+    return h('div', { class: 'kpi ' + teinte },
+      h('div', { class: 'kpi-tete' }, h('span', { class: 'kpi-icone' }, icone), h('span', { class: 'kpi-lib' }, libelle)),
+      h('div', { class: 'kpi-valeur' }, valeur),
+      h('div', { class: 'kpi-jauge' }, h('i', { style: { width: Math.min(100, pourcent) + '%' } })),
+      h('div', { class: 'kpi-detail' }, detail));
+  }
+
+  dessiner();
 }
