@@ -177,7 +177,6 @@ export async function pageFiches(zone, arg, ctx) {
           h('div', { class: 'grille-infos' }, petit('titre', 'Titre de la fiche'), petit('duree', 'Durée totale'),
             petit('organisation', 'Organisation', { placeholder: modif ? 'Individuel, binôme…' : '' }), petit('lieu', 'Lieu / salle'),
             petit('lignes', 'Lignes de réponse « Mon travail »', { type: 'number' })),
-          h('div', { class: 'deux' }, rub('contexte'), rub('objectif')),
           A.parties.map((pt, n) => {
             FA.parties = FA.parties || {};
             const cible = () => (FA.parties[pt.id] = FA.parties[pt.id] || {});
@@ -196,27 +195,24 @@ export async function pageFiches(zone, arg, ctx) {
               h('div', { class: 'deux' }, zp('contexte', 'Activité', 'Ce que les élèves vont faire dans cette partie…', 'colonne « Activité proposée » de la phase'),
                 zp('consignes', 'Travail demandé (une étape par ligne)', 'Étape 1…\nÉtape 2…', 'colonne « Activités des élèves » de la phase')));
           }),
-          h('div', { class: 'deux' }, rub('ressources'), rub('production', false), rub('criteres', false), rub('aide', false), rub('plus', false), rub('corrige')),
-          h('div', { class: 'pied-activite' },
-            h('label', { class: 'case-form' }, h('input', { type: 'checkbox', checked: A.aideFiche, disabled: !modif, onchange: async (e) => { FA.aideFiche = e.target.checked; await sauverAct(); } }), ' Imprimer les coups de pouce sur la fiche élève')));
+          h('div', { class: 'deux' }, rub('ressources')));
         corps.querySelectorAll('input[type=number]').forEach((i) => { i.min = 0; i.max = 40; });
         const ins = corps.querySelectorAll('.grille-infos input');
         ins[2]?.setAttribute('list', 'dl-orgas-act'); ins[3]?.setAttribute('list', 'dl-lieux-act');
       }
-      const d = h('details', { class: 'carte-activite', open: ouverte },
-        h('summary', {}, h('span', { class: 'titre-activite' }, h('b', {}, A ? A.titre : 'Fiche activité'),
+      const d = h('div', { class: 'carte-activite' },
+        h('div', { class: 'entete-activite' }, h('span', { class: 'titre-activite' }, h('b', {}, A ? A.titre : 'Fiche activité'),
           h('small', {}, A ? `${A.parties.length} partie(s)${A.duree ? ' · ' + A.duree : ''}${A.organisation ? ' · ' + A.organisation : ''}` : 'aucune phase cochée')),
           A ? h('span', { class: 'actions-activite' },
-            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche élève (A4)', onclick: (e) => { e.preventDefault(); sortie('eleve', 'imprimer'); } }, '🖶  Imprimer'),
-            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la fiche élève en PDF', onclick: (e) => { e.preventDefault(); sortie('eleve', 'pdf'); } }, '⬇  PDF élève'),
-            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la version enseignant (compétences, éléments de correction)', onclick: (e) => { e.preventDefault(); sortie('enseignant', 'pdf'); } }, '⬇  Version enseignant')) : null),
+            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche élève (A4)', onclick: () => sortie('eleve', 'imprimer') }, '🖶  Imprimer'),
+            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la fiche élève en PDF', onclick: () => sortie('eleve', 'pdf') }, '⬇  PDF élève'),
+            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la version enseignant (avec les activités de l’enseignant et les compétences visées)', onclick: () => sortie('enseignant', 'pdf') }, '⬇  Version enseignant')) : null),
         choix, corps, h('datalist', { id: 'dl-orgas-act' }, ORGAS.map((o) => h('option', { value: o }))), h('datalist', { id: 'dl-lieux-act' }, LIEUX.map((o) => h('option', { value: o }))));
-      d.addEventListener('toggle', () => { ouverte = d.open; if (d.open) ajusterTout(d); });
       vider(zoneAct, h('section', { class: 'bloc-activites' },
         h('div', { class: 'tete-activites' }, h('h3', {}, '🧩  Fiche activité'),
-          h('p', { class: 'aide' }, 'Cochez les phases qui demandent une fiche : elles sont regroupées sur une seule fiche activité, une partie par phase. La fiche se pré-remplit avec la fiche de déroulement, le séquençage, la fiche de préparation et le contrat formatif (repère « auto ») ; détaillez ensuite chaque rubrique : vos compléments sont conservés, les rubriques non modifiées suivent la fiche de déroulement.')),
+          h('p', { class: 'aide' }, 'Cochez les phases qui demandent une fiche : elles sont regroupées sur une seule fiche activité, une partie par phase. La fiche se remplit avec la fiche de déroulement (repère « auto ») ; détaillez ensuite chaque partie : vos compléments sont conservés, les rubriques non modifiées suivent la fiche de déroulement.')),
         d));
-      if (d.open) ajusterTout(d);
+      ajusterTout(d);
     }
     const tablePhases = h('tbody', {});
     const dessinerPhases = () => {
@@ -589,14 +585,7 @@ async function index(zone, ctx, mode = 'preparation') {
 // peut la compléter ou la modifier : seules ses modifications sont enregistrées (fiches_seance.activites).
 export const CHAMPS_ACTIVITE = [
   // [clé, libellé, aide, source automatique (texte)]
-  ['contexte', 'Mise en situation', 'Contexte professionnel, problème à résoudre…', 'situation professionnelle de la fiche de préparation de séquence'],
-  ['objectif', 'Objectif', 'À la fin de l’activité, je suis capable de…', 'objectif intermédiaire et objectifs opérationnels de la séance'],
   ['ressources', 'Documents, matériel et ressources', 'Plans, extraits du DCE, liens (https://…)…', 'rubrique « Matériel et ressources » de la fiche'],
-  ['production', 'Production attendue', 'Ce que je dois rendre : tableau complété, schéma, note de calcul…', ''],
-  ['criteres', 'Critères de réussite (un par ligne)', 'Le travail est réussi si…', 'critères de la fiche contrat formatif'],
-  ['aide', 'Coups de pouce', 'Indices pour les élèves en difficulté…', 'rubrique « Différenciation » de la fiche'],
-  ['plus', 'Pour aller plus loin', 'Prolongement pour les élèves qui ont terminé…', ''],
-  ['corrige', 'Éléments de correction (version enseignant)', 'Réponses attendues, points de vigilance…', ''],
 ];
 const lignesDe = (t) => String(t || '').split('\n').map((l) => l.replace(/^\s*(?:[-•*]|\d+\s*[.)-])\s*/, '').trim()).filter(Boolean);
 const organisationDe = (t) => (/bin[oô]me/i.test(t) ? 'Binôme' : /groupe|îlot/i.test(t) ? 'En groupe' : /classe entière|collectif/i.test(t) ? 'Classe entière' : /individuel/i.test(t) ? 'Individuel' : '');
@@ -617,15 +606,13 @@ export function ficheActivite(x, f, criteres = [], ref = null, situation = '') {
   const parties = sel.map(({ p, i }) => {
     const auto = { titre: String(p.phase || '').trim() || lignesDe(p.activite)[0] || `Phase ${i + 1}`, duree: p.duree || '', contexte: p.activite || '', consignes: lignesDe(p.eleves).join('\n') };
     const m = (o.parties || {})[p.id] || {};
-    return { id: p.id, index: i, auto, ...Object.fromEntries(Object.keys(auto).map((k) => [k, m[k] ?? auto[k]])) };
+    return { id: p.id, index: i, enseignant: p.enseignant || '', auto, ...Object.fromEntries(Object.keys(auto).map((k) => [k, m[k] ?? auto[k]])) };
   });
   const auto = {
     titre: x.titre || 'Activité', duree: dureeTotale(parties.map((pt) => pt.duree)), organisation: organisationDe(sel.map(({ p }) => `${p.activite} ${p.eleves}`).join(' ')),
-    lieu: f?.salle || '', contexte: situation || '', objectif: [x.objectif_inter, ...lignesDe(x.objectifs_ops)].filter(Boolean).join('\n'),
-    ressources: f?.materiel || '', production: '', criteres: [...new Set(criteres.filter((k) => k.actif !== false && k.texte).map((k) => k.texte.trim()))].join('\n'),
-    aide: f?.differenciation || '', plus: '', corrige: '', lignes: '12',
+    lieu: f?.salle || '', ressources: f?.materiel || '', lignes: '12',
   };
-  const A = { auto, parties, aideFiche: o.aideFiche !== false };
+  const A = { auto, parties };
   for (const k of Object.keys(auto)) A[k] = o[k] ?? auto[k];
   A.competences = (x.competences || []).map((c) => `${c}  ${ref?.comp?.[c]?.libelle || ''}`.trim());
   return A;
@@ -635,7 +622,7 @@ export function ficheActivite(x, f, criteres = [], ref = null, situation = '') {
 export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve') {
   const prof = version === 'enseignant';
   const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
-  const liens = liensLibelles(A.ressources), crit = lignesDe(A.criteres), coul = m?.couleur || '#146B63';
+  const liens = liensLibelles(A.ressources), coul = m?.couleur || '#146B63';
   return {
     fichier: nomFichier(`${m ? m.abreviation || m.nom : ''}_S${sq.numero}.${x.numero}_fiche_activite${prof ? '_enseignant' : ''}.pdf`),
     titre: `Fiche activité · séance ${sq.numero}.${x.numero}`,
@@ -645,18 +632,13 @@ export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve')
       { t: 'infos', paires: prof
         ? [['Matière', m?.nom], ['Enseignant', profs], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Promotion', promo], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Phases', A.parties.map((p) => p.index + 1).join(', ')]]
         : [['Nom et prénom', ' '], ['Date', ' '], ['Matière', m?.nom], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Enseignant', profs]] },
-      A.contexte ? R('Mise en situation', A.contexte) : null,
-      A.objectif ? R('Objectif', A.objectif, { gras: true, gris: true }) : null,
       ...A.parties.map((pt, n) => ({ t: 'cadre', couleur: coul, titre: `Partie ${n + 1} · ${pt.titre}${pt.duree ? '  (' + pt.duree + ')' : ''}`,
-        blocs: [pt.contexte ? { t: 'texte', texte: pt.contexte } : null, lignesDe(pt.consignes).length ? { t: 'etapes', titre: 'Travail demandé', items: lignesDe(pt.consignes) } : null].filter(Boolean) })),
+        blocs: [pt.contexte ? { t: 'texte', texte: pt.contexte } : null, lignesDe(pt.consignes).length ? { t: 'etapes', titre: 'Travail demandé', items: lignesDe(pt.consignes) } : null,
+          prof && pt.enseignant ? R('Activités de l’enseignant', pt.enseignant, { gris: true }) : null].filter(Boolean) })),
       A.ressources ? R('Documents, matériel et ressources', A.ressources) : null,
       liens.length ? { t: 'qr', liens } : null,
-      A.production ? R('Production attendue', A.production, { gras: true }) : null,
-      crit.length ? { t: 'cases', titre: prof ? 'Critères de réussite' : 'Critères de réussite — je vérifie mon travail', items: crit } : null,
-      A.aide && (prof || A.aideFiche) ? R('Coups de pouce', A.aide, { gris: true }) : null,
-      A.plus ? R('Pour aller plus loin', A.plus) : null,
+      prof && x.objectif_inter ? R('Objectif intermédiaire de la séance', x.objectif_inter, { gras: true, gris: true }) : null,
       prof && A.competences.length ? R('Compétences visées', A.competences.join('\n'), { gris: true }) : null,
-      prof && A.corrige ? R('Éléments de correction', A.corrige) : null,
       !prof && Number(A.lignes) > 0 ? { t: 'lignes', titre: 'Mon travail', n: Math.min(40, Number(A.lignes)) } : null,
       liens.length && !prof ? { t: 'note', texte: 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' } : null,
     ].filter(Boolean),
@@ -669,7 +651,7 @@ export async function envoyerPDF(doc, mode, outils = null) {
     let creer = outils?.creerPDF, logo = outils?.logo;
     if (!creer) {
       toast(mode === 'pdf' ? 'Préparation du PDF…' : 'Préparation de l’impression…');
-      const P = await import('../pdf.js'); await P.chargerOutils(); creer = P.creerPDF;
+      const P = await import('../pdf.js?v=20261103b'); await P.chargerOutils(); creer = P.creerPDF;   // ?v= : jamais une ancienne version gardée en cache
       logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
     }
     const blob = new Blob([await creer(doc, logo)], { type: 'application/pdf' });

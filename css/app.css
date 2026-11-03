@@ -1470,3 +1470,5 @@ th.eleve.hors span { opacity: .55; }
 .tete-partie .num-activite { width: 26px; height: 26px; font-size: 13px; }
 .tete-partie .titre-partie { flex: 1; font-weight: 700; font-size: 14px; }
 .tete-partie .duree-partie { width: 110px; }
+.entete-activite { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--ligne); flex-wrap: wrap; }
+.entete-activite .titre-activite { min-width: 220px; }

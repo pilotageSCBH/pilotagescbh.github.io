@@ -270,7 +270,10 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
       y -= 8;
     },
   };
-  for (const b of doc.blocs) B[b.t](b);
+  for (const b of doc.blocs) {
+    if (!B[b.t]) throw new Error('Version du site incomplète dans le navigateur : rechargez la page avec Ctrl+F5.');
+    B[b.t](b);
+  }
   // pied de page : titre du document et numéro de page
   if (pied) pages.forEach((p, i) => {
     p.drawText(nettoyer(doc.pied || doc.titre).slice(0, 110), { x: MARGE, y: 22, size: 7, font: F, color: GRIS });
