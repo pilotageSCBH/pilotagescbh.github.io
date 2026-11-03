@@ -378,7 +378,7 @@ async function afficher() {
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
-    if (n === rendu) zone.append(boutonRetour());
+    if (n === rendu && !(r[0] === 'accueil' && profondeur() === 0)) zone.append(boutonRetour());
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
       h('button', { class: 'btn', onclick: afficher }, 'Réessayer')));
