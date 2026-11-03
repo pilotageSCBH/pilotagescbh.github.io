@@ -117,7 +117,7 @@ function ecranConnexion(message = '') {
       info.textContent = err.message; info.classList.add('erreur');
     } finally { valider.disabled = false; }
   } },
-  h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+  h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat', class: 'logo-connexion' }),
   h('h1', {}, NOM_APPLI), titre,
   h('label', {}, 'Identifiant', ident), h('label', {}, 'Code', code), ligne2, valider, info, bascule,
   h('button', { class: 'lien', type: 'button', onclick: () => ecranCodeOublie(ident.value) }, 'Code oublié ?'), aide);
@@ -133,7 +133,7 @@ function ecranConnexion(message = '') {
 function ecranMaintenance(etat) {
   clearInterval(minuteurPresence);
   vider(app, h('div', { class: 'ecran-connexion' }, h('div', { class: 'carte-connexion' },
-    h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+    h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat', class: 'logo-connexion' }),
     h('h1', {}, NOM_APPLI), h('h2', {}, '🛠  Site en maintenance'),
     h('p', {}, etat?.message || 'L’administrateur effectue une opération de maintenance : l’accès est temporairement fermé.'),
     etat?.depuis ? h('p', { class: 'aide' }, 'Depuis le ' + new Date(etat.depuis).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : null,
@@ -185,7 +185,7 @@ function ecranCodeOublie(identifiant = '') {
       await demarrer();
     } catch (x) { msg(x.message, true); } finally { valider.disabled = false; }
   } },
-  h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+  h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat', class: 'logo-connexion' }),
   h('h1', {}, NOM_APPLI), h('h2', {}, 'Code oublié'),
   h('p', { class: 'aide' }, 'Avec votre code de secours (créé dans « Mon compte ») : choisissez vous-même un nouveau code.'),
   h('label', {}, 'Identifiant', ident), h('label', {}, 'Code de secours', secours),
@@ -208,7 +208,7 @@ function ecranNouveauCode() {
     try { await changerCode(c1.value); await db.rpc('code_change'); ctx.profil.doit_changer = false; toast('Code enregistré'); await ctx.chargerBase(); afficher(); demarrerPresence(); }
     catch (x) { info.textContent = x.message; }
   } },
-  h('img', { src: 'img/logo.jpg', alt: 'Lycée André Malraux', class: 'logo-connexion' }),
+  h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat', class: 'logo-connexion' }),
   h('h1', {}, NOM_APPLI), h('h2', {}, 'Choisissez votre code'),
   h('p', { class: 'aide' }, 'Vous êtes entré avec un code provisoire donné par l’administrateur : choisissez maintenant votre propre code (6 caractères au moins).'),
   h('label', {}, 'Nouveau code', c1), h('label', {}, 'Confirmer', c2), h('button', { class: 'btn principal large', type: 'submit' }, 'Enregistrer et entrer'), info,
@@ -313,7 +313,7 @@ function menu(route) {
   const role = ctx.estAdmin() ? 'Administrateur' : ctx.peutEcrire() ? 'Enseignant' : 'Consultation';
   const nav = h('nav', { class: 'menu' + (reduit ? ' reduit' : '') },
     h('div', { class: 'tete-menu' },
-      h('a', { href: '#/accueil', class: 'marque', title: NOM_APPLI }, h('img', { src: 'img/logo.jpg', alt: '' }), h('span', {}, NOM_APPLI)),
+      h('a', { href: '#/accueil', class: 'marque', title: NOM_APPLI }, h('img', { src: 'img/logo.jpg', alt: '', class: 'logo-large' }), h('img', { src: 'img/icone.png', alt: '', class: 'logo-icone' }), h('span', {}, NOM_APPLI)),
       h('button', { class: 'reduire-menu', type: 'button', title: reduit ? 'Déplier le menu' : 'Réduire le menu (icônes seules)', onclick: () => {
         ecrireL(CLE_MENU_REDUIT, reduit ? 'non' : 'oui'); rafraichirMenu();
       } }, reduit ? '»' : '«')),

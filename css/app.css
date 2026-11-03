@@ -291,7 +291,7 @@ table.progression .col-jours { min-width: 172px; }
 .feuille { background: #fff; max-width: 900px; margin: 0 auto 24px; padding: 26px 32px 30px; box-shadow: var(--ombre); border-radius: 4px; }
 .feuille.large { max-width: none; }
 .tete-fiche { display: flex; gap: 18px; align-items: center; border-bottom: 3px solid var(--couleur); padding-bottom: 12px; margin-bottom: 14px; }
-.tete-fiche img { width: 130px; }
+.tete-fiche img { width: 110px; }
 .tete-fiche h2 { font-size: 19px; color: var(--fonce); letter-spacing: .03em; }
 .tete-fiche p { margin: 3px 0 0; font-weight: 700; color: var(--couleur); font-size: 15px; }
 .grille-infos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); border: 1px solid var(--ligne); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
@@ -1082,7 +1082,8 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
   box-shadow: 2px 0 10px rgba(0,0,0,.12); z-index: 5; }
 .tete-menu { display: flex; align-items: flex-start; gap: 6px; padding: 12px 10px 6px 12px; }
 .marque { display: flex; flex-direction: column; gap: 6px; color: #fff; text-decoration: none; font-weight: 800; font-size: 15px; flex: 1; min-width: 0; }
-.marque img { width: 148px; background: #fff; border-radius: 8px; padding: 4px 6px; }
+.marque img { width: 128px; background: #fff; border-radius: 8px; padding: 4px 6px; }
+.marque .logo-icone { display: none; }
 .reduire-menu { flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; line-height: 1; }
 .reduire-menu:hover { background: rgba(255,255,255,.2); }
 .promo-menu { padding: 4px 12px 8px; }
@@ -1137,7 +1138,8 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .menu.reduit .marque span, .menu.reduit .promo-menu label, .menu.reduit .choix-promo, .menu.reduit .zone-recherche, .menu.reduit .txt,
 .menu.reduit .titre-menu .nb, .menu.reduit .titre-menu .chevron, .menu.reduit .marque-mat { display: none; }
 .menu.reduit .tete-menu { flex-direction: column; align-items: center; padding: 10px 6px; }
-.menu.reduit .marque img { width: 44px; height: 44px; object-fit: cover; object-position: left; }
+.menu.reduit .marque .logo-large { display: none; }
+.menu.reduit .marque .logo-icone { display: block; width: 44px; height: 44px; padding: 2px; }
 .menu.reduit .promo-courte { display: block; text-align: center; font-weight: 800; font-size: 12px; background: #fff; color: var(--fonce); border-radius: 6px; padding: 3px 0; }
 .menu.reduit .promo-menu { padding: 0 8px 8px; }
 .menu.reduit .defile-menu { padding: 4px 6px; }
