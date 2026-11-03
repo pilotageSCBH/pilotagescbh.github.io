@@ -1505,3 +1505,20 @@ th.eleve.hors span { opacity: .55; }
 .gros-bouton .ic { font-size: 26px; }
 .gros-bouton b { display: block; font-size: 15px; }
 .gros-bouton small { color: var(--gris); font-size: 12px; }
+
+/* ===================================================================== vidéo de présentation */
+.boutons-tete { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+.video-menu { width: 58px; padding: 7px 0 5px; border: 0; border-radius: 12px; background: var(--anis); color: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.25); transition: transform .15s, background .15s; }
+.video-menu:hover { background: #93B11A; transform: translateY(-1px); }
+.video-menu .lecture { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: var(--anis); font-size: 12px; padding-left: 2px; }
+.video-menu small { font-size: 11px; font-weight: 800; letter-spacing: .02em; }
+.menu.reduit .boutons-tete { margin-left: 0; }
+.menu.reduit .video-menu { width: 44px; }
+.menu.reduit .video-menu small { display: none; }
+.fond-video { position: fixed; inset: 0; z-index: 200; background: rgba(10, 30, 28, .78); display: grid; place-items: center; padding: 16px; }
+.boite-video { width: min(1200px, 96vw); background: #0B1F1D; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.tete-video { display: flex; align-items: center; gap: 12px; padding: 10px 14px; color: #fff; font-size: 14px; }
+.tete-video .gris { color: #A9C2BE; font-size: 12.5px; flex: 1; }
+.tete-video .fermer { background: rgba(255,255,255,.12); color: #fff; border: 0; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+.boite-video video { display: block; width: 100%; max-height: 80vh; background: #000; }

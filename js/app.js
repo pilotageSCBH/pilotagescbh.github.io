@@ -316,9 +316,11 @@ function menu(route) {
   const nav = h('nav', { class: 'menu' + (reduit ? ' reduit' : '') },
     h('div', { class: 'tete-menu' },
       h('a', { href: '#/accueil', class: 'marque', title: NOM_APPLI }, h('img', { src: 'img/logo.jpg', alt: '', class: 'logo-large' }), h('img', { src: 'img/icone.png', alt: '', class: 'logo-icone' }), h('span', {}, NOM_APPLI)),
-      h('button', { class: 'reduire-menu', type: 'button', title: reduit ? 'Déplier le menu' : 'Réduire le menu (icônes seules)', onclick: () => {
-        ecrireL(CLE_MENU_REDUIT, reduit ? 'non' : 'oui'); rafraichirMenu();
-      } }, reduit ? '»' : '«')),
+      h('div', { class: 'boutons-tete' },
+        h('button', { class: 'reduire-menu', type: 'button', title: reduit ? 'Déplier le menu' : 'Réduire le menu (icônes seules)', onclick: () => {
+          ecrireL(CLE_MENU_REDUIT, reduit ? 'non' : 'oui'); rafraichirMenu();
+        } }, reduit ? '»' : '«'),
+        h('button', { class: 'video-menu', type: 'button', title: 'Vidéo de présentation du site (5 min)', onclick: ouvrirVideo }, h('span', { class: 'lecture' }, '▶'), h('small', {}, 'Vidéo')))),
     h('div', { class: 'promo-menu' }, h('label', {}, 'Promotion affichée'), choixPromotion(), h('span', { class: 'promo-courte', title: 'Promotion ' + (ctx.promo?.libelle || '') }, ctx.promo ? String(ctx.promo.annee_debut).slice(2) + '-' + String(ctx.promo.annee_debut + 2).slice(2) : '')),
     h('div', { class: 'zone-recherche' }, recherche),
     h('div', { class: 'defile-menu' },
@@ -337,6 +339,24 @@ function menu(route) {
   setTimeout(() => { nav.querySelector('.lien-menu.actif')?.scrollIntoView({ block: 'nearest' }); document.querySelector('.cadre')?.classList.toggle('menu-reduit', reduit); }, 0);
   majBadgeAlertes();
   return nav;
+}
+
+// vidéo de présentation du site (fichier video/presentation.mp4), dans une fenêtre par-dessus la page
+export function ouvrirVideo() {
+  document.querySelector('.fond-video')?.remove();
+  // MP4 (H.264) pour la plupart des navigateurs ; WebM (VP9) si le MP4 ne peut pas être lu
+  const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto' },
+    h('source', { src: 'video/presentation.mp4', type: 'video/mp4' }), h('source', { src: 'video/presentation.webm', type: 'video/webm' }),
+    'Votre navigateur ne peut pas lire cette vidéo.');
+  const fermer = () => { video.pause(); fond.remove(); document.removeEventListener('keydown', touche); };
+  const touche = (e) => { if (e.key === 'Escape') fermer(); };
+  const fond = h('div', { class: 'fond-video', onmousedown: (e) => { if (e.target === fond) fermer(); } },
+    h('div', { class: 'boite-video', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Vidéo de présentation' },
+      h('div', { class: 'tete-video' }, h('b', {}, '▶  Présentation du site Pilotage BTS SCBH'), h('span', { class: 'gris' }, 'environ 5 minutes · sous-titrée'),
+        h('button', { class: 'fermer', type: 'button', 'aria-label': 'Fermer', onclick: fermer }, '✕')),
+      video));
+  document.addEventListener('keydown', touche);
+  document.body.append(fond);
 }
 
 // nombre d'alertes importantes (mes matières), recalculé au plus toutes les 2 minutes
