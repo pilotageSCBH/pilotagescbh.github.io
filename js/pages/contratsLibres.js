@@ -3,7 +3,7 @@
 // #/contrats : liste par matière et création ; #/contrats/ID : la fiche contrat (en-tête, critères, notes).
 import { db } from '../api.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, imprimer, dateFr } from '../ui.js';
-import { dessinerContrat } from './contrat.js';
+import { dessinerContrat, choixCompetences } from './contrat.js';
 
 const TYPES = { formatif: ['Fiche contrat formatif', '✅'], sommatif: ['Fiche contrat sommatif', '🏁'] };
 
@@ -21,7 +21,7 @@ export async function pageContratsLibres(zone, arg, ctx) {
       h('div', {}, h('h1', {}, '📌  Contrats hors séquence'),
         h('p', { class: 'sous-titre' }, `Documents professeurs · Documents d’évaluation  ·  Promotion ${P.libelle}`)),
       h('div', { class: 'actions-page' }, peutCreer ? h('button', { class: 'btn principal', onclick: () => creer(ctx) }, '＋  Nouveau contrat') : null)),
-    h('p', { class: 'aide' }, 'Fiches contrat formatif ou sommatif qui ne dépendent d’aucune séquence : par exemple pour évaluer des compétences transversales (C5, C6) non prévues dans le séquençage. '
+    h('p', { class: 'aide' }, 'Fiches contrat formatif ou sommatif qui ne dépendent d’aucune séquence : par exemple pour évaluer des compétences (cœur de métier ou transversales) non prévues dans le séquençage. '
       + 'Les contrats sommatifs comptent comme les autres dans la validation des compétences, les résultats et moyennes, la fiche élève et le livret.'),
     h('section', { class: 'grille-libres' }, ctx.matieres.map((m) => {
       const l = contrats.filter((c) => c.matiere_id === m.id);
@@ -46,17 +46,14 @@ async function creer(ctx, matiere = null) {
   const mat = h('select', { class: 'champ' }, mats.map((m) => h('option', { value: m.id, selected: m.id === matiere }, m.nom)));
   const titre = h('input', { class: 'champ', placeholder: 'ex. Communication orale – présentation du projet' });
   const date = h('input', { class: 'champ', type: 'date' });
-  const cases = new Map();
-  const bloc = (t, cs, ouvert) => h('details', { class: 'groupe-comps', open: ouvert }, h('summary', {}, t),
-    cs.map((c) => { const cb = h('input', { type: 'checkbox' }); cases.set(c.code, cb); return h('label', { class: 'choix-doc' }, cb, h('b', {}, c.code), ' ', c.libelle); }));
+  const choix = choixCompetences(ref);
   const r = await fenetre('Nouveau contrat hors séquence', h('div', { class: 'creation-libre' },
     h('div', { class: 'formulaire' }, h('label', {}, 'Type', type), h('label', {}, 'Matière', mat), h('label', { class: 'large' }, 'Titre de l’évaluation', titre), h('label', {}, 'Date', date)),
-    h('p', { class: 'aide' }, 'Compétences évaluées : une rubrique par compétence, avec ses indicateurs de performance comme critères (modifiables ensuite). Vous pourrez aussi ajouter des rubriques libres.'),
-    bloc('Compétences transversales (C5 · C6)', ref.competences.filter((c) => ctx.transversale(c.code)), true),
-    bloc('Compétences cœur de métier (C1 à C4)', ref.competences.filter((c) => !ctx.transversale(c.code)), false)),
+    h('p', { class: 'aide' }, 'Compétences évaluées, à choisir dans tout le référentiel (C1 à C6) : une rubrique par compétence, avec ses indicateurs de performance comme critères (modifiables ensuite). Vous pourrez aussi ajouter des rubriques libres.'),
+    choix.el),
   [{ texte: 'Annuler', valeur: null }, { texte: '＋  Créer le contrat', classe: 'principal', action: async () => {
     if (!titre.value.trim()) throw new Error('Donnez un titre à l’évaluation.');
-    const comps = [...cases].filter(([, cb]) => cb.checked).map(([k]) => k);
+    const comps = choix.choisies();
     return db.rpc('creer_contrat_libre', { t: type.value, p: ctx.promo.id, m: Number(mat.value), titre: titre.value.trim(), d: date.value || null, comps });
   } }], { large: true });
   if (r) { toast('Contrat créé'); location.hash = '#/contrats/' + r; }

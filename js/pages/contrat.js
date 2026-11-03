@@ -208,17 +208,11 @@ export async function dessinerContrat(zone, opts) {
   async function ajouterCompetences() {
     const ref = await ctx.referentiel();
     const deja = new Set(criteres.map((k) => k.groupe));
-    const cases = new Map();
-    const bloc = (titre, cs) => h('fieldset', { class: 'groupe-docs' }, h('legend', {}, titre), cs.map((c) => {
-      const cb = h('input', { type: 'checkbox', disabled: deja.has(c.code) }); cases.set(c.code, cb);
-      return h('label', { class: 'choix-doc' + (deja.has(c.code) ? ' gris' : '') }, cb, h('b', {}, c.code), ' ', c.libelle, deja.has(c.code) ? ' (déjà dans le contrat)' : '');
-    }));
-    const ok = await fenetre('Ajouter des compétences', h('div', { class: 'choix-telecharger' },
-      bloc('Compétences transversales (C5 · C6)', ref.competences.filter((c) => ctx.transversale(c.code))),
-      bloc('Compétences cœur de métier (C1 à C4)', ref.competences.filter((c) => !ctx.transversale(c.code)))),
+    const choix = choixCompetences(ref, deja);
+    const ok = await fenetre('Ajouter des compétences', h('div', { class: 'creation-libre' }, h('p', { class: 'aide' }, 'Toutes les compétences du référentiel, de C1 à C6.'), choix.el),
     [{ texte: 'Annuler', valeur: false }, { texte: '＋  Ajouter', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
-    const comps = [...cases].filter(([, cb]) => cb.checked).map(([k]) => k);
+    const comps = choix.choisies();
     if (!comps.length) return;
     try {
       await db.rpc('ajouter_competences_contrat', { c: contrat.id, comps });
@@ -241,4 +235,29 @@ export async function dessinerContrat(zone, opts) {
 
   dessiner();
   return { contrat, dateFr };
+}
+
+
+// choix de compétences dans tout le référentiel (C1 à C6), par famille, avec « tout cocher » par famille et en tout
+export function choixCompetences(ref, deja = new Set()) {
+  const cases = new Map();
+  const familles = [...new Set(ref.competences.map((c) => c.famille))];
+  const compte = h('b', {});
+  const maj = () => { compte.textContent = `${[...cases.values()].filter((cb) => cb.checked).length} compétence(s) cochée(s)`; };
+  const blocs = familles.map((f) => {
+    const cs = ref.competences.filter((c) => c.famille === f);
+    const tout = h('input', { type: 'checkbox', title: 'Tout cocher dans cette famille', onchange: (e) => { cs.forEach((c) => { const cb = cases.get(c.code); if (!cb.disabled) cb.checked = e.target.checked; }); maj(); } });
+    return h('fieldset', { class: 'famille-comps' },
+      h('legend', {}, h('label', {}, tout, h('b', {}, f), ' ', cs[0]?.famille_libelle || '')),
+      cs.map((c) => {
+        const cb = h('input', { type: 'checkbox', disabled: deja.has(c.code), onchange: maj }); cases.set(c.code, cb);
+        return h('label', { class: 'choix-doc' + (deja.has(c.code) ? ' gris' : '') }, cb, h('b', {}, c.code), ' ', c.libelle, deja.has(c.code) ? ' (déjà dans le contrat)' : '');
+      }));
+  });
+  maj();
+  const tous = (v) => { cases.forEach((cb) => { if (!cb.disabled) cb.checked = v; }); maj(); };
+  const el = h('div', { class: 'choix-comps' },
+    h('div', { class: 'ligne-com' }, compte, h('span', {}, h('button', { class: 'lien petit', type: 'button', onclick: () => tous(false) }, 'tout décocher'))),
+    h('div', { class: 'liste-comps' }, blocs));
+  return { el, choisies: () => [...cases].filter(([, cb]) => cb.checked).map(([k]) => k) };
 }
