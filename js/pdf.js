@@ -128,6 +128,13 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
       texte(nettoyer(titre).toUpperCase(), gauche + 6, y - 11.5, FB, 8.5, BLANC);
       y -= 16;
     },
+    // paragraphe simple (sans bandeau)
+    texte(b) {
+      const taille = 9.5, pas = 12.5;
+      y -= 2;
+      for (const l of lignes(b.texte, b.gras ? FB : F, taille, largeur - 8)) { place(pas); y -= pas; texte(l, gauche + 4, y + 2.5, b.gras ? FB : F, taille); }
+      y -= 8;
+    },
     // étapes numérotées (pastille avec le numéro, texte à côté)
     etapes(b) {
       const taille = 9, pas = 11.5, ret = 26;
