@@ -564,6 +564,7 @@ async function index(zone, ctx, mode = 'preparation') {
     h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, `${icone}  ${titre}`),
       h('p', { class: 'sous-titre' }, `Documents professeurs · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
     h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
+    mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, 'Pour évaluer des compétences hors de toute séquence (par exemple des compétences transversales) : ', h('a', { href: '#/contrats' }, '📌 Contrats hors séquence'), '.') : null,
     h('section', { class: 'grille-matieres' }, ctx.matieres.map((m) => {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },

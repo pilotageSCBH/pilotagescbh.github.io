@@ -39,7 +39,7 @@ export async function pageResultats(zone, arg, ctx) {
     sequences = new Map(sq.map((s) => [s.id, s]));
     evaluations = ev;
     const [co, re] = await Promise.all([
-      sq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sq.map((s) => s.id).join(',')})&order=id`) : [],
+      Promise.all([sq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sq.map((s) => s.id).join(',')})&order=id`) : [], db.lire('contrats', `type=eq.sommatif&promotion_id=eq.${P.id}&order=id`).catch(() => [])]).then(([a, b]) => [...a, ...b]),
       ev.length ? db.lire('resultats', `evaluation_id=in.(${ev.map((v) => v.id).join(',')})&order=evaluation_id,eleve_id`) : []]);
     contrats = co;
     resultats = new Map(re.map((r) => [`${r.evaluation_id}:${r.eleve_id}`, r.valeur]));
@@ -53,8 +53,8 @@ export async function pageResultats(zone, arg, ctx) {
     const cols = [];
     for (const c of contrats) {
       const s = sequences.get(c.sequence_id);
-      if (!s || s.matiere_id !== m.id || !dansPeriode(c.date_eval)) continue;
-      cols.push({ type: 'contrat', id: c.id, objet: c, seq: s, titre: `Contrat séq. ${s.numero}`, sous: s.intitule || '', date: c.date_eval,
+      if (!(s ? s.matiere_id === m.id : c.matiere_id === m.id) || !dansPeriode(c.date_eval)) continue;
+      cols.push({ type: 'contrat', id: c.id, objet: c, seq: s, titre: s ? `Contrat séq. ${s.numero}` : 'Contrat hors séq.', sous: s ? s.intitule || '' : c.titre || '', date: c.date_eval,
         coef: Number(c.coef_resultat), bareme: 20, note: (e) => (concerne(e, c.date_eval) ? sommatives.get(`${c.id}:${e.id}`) ?? null : null), brut: (e) => sommatives.get(`${c.id}:${e.id}`) ?? null });
     }
     for (const v of evaluations) {

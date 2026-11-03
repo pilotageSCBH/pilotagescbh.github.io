@@ -12,7 +12,8 @@ export async function pageValidation(zone, _arg, ctx) {
   const ref = await ctx.referentiel();
   const eleves = (await db.lire('eleves', `promotion_id=eq.${ctx.promo.id}&order=nom,prenom`)).filter((e) => !e.arret);
   const sequences = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}`);
-  const contrats = sequences.length ? await db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : [];
+  const contrats = [...(sequences.length ? await db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : []),
+    ...(await db.lire('contrats', `type=eq.sommatif&promotion_id=eq.${ctx.promo.id}&order=id`).catch(() => []))];   // + contrats hors séquence
   const criteres = contrats.length ? (await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&order=id`)).filter((k) => k.actif) : [];
   const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
   const notes = new Map(notesL.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
@@ -21,7 +22,7 @@ export async function pageValidation(zone, _arg, ctx) {
   // meilleure évaluation par élève et par compétence
   const best = new Map();
   for (const c of contrats) {
-    const sq = sequences.find((s) => s.id === c.sequence_id), m = ctx.matieres.find((x) => x.id === sq?.matiere_id);
+    const sq = sequences.find((s) => s.id === c.sequence_id), m = ctx.matieres.find((x) => x.id === (sq?.matiere_id ?? c.matiere_id));
     const groupes = new Map();
     for (const k of criteres.filter((x) => x.contrat_id === c.id)) groupes.set(k.groupe, (groupes.get(k.groupe) || []).concat(k));
     for (const [code, ks] of groupes) for (const e of eleves) {

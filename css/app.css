@@ -1472,3 +1472,17 @@ th.eleve.hors span { opacity: .55; }
 .tete-partie .duree-partie { width: 110px; }
 .entete-activite { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--ligne); flex-wrap: wrap; }
 .entete-activite .titre-activite { min-width: 220px; }
+
+/* ===================================================================== contrats hors séquence */
+.grille-libres { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.liste-libres { list-style: none; margin: 0; padding: 6px 10px; }
+.liste-libres li a { display: flex; gap: 10px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--ligne); text-decoration: none; color: inherit; border-radius: 6px; }
+.liste-libres li a:hover { background: var(--clair); }
+.liste-libres li a > span:last-child { display: flex; flex-direction: column; }
+.liste-libres small { color: var(--gris); font-size: 12px; }
+.type-libre { font-size: 18px; }
+.ajout-libre { margin: 6px 14px 12px; }
+.creation-libre .groupe-comps { border: 1px solid var(--ligne); border-radius: 8px; padding: 6px 10px; margin: 8px 0; max-height: 34vh; overflow: auto; }
+.creation-libre .groupe-comps summary { font-weight: 700; color: var(--fonce); cursor: pointer; padding: 4px 0; }
+.creation-libre .choix-doc { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; }
+.titre-libre { font-weight: 700; min-width: 360px; }

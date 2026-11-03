@@ -37,8 +37,8 @@ export async function acquisAnterieurs(ctx, eleves) {
     while (o && !l.includes(o.id) && l.length < 3) { l.push(o.id); o = fiches.get(o.origine_eleve_id); } }
   const ids = [...fiches.keys()], promos = [...new Set([...fiches.values()].map((o) => o.promotion_id))];
   const sequences = await db.lire('sequences', `promotion_id=in.(${promos.join(',')})`);
-  if (!sequences.length) return R;
-  const contrats = await db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sequences.map((s) => s.id).join(',')})`);
+  const contrats = [...(sequences.length ? await db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sequences.map((s) => s.id).join(',')})`) : []),
+    ...(await db.lire('contrats', `type=eq.sommatif&promotion_id=in.(${promos.join(',')})`).catch(() => []))];   // + contrats hors séquence
   if (!contrats.length) return R;
   const criteres = (await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&order=id`)).filter((k) => k.actif);
   if (!criteres.length) return R;
@@ -49,8 +49,8 @@ export async function acquisAnterieurs(ctx, eleves) {
     const best = new Map(), o = fiches.get(oid);
     for (const c of contrats) {
       const s = sequences.find((x) => x.id === c.sequence_id);
-      if (!s || s.promotion_id !== o.promotion_id) continue;
-      const mat = ctx.matieres.find((x) => x.id === s.matiere_id), groupes = new Map();
+      if ((s ? s.promotion_id : c.promotion_id) !== o.promotion_id) continue;
+      const mat = ctx.matieres.find((x) => x.id === (s ? s.matiere_id : c.matiere_id)), groupes = new Map();
       for (const k of criteres.filter((x) => x.contrat_id === c.id)) groupes.set(k.groupe, (groupes.get(k.groupe) || []).concat(k));
       for (const [code, ks] of groupes) {
         const n = moyenne(ks, notes, oid);

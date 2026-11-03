@@ -53,12 +53,13 @@ export async function chargerSuivi(ctx) {
   const idsSeq = sequences.map((s) => s.id);
   const seancesL = idsSeq.length ? await db.lire('seances', `sequence_id=in.(${idsSeq.join(',')})&order=sequence_id,numero`) : [];
   const idsSe = seancesL.map((x) => x.id);
-  const [contrats1, contrats2, fiches, resultats] = await Promise.all([
+  const [contrats1, contrats2, fiches, resultats, contrats3] = await Promise.all([
     idsSeq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${idsSeq.join(',')})`) : [],
     idsSe.length ? db.lire('contrats', `type=eq.formatif&seance_id=in.(${idsSe.join(',')})`) : [],
     idsSe.length ? db.lire('fiches_seance', `seance_id=in.(${idsSe.join(',')})&select=seance_id,phases,maison_avant,maison_apres`) : [],
-    evaluations.length ? db.lire('resultats', `evaluation_id=in.(${evaluations.map((v) => v.id).join(',')})&select=evaluation_id`) : []]);
-  const contrats = [...contrats1, ...contrats2];
+    evaluations.length ? db.lire('resultats', `evaluation_id=in.(${evaluations.map((v) => v.id).join(',')})&select=evaluation_id`) : [],
+    db.lire('contrats', `promotion_id=eq.${P.id}`).catch(() => [])]);   // contrats hors séquence
+  const contrats = [...contrats1, ...contrats2, ...contrats3];
   const criteres = contrats.length ? await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&actif=is.true&select=id,contrat_id,groupe`) : [];
   const seqs = new Map(sequences.map((s) => [s.id, s]));
   const seances = new Map(seancesL.map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: ctx.matieres.find((m) => m.id === seqs.get(x.sequence_id)?.matiere_id) }]));
@@ -83,6 +84,11 @@ export function listeEvaluations(D, ctx) {
   const l = [];
   for (const c of D.contrats) {
     const x = c.seance_id ? D.seances.get(c.seance_id) : null, s = c.type === 'sommatif' ? D.seqs.get(c.sequence_id) : x?.seq;
+    if (!s && c.matiere_id && !c.sequence_id && !c.seance_id) {   // contrat hors séquence
+      l.push({ type: c.type, id: c.id, date: c.date_eval, mat: ctx.matieres.find((y) => y.id === c.matiere_id), notee: c.type === 'sommatif' ? D.noteesContrats.has(c.id) : null,
+        titre: `Fiche contrat ${c.type} hors séquence${c.titre ? ' · ' + c.titre : ''}`, lien: `#/contrats/${c.id}`, forme: c.forme });
+      continue;
+    }
     if (!s) continue;
     const m = ctx.matieres.find((y) => y.id === s.matiere_id);
     l.push({ type: c.type, id: c.id, date: c.date_eval, mat: m, notee: c.type === 'sommatif' ? D.noteesContrats.has(c.id) : null,

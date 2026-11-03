@@ -33,7 +33,7 @@ export async function pageEleve(zone, arg, ctx) {
   if (!eleves.length) { vider(zone, h('header', { class: 'entete-page' }, h('h1', {}, 'Fiche élève et livret')), h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.')); return; }
   const sequences = new Map(sq.map((s) => [s.id, s]));
   const [contrats, res] = await Promise.all([
-    sq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sq.map((s) => s.id).join(',')})&order=id`) : [],
+    Promise.all([sq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${sq.map((s) => s.id).join(',')})&order=id`) : [], db.lire('contrats', `type=eq.sommatif&promotion_id=eq.${P.id}&order=id`).catch(() => [])]).then(([a, b]) => [...a, ...b]),
     ev.length ? db.lire('resultats', `evaluation_id=in.(${ev.map((v) => v.id).join(',')})&order=evaluation_id,eleve_id`) : []]);
   const criteres = contrats.length ? (await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&order=id`)).filter((k) => k.actif) : [];
   const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
@@ -51,7 +51,7 @@ export async function pageEleve(zone, arg, ctx) {
 
   // toutes les évaluations notées sur 20 : contrats sommatifs et résultats intermédiaires
   const items = [
-    ...contrats.map((c) => { const s = sequences.get(c.sequence_id); return s && { matiere: s.matiere_id, titre: `Contrat séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}`, date: c.date_eval, coef: Number(c.coef_resultat ?? 1), note: (e) => (concerne(e, c.date_eval) ? sommatives.get(`${c.id}:${e.id}`) ?? null : null) }; }).filter(Boolean),
+    ...contrats.map((c) => { const s = sequences.get(c.sequence_id); return (s || c.matiere_id) && { matiere: s ? s.matiere_id : c.matiere_id, titre: s ? `Contrat séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}` : `Contrat hors séquence${c.titre ? ' · ' + c.titre : ''}`, date: c.date_eval, coef: Number(c.coef_resultat ?? 1), note: (e) => (concerne(e, c.date_eval) ? sommatives.get(`${c.id}:${e.id}`) ?? null : null) }; }).filter(Boolean),
     ...ev.map((v) => { const b = Number(v.bareme) || 20; return { matiere: v.matiere_id, titre: v.libelle || 'Résultat', date: v.date_eval, coef: Number(v.coefficient), note: (e) => { if (!concerne(e, v.date_eval)) return null; const r = resultats.get(`${v.id}:${e.id}`); return /^[0-9.]+$/.test(r || '') ? Number(r) * 20 / b : null; } }; }),
   ];
   const dansPeriode = (d) => { const [, , a, b] = PERIODES.find((p) => p[0] === periode); return periode === 'tout' || (d && d >= a && d < b); };
@@ -64,7 +64,7 @@ export async function pageEleve(zone, arg, ctx) {
   const meilleur = (e) => {
     const best = new Map();
     for (const c of contrats) {
-      const s = sequences.get(c.sequence_id), mat = ctx.matieres.find((x) => x.id === s?.matiere_id);
+      const s = sequences.get(c.sequence_id), mat = ctx.matieres.find((x) => x.id === (s?.matiere_id ?? c.matiere_id));
       const groupes = new Map();
       for (const k of criteres.filter((x) => x.contrat_id === c.id)) groupes.set(k.groupe, (groupes.get(k.groupe) || []).concat(k));
       for (const [code, ks] of groupes) {

@@ -3,6 +3,7 @@ import { NOM_APPLI } from '../config.js';
 import { estConnecte, connexion, premiereConnexion, deconnexion, db, emailConnecte, SESSION_EXPIREE, rpcPublic, emailDe, changerCode } from './api.js';
 import { h, vider, erreur, toast } from './ui.js';
 import { pageAccueil } from './pages/accueil.js';
+import { pageContratsLibres } from './pages/contratsLibres.js';
 import { pageEquipe } from './pages/equipe.js';
 import { pageEleves } from './pages/eleves.js';
 import { pageReferentiel } from './pages/referentiel.js';
@@ -81,7 +82,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -260,7 +261,8 @@ function menu(route) {
       { href: '#/fiches/deroulement', icone: '📝', texte: 'Fiches de déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
       { sous: 'Documents d’évaluation' },
       { href: '#/fiches/formatifs', icone: '✅', texte: 'Fiches contrats formatifs', actif: page === 'fiches' && modeFiches(arg) === 'formatifs' },
-      { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' }] },
+      { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' },
+      { href: '#/contrats', icone: '📌', texte: 'Contrats hors séquence', actif: page === 'contrats' }] },
     { cle: 'resultats', titre: 'Résultats', icone: '🏆', items: [
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
@@ -373,7 +375,7 @@ async function afficher() {
   try {
     await PAGES[r[0]](zone, r[1], ctx);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
-    const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches',
+    const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches',
       validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));

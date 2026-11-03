@@ -3,7 +3,7 @@
 //   < 2 → NA (non acquis) · 2 à < 4 → EVA (en voie d'acquisition) · ≥ 4 → A (acquis) · aucune note → NE.
 import { concerne } from '../redoublants.js';
 import { db } from '../api.js';
-import { h, vider, champ, toast, erreur, confirmer, dateFr } from '../ui.js';
+import { h, vider, champ, toast, erreur, confirmer, dateFr, fenetre } from '../ui.js';
 import { empileH, colonnes, carteGraph } from '../graphiques.js';
 
 export const FORMES = ['Devoir surveillé', 'Travaux pratiques', 'QCM', 'Exposé oral', 'Dossier', 'Étude de cas', 'Mise en situation'];
@@ -33,8 +33,9 @@ export function moyenne(criteres, notes, eleveId) {
 export async function dessinerContrat(zone, opts) {
   const { type, ctx, modif } = opts;
   const champCle = type === 'sommatif' ? 'sequence_id' : 'seance_id';
-  let contrat = (await db.lire('contrats', `type=eq.${type}&${champCle}=eq.${opts.id}`))[0];
-  if (!contrat && modif) {
+  const libre = !!opts.contratId;   // contrat hors séquence (rattaché à une promotion et une matière)
+  let contrat = (await db.lire('contrats', libre ? `id=eq.${opts.contratId}` : `type=eq.${type}&${champCle}=eq.${opts.id}`))[0];
+  if (!contrat && modif && !libre) {
     try { const id = await db.rpc(type === 'sommatif' ? 'contrat_sommatif' : 'contrat_formatif', type === 'sommatif' ? { s: opts.id } : { x: opts.id });
       contrat = (await db.lire('contrats', `id=eq.${id}`))[0]; } catch (e) { erreur(e); }
   }
@@ -102,24 +103,28 @@ export async function dessinerContrat(zone, opts) {
           }, { lecture: !modif, classe: 'centre' })),
           eleves.map((e) => celluleNote(k, e))));
       }
-      lignes.push(h('tr', { class: 'ligne-moy' }, h('td', { colspan: 2 }, type === 'sommatif' ? `Niveau de la compétence ${t.code} (note / 5)` : 'Note de l’objectif / 5'),
+      lignes.push(h('tr', { class: 'ligne-moy' }, h('td', { colspan: 2 }, /^C\d/.test(t.code) ? `Niveau de la compétence ${t.code} (note / 5)` : type === 'sommatif' ? `Niveau · ${t.code} (note / 5)` : 'Note de l’objectif / 5'),
         eleves.map((e) => n5(moyenne(actifs(g), notes, e.id)))));
     }
-    if (type === 'formatif') lignes.push(h('tr', { class: 'ligne-moy forte' }, h('td', { colspan: 2 }, 'OBJECTIF INTERMÉDIAIRE (note / 5)'), eleves.map((e) => n5(finale(e)))));
+    if (type === 'formatif') lignes.push(h('tr', { class: 'ligne-moy forte' }, h('td', { colspan: 2 }, libre ? 'RÉSULTAT GLOBAL (note / 5)' : 'OBJECTIF INTERMÉDIAIRE (note / 5)'), eleves.map((e) => n5(finale(e)))));
     lignes.push(h('tr', { class: 'ligne-finale' }, h('td', { colspan: 2 }, 'NOTE FINALE / 20'),
       eleves.map((e) => { const f = finale(e); return h('td', { class: 'finale' }, f === null ? '—' : arrondi(f * 4)); })));
 
     vider(zone,
       tete,
       h('div', { class: 'barre-contrat' },
-        h('span', { class: 'aide' }, type === 'sommatif'
+        h('span', { class: 'aide' }, libre
+          ? 'Critères = indicateurs de performance du référentiel pour chaque compétence choisie ; rubriques et critères modifiables.'
+          : type === 'sommatif'
           ? 'Critères = indicateurs de performance du référentiel pour chaque compétence de la séquence.'
           : 'Critères = résultats attendus du référentiel pour chaque objectif opérationnel de la séance.'),
-        type === 'sommatif' && modif ? h('button', { class: 'btn petit', onclick: actualiser }, '↻ Ajouter les compétences ajoutées au séquençage') : null,
+        type === 'sommatif' && modif && !libre ? h('button', { class: 'btn petit', onclick: actualiser }, '↻ Ajouter les compétences ajoutées au séquençage') : null,
+        libre && modif ? h('button', { class: 'btn petit', onclick: ajouterCompetences }, '＋ Compétences du référentiel') : null,
+        libre && modif ? h('button', { class: 'btn petit', onclick: ajouterRubrique }, '＋ Rubrique libre') : null,
         criteres.some((k) => !k.actif) ? h('label', { class: 'interrupteur' }, h('input', { type: 'checkbox', checked: voirRetires, onchange: (e) => { voirRetires = e.target.checked; dessiner(); } }), 'voir les critères retirés') : null),
       eleves.length ? null : h('p', { class: 'aide' }, 'Aucun élève dans cette promotion : ajoutez-les dans la page Élèves.'),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'grille-notes' },
-        h('thead', {}, h('tr', {}, h('th', { class: 'col-critere' }, type === 'sommatif' ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères d’évaluation'),
+        h('thead', {}, h('tr', {}, h('th', { class: 'col-critere' }, type === 'sommatif' || libre ? 'Compétences et indicateurs de performance' : 'Objectifs opérationnels et critères d’évaluation'),
           h('th', { class: 'coef' }, 'Coef.'), nomsEleves)),
         h('tbody', {}, lignes))),
       h('div', { class: 'legende-niveaux' },
@@ -196,6 +201,41 @@ export async function dessinerContrat(zone, opts) {
       await db.rpc('contrat_sommatif', { s: opts.id });
       criteres = await db.lire('criteres', `contrat_id=eq.${contrat.id}&order=groupe_ordre,ordre,id`);
       toast('Contrat à jour'); dessiner();
+    } catch (e) { erreur(e); }
+  }
+
+  // contrat hors séquence : ajout de compétences du référentiel (toutes, transversales en tête) ou d'une rubrique libre
+  async function ajouterCompetences() {
+    const ref = await ctx.referentiel();
+    const deja = new Set(criteres.map((k) => k.groupe));
+    const cases = new Map();
+    const bloc = (titre, cs) => h('fieldset', { class: 'groupe-docs' }, h('legend', {}, titre), cs.map((c) => {
+      const cb = h('input', { type: 'checkbox', disabled: deja.has(c.code) }); cases.set(c.code, cb);
+      return h('label', { class: 'choix-doc' + (deja.has(c.code) ? ' gris' : '') }, cb, h('b', {}, c.code), ' ', c.libelle, deja.has(c.code) ? ' (déjà dans le contrat)' : '');
+    }));
+    const ok = await fenetre('Ajouter des compétences', h('div', { class: 'choix-telecharger' },
+      bloc('Compétences transversales (C5 · C6)', ref.competences.filter((c) => ctx.transversale(c.code))),
+      bloc('Compétences cœur de métier (C1 à C4)', ref.competences.filter((c) => !ctx.transversale(c.code)))),
+    [{ texte: 'Annuler', valeur: false }, { texte: '＋  Ajouter', classe: 'principal', valeur: true }], { large: true });
+    if (!ok) return;
+    const comps = [...cases].filter(([, cb]) => cb.checked).map(([k]) => k);
+    if (!comps.length) return;
+    try {
+      await db.rpc('ajouter_competences_contrat', { c: contrat.id, comps });
+      criteres = await db.lire('criteres', `contrat_id=eq.${contrat.id}&order=groupe_ordre,ordre,id`);
+      toast(`${comps.length} compétence(s) ajoutée(s)`); dessiner();
+    } catch (e) { erreur(e); }
+  }
+  async function ajouterRubrique() {
+    const nom = h('input', { class: 'champ', placeholder: 'ex. Travail en équipe, Communication orale…' });
+    const r = await fenetre('Ajouter une rubrique libre', h('div', { class: 'formulaire' }, h('label', { class: 'large' }, 'Intitulé de la rubrique', nom)),
+      [{ texte: 'Annuler', valeur: null }, { texte: '＋  Ajouter', classe: 'principal', action: () => { if (!nom.value.trim()) throw new Error('Saisissez un intitulé.'); return nom.value.trim(); } }]);
+    if (!r) return;
+    try {
+      const go = Math.max(0, ...criteres.map((k) => k.groupe_ordre)) + 1;
+      await db.ajouter('criteres', { contrat_id: contrat.id, groupe: r, groupe_ordre: go, ordre: 1, texte: '', libre: true });
+      criteres = await db.lire('criteres', `contrat_id=eq.${contrat.id}&order=groupe_ordre,ordre,id`);
+      dessiner();
     } catch (e) { erreur(e); }
   }
 
