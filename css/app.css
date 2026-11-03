@@ -1319,7 +1319,8 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
 .titre-accueil { font-size: 20px; color: var(--fonce); margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
 .titre-accueil::before { content: ''; width: 6px; height: 22px; border-radius: 3px; background: linear-gradient(var(--teal), var(--anis)); }
 
-.tuiles-accueil { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tuiles-accueil { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1350px) { .tuiles-accueil { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .tuiles-accueil { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .tuiles-accueil { grid-template-columns: 1fr; } }
 .tuile-accueil { display: flex; align-items: center; gap: 14px; padding: 18px; background: #fff; border-radius: 14px; box-shadow: var(--ombre);
@@ -1492,3 +1493,15 @@ th.eleve.hors span { opacity: .55; }
 .famille-comps legend label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .famille-comps .choix-doc { display: flex; gap: 8px; align-items: baseline; padding: 2px 0 2px 24px; font-size: 13px; }
 .famille-comps .choix-doc b, .famille-comps legend b { white-space: nowrap; }
+/* contrats hors séquence : création bien visible */
+.bandeau-creation { display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 4px 0 20px; padding: 18px 22px; border-radius: 14px;
+  background: linear-gradient(120deg, #0F5A53, var(--teal) 60%, #5E9A2A); color: #fff; box-shadow: var(--ombre); }
+.bandeau-creation h2 { margin: 0 0 6px; font-size: 19px; color: #fff; }
+.bandeau-creation p { margin: 0; max-width: 640px; font-size: 13.5px; line-height: 1.45; opacity: .95; }
+.boutons-creation { display: flex; gap: 12px; flex-wrap: wrap; }
+.gros-bouton { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border: 0; border-radius: 12px; background: #fff; color: var(--fonce); cursor: pointer; text-align: left;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18); transition: transform .15s; font: inherit; }
+.gros-bouton:hover { transform: translateY(-2px); }
+.gros-bouton .ic { font-size: 26px; }
+.gros-bouton b { display: block; font-size: 15px; }
+.gros-bouton small { color: var(--gris); font-size: 12px; }

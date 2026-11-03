@@ -53,8 +53,10 @@ export async function pageAccueil(zone, _arg, ctx) {
     ['🗓', 'Progression', 'Placement des séances sur les deux années', '#/progression'],
     ['📂', 'Documents professeurs', 'Fiches de préparation, de déroulement et contrats', '#/fiches/preparation'],
     ['📆', 'Calendrier des évaluations', 'Toutes les évaluations de la promotion', '#/evaluations'],
+    ['📌', 'Contrats hors séquence', 'Créer un contrat formatif ou sommatif sur n’importe quelle compétence', '#/contrats'],
     ['🏆', 'Résultats', 'Validation des compétences, moyennes, livrets', '#/validation'],
     ['📖', 'Référentiel', 'Activités, compétences et savoirs associés', '#/referentiel'],
+    ['👥', 'Élèves', 'Liste, effectifs et fiches des élèves', '#/eleves'],
   ];
 
   const jauge = (lib, val, total, lien, detail) => h('a', { class: 'chiffre-ligne', href: lien },

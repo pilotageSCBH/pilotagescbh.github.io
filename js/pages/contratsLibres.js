@@ -21,8 +21,7 @@ export async function pageContratsLibres(zone, arg, ctx) {
       h('div', {}, h('h1', {}, '📌  Contrats hors séquence'),
         h('p', { class: 'sous-titre' }, `Documents professeurs · Documents d’évaluation  ·  Promotion ${P.libelle}`)),
       h('div', { class: 'actions-page' }, peutCreer ? h('button', { class: 'btn principal', onclick: () => creer(ctx) }, '＋  Nouveau contrat') : null)),
-    h('p', { class: 'aide' }, 'Fiches contrat formatif ou sommatif qui ne dépendent d’aucune séquence : par exemple pour évaluer des compétences (cœur de métier ou transversales) non prévues dans le séquençage. '
-      + 'Les contrats sommatifs comptent comme les autres dans la validation des compétences, les résultats et moyennes, la fiche élève et le livret.'),
+    peutCreer ? bandeauCreation(ctx) : h('p', { class: 'aide' }, 'Fiches contrat formatif ou sommatif qui ne dépendent d’aucune séquence. Seuls les enseignants d’une matière peuvent en créer.'),
     h('section', { class: 'grille-libres' }, ctx.matieres.map((m) => {
       const l = contrats.filter((c) => c.matiere_id === m.id);
       if (!l.length && !ctx.peutMatiere(m.id)) return null;
@@ -37,17 +36,28 @@ export async function pageContratsLibres(zone, arg, ctx) {
     })));
 }
 
-// création : type, matière, titre, date, compétences à évaluer (transversales en tête)
-async function creer(ctx, matiere = null) {
+// grand bandeau « évaluer hors séquence » avec deux boutons de création (page des contrats hors séquence, pages des fiches contrats, accueil)
+export function bandeauCreation(ctx) {
+  return h('section', { class: 'bandeau-creation' },
+    h('div', { class: 'texte-creation' }, h('h2', {}, '📌  Évaluer hors séquence'),
+      h('p', {}, 'Créez une fiche contrat qui ne dépend d’aucune séquence, pour évaluer n’importe quelle compétence du référentiel (C1 à C6), par exemple une compétence non prévue dans le séquençage. '
+        + 'Les contrats sommatifs comptent dans la validation des compétences, les résultats et moyennes, la fiche élève et le livret.')),
+    h('div', { class: 'boutons-creation' },
+      h('button', { class: 'gros-bouton', type: 'button', onclick: () => creer(ctx, null, 'formatif') }, h('span', { class: 'ic' }, '✅'), h('span', {}, h('b', {}, 'Nouveau contrat formatif'), h('small', {}, 'hors séquence'))),
+      h('button', { class: 'gros-bouton', type: 'button', onclick: () => creer(ctx, null, 'sommatif') }, h('span', { class: 'ic' }, '🏁'), h('span', {}, h('b', {}, 'Nouveau contrat sommatif'), h('small', {}, 'hors séquence')))));
+}
+
+// création : type, matière, titre, date, compétences à évaluer (toutes les compétences du référentiel)
+export async function creer(ctx, matiere = null, typeChoisi = 'formatif') {
   const ref = await ctx.referentiel();
   const mats = ctx.matieres.filter((m) => ctx.peutMatiere(m.id));
   if (!matiere) matiere = ctx.matieres.find((m) => ctx.enseigne(m.id))?.id ?? null;   // par défaut : sa matière
-  const type = h('select', { class: 'champ' }, h('option', { value: 'formatif' }, 'Fiche contrat formatif'), h('option', { value: 'sommatif' }, 'Fiche contrat sommatif'));
+  const type = h('select', { class: 'champ' }, h('option', { value: 'formatif', selected: typeChoisi === 'formatif' }, 'Fiche contrat formatif'), h('option', { value: 'sommatif', selected: typeChoisi === 'sommatif' }, 'Fiche contrat sommatif'));
   const mat = h('select', { class: 'champ' }, mats.map((m) => h('option', { value: m.id, selected: m.id === matiere }, m.nom)));
   const titre = h('input', { class: 'champ', placeholder: 'ex. Communication orale – présentation du projet' });
   const date = h('input', { class: 'champ', type: 'date' });
   const choix = choixCompetences(ref);
-  const r = await fenetre('Nouveau contrat hors séquence', h('div', { class: 'creation-libre' },
+  const r = await fenetre(typeChoisi === 'sommatif' ? 'Nouveau contrat sommatif hors séquence' : 'Nouveau contrat formatif hors séquence', h('div', { class: 'creation-libre' },
     h('div', { class: 'formulaire' }, h('label', {}, 'Type', type), h('label', {}, 'Matière', mat), h('label', { class: 'large' }, 'Titre de l’évaluation', titre), h('label', {}, 'Date', date)),
     h('p', { class: 'aide' }, 'Compétences évaluées, à choisir dans tout le référentiel (C1 à C6) : une rubrique par compétence, avec ses indicateurs de performance comme critères (modifiables ensuite). Vous pourrez aussi ajouter des rubriques libres.'),
     choix.el),

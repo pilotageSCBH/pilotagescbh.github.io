@@ -6,6 +6,7 @@ import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, date
 import { dessinerContrat, moyenne, niveau, arrondi, ORGAS, LIEUX } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
+import { bandeauCreation } from './contratsLibres.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -564,7 +565,8 @@ async function index(zone, ctx, mode = 'preparation') {
     h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, `${icone}  ${titre}`),
       h('p', { class: 'sous-titre' }, `Documents professeurs · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
     h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
-    mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, 'Pour évaluer des compétences hors de toute séquence (par exemple des compétences transversales) : ', h('a', { href: '#/contrats' }, '📌 Contrats hors séquence'), '.') : null,
+    (mode === 'formatifs' || mode === 'sommatif') && ctx.matieres.some((m) => ctx.peutMatiere(m.id)) ? bandeauCreation(ctx) : null,
+    mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, h('a', { href: '#/contrats' }, '📌 Voir tous les contrats hors séquence de la promotion →')) : null,
     h('section', { class: 'grille-matieres' }, ctx.matieres.map((m) => {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },
