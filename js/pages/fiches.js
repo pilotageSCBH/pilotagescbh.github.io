@@ -634,8 +634,6 @@ export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve')
           prof && pt.enseignant ? R('Activités de l’enseignant', pt.enseignant, { gris: true }) : null].filter(Boolean) })),
       A.ressources ? R('Documents, matériel et ressources', A.ressources) : null,
       liens.length ? { t: 'qr', liens } : null,
-      prof && x.objectif_inter ? R('Objectif intermédiaire de la séance', x.objectif_inter, { gras: true, gris: true }) : null,
-      prof && A.competences.length ? R('Compétences visées', A.competences.join('\n'), { gris: true }) : null,
       liens.length && !prof ? { t: 'note', texte: 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' } : null,
     ].filter(Boolean),
   };
