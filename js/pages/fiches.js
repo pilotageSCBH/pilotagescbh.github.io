@@ -203,9 +203,7 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'entete-activite' }, h('span', { class: 'titre-activite' }, h('b', {}, A ? A.titre : 'Fiche activité'),
           h('small', {}, A ? `${A.parties.length} partie(s)${A.duree ? ' · ' + A.duree : ''}${A.organisation ? ' · ' + A.organisation : ''}` : 'aucune phase cochée')),
           A ? h('span', { class: 'actions-activite' },
-            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche élève (A4)', onclick: () => sortie('eleve', 'imprimer') }, '🖶  Imprimer'),
-            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la fiche élève en PDF', onclick: () => sortie('eleve', 'pdf') }, '⬇  PDF élève'),
-            h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la version enseignant (avec les activités de l’enseignant et les compétences visées)', onclick: () => sortie('enseignant', 'pdf') }, '⬇  Version enseignant')) : null),
+            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche activité (A4)', onclick: () => sortie('enseignant', 'imprimer') }, '🖶  Imprimer')) : null),
         choix, corps, h('datalist', { id: 'dl-orgas-act' }, ORGAS.map((o) => h('option', { value: o }))), h('datalist', { id: 'dl-lieux-act' }, LIEUX.map((o) => h('option', { value: o }))));
       vider(zoneAct, h('section', { class: 'bloc-activites' },
         h('div', { class: 'tete-activites' }, h('h3', {}, '🧩  Fiche activité'),
@@ -412,7 +410,7 @@ export async function pageFiches(zone, arg, ctx) {
         h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
           [`seance-${x.id}`, `activites-${x.id}`, `formatif-${x.id}`].forEach((k) => { cases.get(k).checked = e.target.checked; }); majCompte(); } }),
         `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
-        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`activites-${x.id}`, 'Fiche activité (version élève, si des phases sont cochées)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
+        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`activites-${x.id}`, 'Fiche activité (si des phases sont cochées)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
     [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
       if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
       return true;
@@ -533,7 +531,7 @@ export async function modelesSequence(S, ctx, choisis) {
           { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
         lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
         (() => { const A = ficheActivite(x, f);
-          return A ? R('Fiche activité (document élève séparé)', A.parties.map((p, n) => `Partie ${n + 1} · ${p.titre}${p.duree ? ' · ' + p.duree : ''}  (phase ${p.index + 1})`).join('\n')) : null; })(),
+          return A ? R('Fiche activité (document séparé)', A.parties.map((p, n) => `Partie ${n + 1} · ${p.titre}${p.duree ? ' · ' + p.duree : ''}  (phase ${p.index + 1})`).join('\n')) : null; })(),
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
     } else if (k.startsWith('activites-')) {
@@ -541,7 +539,7 @@ export async function modelesSequence(S, ctx, choisis) {
       const ct = (await db.lire('contrats', `type=eq.formatif&seance_id=eq.${x.id}`))[0];
       const ks = ct ? await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`) : [];
       const A = ficheActivite(x, f, ks, ref, d.preparation?.situation || '');
-      if (A) out.push({ ...modeleActivite(A, x, { sq, m, promo, profs }), fichier: `S${sq.numero}.${x.numero}_a_Fiche_activite.pdf` });
+      if (A) out.push({ ...modeleActivite(A, x, { sq, m, promo, profs }, 'enseignant'), fichier: `S${sq.numero}.${x.numero}_a_Fiche_activite.pdf` });
     } else if (k.startsWith('formatif-')) {
       out.push({ fichier: `S${sq.numero}.${x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
         blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
@@ -625,9 +623,9 @@ export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve')
   return {
     fichier: nomFichier(`${m ? m.abreviation || m.nom : ''}_S${sq.numero}.${x.numero}_fiche_activite${prof ? '_enseignant' : ''}.pdf`),
     titre: `Fiche activité · séance ${sq.numero}.${x.numero}`,
-    pied: `${m?.nom || ''} · Séance ${sq.numero}.${x.numero} · Fiche activité${prof ? ' · version enseignant' : ''} · Promotion ${promo}`,
+    pied: `${m?.nom || ''} · Séance ${sq.numero}.${x.numero} · Fiche activité · Promotion ${promo}`,
     blocs: [
-      { t: 'titre', texte: prof ? 'FICHE ACTIVITÉ — VERSION ENSEIGNANT' : 'FICHE ACTIVITÉ', sous: A.titre, couleur: coul },
+      { t: 'titre', texte: 'FICHE ACTIVITÉ', sous: A.titre, couleur: coul },
       { t: 'infos', paires: prof
         ? [['Matière', m?.nom], ['Enseignant', profs], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Promotion', promo], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Phases', A.parties.map((p) => p.index + 1).join(', ')]]
         : [['Nom et prénom', ' '], ['Date', ' '], ['Matière', m?.nom], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Enseignant', profs]] },
