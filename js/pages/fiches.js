@@ -175,8 +175,7 @@ export async function pageFiches(zone, arg, ctx) {
         const rub = (k, pleine = true) => { const [, lib, aide, source] = C[k]; return zone(k, lib, aide, source, A.auto[k] || '', A[k], FA, pleine); };
         corps = h('div', { class: 'corps-activite' },
           h('div', { class: 'grille-infos' }, petit('titre', 'Titre de la fiche'), petit('duree', 'Durée totale'),
-            petit('organisation', 'Organisation', { placeholder: modif ? 'Individuel, binôme…' : '' }), petit('lieu', 'Lieu / salle'),
-            petit('lignes', 'Lignes de réponse « Mon travail »', { type: 'number' })),
+            petit('organisation', 'Organisation', { placeholder: modif ? 'Individuel, binôme…' : '' }), petit('lieu', 'Lieu / salle')),
           A.parties.map((pt, n) => {
             FA.parties = FA.parties || {};
             const cible = () => (FA.parties[pt.id] = FA.parties[pt.id] || {});
@@ -639,7 +638,6 @@ export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve')
       liens.length ? { t: 'qr', liens } : null,
       prof && x.objectif_inter ? R('Objectif intermédiaire de la séance', x.objectif_inter, { gras: true, gris: true }) : null,
       prof && A.competences.length ? R('Compétences visées', A.competences.join('\n'), { gris: true }) : null,
-      !prof && Number(A.lignes) > 0 ? { t: 'lignes', titre: 'Mon travail', n: Math.min(40, Number(A.lignes)) } : null,
       liens.length && !prof ? { t: 'note', texte: 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' } : null,
     ].filter(Boolean),
   };
