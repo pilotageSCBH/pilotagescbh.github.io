@@ -4,6 +4,7 @@
 import { db } from '../api.js';
 import { h, vider, imprimer } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
+import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant } from '../redoublants.js';
 
 const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
 
@@ -30,6 +31,13 @@ export async function pageValidation(zone, _arg, ctx) {
       if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(cle, { n, date: c.date_eval, mat: m ? codeMat(m) : '' });
     }
   }
+  // redoublants : compétences validées dans leur promotion d'origine (si meilleures)
+  const anterieurs = await acquisAnterieurs(ctx, eleves);
+  for (const [eid, m] of anterieurs) {
+    const b = new Map([...best].filter(([k]) => k.startsWith(eid + ':')).map(([k, v]) => [k.split(':')[1], v]));
+    for (const [code, v] of fusionnerAcquis(b, m)) best.set(`${eid}:${code}`, v);
+  }
+  const nbRed = eleves.filter((e) => e.redoublant).length;
   const comps = ref.competences;
   const familles = [];
   for (const c of comps) { const f = familles[familles.length - 1]; if (f && f.code === c.famille) f.n++; else familles.push({ code: c.famille, lib: c.famille_libelle, n: 1 }); }
@@ -43,7 +51,8 @@ export async function pageValidation(zone, _arg, ctx) {
       h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ${eleves.length} élèves  ·  ${contrats.length} contrat(s) sommatif(s)`)),
       h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer (A3 paysage)'))),
     h('p', { class: 'aide ecran' }, 'Meilleure évaluation obtenue dans les contrats sommatifs de toutes les matières (à égalité, la plus récente). Dans chaque case : niveau, date et matière ('
-      + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'),
+      + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'
+      + (nbRed ? ' Élèves redoublants (R) : les compétences validées dans leur promotion d’origine sont reprises si elles sont meilleures (case hachurée, mention « N-1 »).' : '')),
     h('div', { class: 'tableau-validation' }, h('table', { class: 'validation' },
       h('thead', {},
         h('tr', { class: 'categories' }, h('th', { rowspan: 3, class: 'nom' }, 'Élève'),
@@ -58,10 +67,11 @@ export async function pageValidation(zone, _arg, ctx) {
           const b = best.get(`${e.id}:${c.code}`);
           const nv = niveau(b ? b.n : null);
           if (b) cpt[nv.code]++;
-          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : ''), title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)` : `${c.code} : non évaluée` },
-            h('b', {}, nv.code), b ? h('small', {}, jj(b.date)) : null, b ? h('small', {}, b.mat) : null);
+          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : '') + (b?.anterieur ? ' anterieur' : ''),
+            title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)${b.anterieur ? ` · obtenu dans la promotion ${b.promo}` : ''}` : `${c.code} : non évaluée` },
+            h('b', {}, nv.code), b ? h('small', {}, jj(b.date)) : null, b ? h('small', {}, b.anterieur ? 'N-1' : b.mat) : null);
         });
-        return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom), cells,
+        return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx)), cells,
           h('td', { class: 'total' }, cpt.A), h('td', { class: 'total' }, cpt.EVA), h('td', { class: 'total' }, cpt.NA));
       })))),
     eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'),

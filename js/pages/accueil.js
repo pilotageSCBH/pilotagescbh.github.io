@@ -16,6 +16,7 @@ export async function pageAccueil(zone, _arg, ctx) {
   // ------------------------------------------------------------------ chiffres de la promotion
   const enFormation = tous.filter((e) => !e.arret), arrets = tous.length - enFormation.length;
   const apprentis = enFormation.filter((e) => e.statut === 'Apprenti').length;
+  const redoublants = enFormation.filter((e) => e.redoublant).length;
   const compsTraitees = new Set(seances.flatMap((x) => x.competences || []).filter((c) => ref.comp[c]));
   const coeur = ref.competences.filter((c) => !ctx.transversale(c.code)), trans = ref.competences.filter((c) => ctx.transversale(c.code));
   const coeurT = coeur.filter((c) => compsTraitees.has(c.code)).length, transT = trans.filter((c) => compsTraitees.has(c.code)).length;
@@ -106,7 +107,7 @@ export async function pageAccueil(zone, _arg, ctx) {
           h('div', { class: 'effectif-nb' }, h('b', {}, enFormation.length), h('span', {}, 'élèves en formation')),
           h('div', { class: 'effectif-detail' },
             h('div', { class: 'barre-effectif' }, h('i', { class: 'app', style: { flex: apprentis || 0.0001 } }), h('i', { class: 'sco', style: { flex: (enFormation.length - apprentis) || 0.0001 } })),
-            h('small', {}, h('i', { class: 'pastille app' }), `${apprentis} apprenti(s)  `, h('i', { class: 'pastille sco' }), `${enFormation.length - apprentis} scolaire(s)`, arrets ? `  ·  ${arrets} arrêt(s)` : ''))),
+            h('small', {}, h('i', { class: 'pastille app' }), `${apprentis} apprenti(s)  `, h('i', { class: 'pastille sco' }), `${enFormation.length - apprentis} scolaire(s)`, redoublants ? `  ·  ${redoublants} redoublant(s)` : '', arrets ? `  ·  ${arrets} arrêt(s)` : ''))),
         h('p', { class: 'aide petit' }, 'Couverture du référentiel par les séances (au moins une séance)'),
         jauge('Compétences cœur de métier', coeurT, coeur.length, '#/couverture/competences', 'C1 à C4'),
         jauge('Compétences transversales', transT, trans.length, '#/couverture/competences', 'C5 et C6'),

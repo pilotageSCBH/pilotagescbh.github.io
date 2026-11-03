@@ -30,7 +30,7 @@ export async function pageFiches(zone, arg, ctx) {
     db.lire('eleves', `promotion_id=eq.${sq.promotion_id}`),
     db.lire('fiches_sequence', `sequence_id=eq.${sq.id}`)]);
   const actifs = eleves.filter((e) => !e.arret), app = actifs.filter((e) => e.statut === 'Apprenti').length;
-  const effectif = `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires)`;
+  const effectif = `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires${actifs.some((e) => e.redoublant) ? ` · dont ${actifs.filter((e) => e.redoublant).length} redoublant(s)` : ""})`;
   const profs = ctx.enseignantsDe(m.id).join(', ') || '—';
   const promo = ctx.promotions.find((p) => p.id === sq.promotion_id)?.libelle || '';
   const remplies = seances.filter((x) => x.titre || x.objectif_inter);
@@ -372,7 +372,7 @@ export async function contexteSequence(sq, ctx) {
   const actifs = eleves.filter((e) => !e.arret), app = actifs.filter((e) => e.statut === 'Apprenti').length;
   const remplies = seances.filter((x) => x.titre || x.objectif_inter);
   return { sq, m, ref, seances, actifs,
-    effectif: `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires)`,
+    effectif: `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires${actifs.some((e) => e.redoublant) ? ` · dont ${actifs.filter((e) => e.redoublant).length} redoublant(s)` : ""})`,
     profs: ctx.enseignantsDe(m.id).join(', ') || '—',
     promo: ctx.promotions.find((p) => p.id === sq.promotion_id)?.libelle || '',
     volume: `${remplies.length} séance(s) · ${heures(remplies.reduce((a, x) => a + (Number(x.duree) || 0), 0)) || '0 h'}` };

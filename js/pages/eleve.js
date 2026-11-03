@@ -6,6 +6,7 @@ import { h, vider, toast, erreur, champ, dateFr } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
 import { barresH, courbe, anneau, carteGraph } from '../graphiques.js';
 import { telecharger, nomFichier } from '../echange.js';
+import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, libPromo, concerne } from '../redoublants.js';
 
 const CLE_PER = 'pilotage-scbh-eleve-periode';
 const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -40,11 +41,18 @@ export async function pageEleve(zone, arg, ctx) {
   const resultats = new Map(res.map((r) => [`${r.evaluation_id}:${r.eleve_id}`, r.valeur]));
   const sommatives = new Map((ns || []).map((r) => [`${r.contrat_id}:${r.eleve_id}`, Number(r.note)]));
   const appreciations = new Map(ap.map((a) => [`${a.eleve_id}:${a.matiere_id}`, a.texte]));
+  // redoublants : acquis de la promotion d'origine ; élèves de cette promotion partis redoubler ailleurs
+  const anterieurs = await acquisAnterieurs(ctx, eleves);
+  const suites = await db.lire('eleves', `origine_eleve_id=in.(${eleves.map((e) => e.id).join(',')})&select=id,origine_eleve_id,promotion_id`).catch(() => []);
+  const ouvrirAilleurs = (promotionId, eleveId) => {
+    const p = ctx.promotions.find((x) => x.id === promotionId); if (!p) return;
+    ctx.choisirPromo(p.annee_debut); location.hash = '#/eleve/' + eleveId;
+  };
 
   // toutes les évaluations notées sur 20 : contrats sommatifs et résultats intermédiaires
   const items = [
-    ...contrats.map((c) => { const s = sequences.get(c.sequence_id); return s && { matiere: s.matiere_id, titre: `Contrat séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}`, date: c.date_eval, coef: Number(c.coef_resultat ?? 1), note: (e) => sommatives.get(`${c.id}:${e.id}`) ?? null }; }).filter(Boolean),
-    ...ev.map((v) => { const b = Number(v.bareme) || 20; return { matiere: v.matiere_id, titre: v.libelle || 'Résultat', date: v.date_eval, coef: Number(v.coefficient), note: (e) => { const r = resultats.get(`${v.id}:${e.id}`); return /^[0-9.]+$/.test(r || '') ? Number(r) * 20 / b : null; } }; }),
+    ...contrats.map((c) => { const s = sequences.get(c.sequence_id); return s && { matiere: s.matiere_id, titre: `Contrat séquence ${s.numero}${s.intitule ? ' · ' + s.intitule : ''}`, date: c.date_eval, coef: Number(c.coef_resultat ?? 1), note: (e) => (concerne(e, c.date_eval) ? sommatives.get(`${c.id}:${e.id}`) ?? null : null) }; }).filter(Boolean),
+    ...ev.map((v) => { const b = Number(v.bareme) || 20; return { matiere: v.matiere_id, titre: v.libelle || 'Résultat', date: v.date_eval, coef: Number(v.coefficient), note: (e) => { if (!concerne(e, v.date_eval)) return null; const r = resultats.get(`${v.id}:${e.id}`); return /^[0-9.]+$/.test(r || '') ? Number(r) * 20 / b : null; } }; }),
   ];
   const dansPeriode = (d) => { const [, , a, b] = PERIODES.find((p) => p[0] === periode); return periode === 'tout' || (d && d >= a && d < b); };
   const itemsP = () => items.filter((i) => dansPeriode(i.date));
@@ -66,7 +74,7 @@ export async function pageEleve(zone, arg, ctx) {
         if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(code, { n, date: c.date_eval, mat: mat ? ctx.codeMat(mat) : '', matNom: mat?.nom || '' });
       }
     }
-    return best;
+    return fusionnerAcquis(best, anterieurs.get(e.id));
   };
   const niveauDe = (best, code) => { const b = best.get(code); return b ? niveau(b.n).code : 'NE'; };
   const categories = [['Compétences cœur de métier', 'C1 à C4', ref.competences.filter((c) => !ctx.transversale(c.code))],
@@ -102,9 +110,16 @@ export async function pageEleve(zone, arg, ctx) {
       h('section', { class: 'profil-carte eleve' },
         h('span', { class: 'avatar grand' }, (e.prenom[0] || '') + (e.nom[0] || '')),
         h('div', { class: 'profil-infos' }, h('h2', {}, `${e.nom} ${e.prenom}`),
-          h('div', { class: 'profil-badges' }, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut),
+          h('div', { class: 'profil-badges' }, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut), badgeRedoublant(e, ctx, true),
             e.entreprise ? h('span', { class: 'role-pill' }, '🏭  ' + e.entreprise) : null, e.naissance ? h('span', { class: 'role-pill' }, 'né(e) le ' + dateFr(e.naissance)) : null),
-          e.etudes ? h('p', { class: 'gris' }, `Parcours : ${e.etudes}${e.etablissement ? ' · ' + e.etablissement : ''}`) : null),
+          e.etudes ? h('p', { class: 'gris' }, `Parcours : ${e.etudes}${e.etablissement ? ' · ' + e.etablissement : ''}`) : null,
+          e.redoublant ? h('div', { class: 'bandeau-redoublant' },
+            h('span', {}, `↻ Redoublant(e)${e.origine_promotion_id ? ` · vient de la promotion ${libPromo(ctx, e.origine_promotion_id)}` : ''}${e.date_arrivee ? ` · arrivé(e) le ${dateFr(e.date_arrivee)}` : ''}. `
+              + 'Les évaluations antérieures à son arrivée ne comptent pas ; les compétences validées auparavant sont reprises dans le livret (N-1).'),
+            e.origine_eleve_id ? h('button', { class: 'lien', onclick: () => ouvrirAilleurs(e.origine_promotion_id, e.origine_eleve_id) }, `Voir sa fiche dans la promotion ${libPromo(ctx, e.origine_promotion_id)} →`) : null) : null,
+          suites.filter((x) => x.origine_eleve_id === e.id).map((x) => h('div', { class: 'bandeau-redoublant suite' },
+            h('span', {}, `→ ${e.devenir || 'Redouble avec la promotion ' + libPromo(ctx, x.promotion_id)}.`),
+            h('button', { class: 'lien', onclick: () => ouvrirAilleurs(x.promotion_id, x.id) }, `Voir sa fiche dans la promotion ${libPromo(ctx, x.promotion_id)} →`)))),
         h('div', { class: 'moy-eleve auto' }, h('span', {}, 'Moyenne générale'), h('strong', { class: mg !== null && mg < 10 ? 'faible' : '' }, virgule(mg)),
           h('small', {}, `classe : ${virgule(mc)}`))),
       // résultats par matière
@@ -146,7 +161,7 @@ export async function pageEleve(zone, arg, ctx) {
             h('div', { class: 'titre-famille' }, h('b', {}, f), ' ', cs.find((c) => c.famille === f)?.famille_libelle || ''),
             cs.filter((c) => c.famille === f).map((c) => { const b = best.get(c.code), nv = niveauDe(best, c.code);
               return h('div', { class: 'ligne-livret' }, h('span', { class: 'code' }, c.code), h('span', { class: 'lib' }, c.libelle),
-                h('span', { class: 'niv ' + NIV[nv][1] }, nv), h('span', { class: 'quand gris' }, b ? `${b.date ? dateFr(b.date) : ''} · ${b.mat}` : '')); })))))));
+                h('span', { class: 'niv ' + NIV[nv][1] }, nv), h('span', { class: 'quand gris' + (b?.anterieur ? ' anterieur' : '') }, b ? `${b.date ? dateFr(b.date) : ''} · ${b.mat}${b.anterieur ? ` · promo ${b.promo}` : ''}` : '')); })))))));
     zone.querySelectorAll('textarea.champ').forEach((t) => { t.style.height = 'auto'; t.style.height = Math.max(t.scrollHeight + 2, 30) + 'px'; });
   }
 
@@ -157,7 +172,7 @@ export async function pageEleve(zone, arg, ctx) {
     const detail = itemsP().filter((i) => i.note(e) !== null).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
     const blocs = [
       { t: 'titre', texte: 'FICHE DE SUIVI ET LIVRET DE COMPÉTENCES', sous: `${e.nom} ${e.prenom} · Promotion ${P.libelle}`, couleur: '#146B63' },
-      { t: 'infos', paires: [['Statut', e.statut], ['Né(e) le', e.naissance ? dateFr(e.naissance) : ''], ['Entreprise', e.entreprise], ['Parcours', [e.etudes, e.etablissement].filter(Boolean).join(' · ')],
+      { t: 'infos', paires: [['Statut', e.statut + (e.redoublant ? ` · redoublant(e)${e.origine_promotion_id ? ' (promotion ' + libPromo(ctx, e.origine_promotion_id) + ')' : ''}${e.date_arrivee ? ', arrivé(e) le ' + dateFr(e.date_arrivee) : ''}` : '')], ['Né(e) le', e.naissance ? dateFr(e.naissance) : ''], ['Entreprise', e.entreprise], ['Parcours', [e.etudes, e.etablissement].filter(Boolean).join(' · ')],
         ['Période', per[1]], ['Moyenne générale', `${virgule(moyGen(e))}  (classe : ${virgule(moyClasse(moyGen))})`]] },
       { t: 'table', titre: 'Résultats par matière', colonnes: [{ titre: 'Matière', part: 20, gras: true }, { titre: 'Moyenne', part: 10, centre: true, gras: true },
         { titre: 'Classe', part: 9, centre: true }, { titre: 'Évals', part: 7, centre: true }, { titre: 'Appréciation', part: 54 }], lignes: lignesMat },
@@ -171,12 +186,12 @@ export async function pageEleve(zone, arg, ctx) {
         for (const f of [...new Set(cs.map((c) => c.famille))]) {
           lignes.push({ groupe: `${f} · ${cs.find((c) => c.famille === f)?.famille_libelle || ''}` });
           cs.filter((c) => c.famille === f).forEach((c) => { const b = best.get(c.code), nv = niveauDe(best, c.code);
-            lignes.push({ fond: { A: '#CDE9BF', EVA: '#FBDDB0', NA: '#F6C9C3', NE: '#FFFFFF' }[nv], cellules: [`${c.code}  ${c.libelle}`, nv, b?.date ? dateFr(b.date) : '', b?.matNom || ''] }); });
+            lignes.push({ fond: { A: '#CDE9BF', EVA: '#FBDDB0', NA: '#F6C9C3', NE: '#FFFFFF' }[nv], cellules: [`${c.code}  ${c.libelle}`, nv, b?.date ? dateFr(b.date) : '', (b?.matNom || '') + (b?.anterieur ? ` (promo ${b.promo})` : '')] }); });
         }
         return { t: 'table', titre: `Livret · ${t} (${codes}) — A : ${n.A} · EVA : ${n.EVA} · NA : ${n.NA} · non évaluées : ${n.NE}`,
           colonnes: [{ titre: 'Compétence', part: 62 }, { titre: 'Niveau', part: 9, centre: true, gras: true }, { titre: 'Date', part: 12, centre: true }, { titre: 'Matière', part: 17 }], lignes };
       }),
-      { t: 'note', texte: 'Niveau : A acquis (4 à 5 / 5) · EVA en voie d’acquisition (2 à moins de 4) · NA non acquis (moins de 2) · NE non évaluée. Meilleur niveau obtenu dans les contrats sommatifs.' },
+      { t: 'note', texte: 'Niveau : A acquis (4 à 5 / 5) · EVA en voie d’acquisition (2 à moins de 4) · NA non acquis (moins de 2) · NE non évaluée. Meilleur niveau obtenu dans les contrats sommatifs' + (e.redoublant ? ', y compris dans la promotion d’origine pour un élève redoublant (indiqué « promo »).' : '.') },
     ].filter(Boolean);
     return { fichier: nomFichier(`Fiche_${e.nom}_${e.prenom}.pdf`), titre: `Fiche de suivi · ${e.nom} ${e.prenom}`, pied: `${e.nom} ${e.prenom} · Promotion ${P.libelle} · ${per[1]}`, blocs };
   }

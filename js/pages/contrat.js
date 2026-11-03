@@ -1,6 +1,7 @@
 // Contrat d'évaluation (sommatif d'une séquence ou formatif d'une séance) : en-tête, critères, grille de notation des élèves.
 // Note de 0 à 5 (ou NE) par critère ; moyenne pondérée par les coefficients :
 //   < 2 → NA (non acquis) · 2 à < 4 → EVA (en voie d'acquisition) · ≥ 4 → A (acquis) · aucune note → NE.
+import { concerne } from '../redoublants.js';
 import { db } from '../api.js';
 import { h, vider, champ, toast, erreur, confirmer, dateFr } from '../ui.js';
 import { empileH, colonnes, carteGraph } from '../graphiques.js';
@@ -79,7 +80,7 @@ export async function dessinerContrat(zone, opts) {
     if (inp[2]) inp[2].setAttribute('list', 'dl-lieux');
     if (inp[3]) inp[3].setAttribute('list', 'dl-orgas');
 
-    const nomsEleves = eleves.map((e) => h('th', { class: 'eleve' }, h('span', {}, `${e.nom} ${e.prenom}`)));
+    const nomsEleves = eleves.map((e) => h('th', { class: 'eleve' + (concerne(e, contrat.date_eval) ? '' : ' hors') }, h('span', {}, `${e.nom} ${e.prenom}`, e.redoublant ? ' (R)' : '')));
     const lignes = [];
     for (const g of groupes) {
       const t = opts.titreGroupe(g.nom);
@@ -149,6 +150,7 @@ export async function dessinerContrat(zone, opts) {
   function celluleNote(k, e) {
     const cle = `${k.id}:${e.id}`, v = notes.get(cle) || '';
     const classe = (x) => 'note-sel n' + (x === '' ? 'vide' : x === 'NE' ? 'ne' : x);
+    if (!v && !concerne(e, contrat.date_eval)) return h('td', { class: 'note hors', title: `${e.nom} ${e.prenom} est arrivé(e) dans la promotion après cette évaluation : non concerné(e)` }, 'n.c.');
     if (!modif || !k.actif) return h('td', { class: 'note' }, h('span', { class: classe(v) }, v));
     const s = h('select', { class: classe(v), title: `${e.nom} ${e.prenom}` }, ['', '0', '1', '2', '3', '4', '5', 'NE'].map((o) => h('option', { value: o, selected: o === v }, o)));
     s.addEventListener('change', async () => {

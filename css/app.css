@@ -1403,3 +1403,27 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
   .hero-accueil h1 { font-size: 28px; } .puces-une { grid-template-columns: 1fr; }
   .hero-carte { flex-direction: column; } .pied-accueil { flex-direction: column; align-items: flex-start; }
 }
+
+/* ===================================================================== élèves redoublants */
+.badge-redoublant { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #6B4FA0; color: #fff;
+  font-size: 10.5px; font-weight: 800; vertical-align: middle; cursor: help; }
+.badge-redoublant.long { height: auto; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+.tuile.redoublants strong { color: #6B4FA0; }
+.suite-parcours { color: #6B4FA0; font-weight: 600; }
+.case-form { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-weight: 600; align-self: end; padding-bottom: 8px; }
+.case-form input { width: 18px; height: 18px; }
+.accueil-redoublants .liste-puces { margin: 0 0 12px; padding-left: 18px; }
+.accueil-redoublants .liste-puces li { margin: 3px 0; }
+.liste-redoublants { max-height: 46vh; overflow: auto; margin-top: 12px; border: 1px solid var(--ligne); border-radius: 8px; }
+.liste-redoublants table { margin: 0; }
+.liste-redoublants tr.gris td { color: var(--gris); }
+.liste-redoublants input[type=checkbox] { width: 18px; height: 18px; }
+.bandeau-redoublant { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; padding: 8px 12px; border-radius: 8px;
+  background: #F1ECF8; border-left: 4px solid #6B4FA0; font-size: 13px; color: #3F2C63; }
+.bandeau-redoublant.suite { background: #F4F1EA; border-left-color: var(--orange); color: #6A4A10; }
+.bandeau-redoublant .lien { font-weight: 700; }
+table.validation td.anterieur { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 4px, transparent 4px 8px); }
+table.validation td.anterieur small:last-child { font-weight: 800; color: #3F2C63; }
+.livret .quand.anterieur { color: #6B4FA0; font-weight: 600; }
+td.note-res.hors, td.note.hors { background: repeating-linear-gradient(135deg, #F3F5F4 0 5px, #E8ECEA 5px 10px); color: #8A9794; font-size: 11px; text-align: center; }
+th.eleve.hors span { opacity: .55; }

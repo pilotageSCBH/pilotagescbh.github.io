@@ -1,6 +1,7 @@
 // Résultats et moyennes : notes / 20 des contrats d'évaluation sommative (calculées automatiquement) et résultats
 // intermédiaires saisis par matière (hors contrats), avec coefficients ; moyenne de chaque élève par matière,
 // moyenne générale (coefficients des matières), moyenne de la classe, notes la plus basse et la plus haute.
+import { badgeRedoublant, concerne } from '../redoublants.js';
 import { db } from '../api.js';
 import { h, vider, toast, erreur, fenetre, confirmer, imprimer, dateFr, nombre } from '../ui.js';
 import { boutonAnnuler } from '../annuler.js';
@@ -54,14 +55,14 @@ export async function pageResultats(zone, arg, ctx) {
       const s = sequences.get(c.sequence_id);
       if (!s || s.matiere_id !== m.id || !dansPeriode(c.date_eval)) continue;
       cols.push({ type: 'contrat', id: c.id, objet: c, seq: s, titre: `Contrat séq. ${s.numero}`, sous: s.intitule || '', date: c.date_eval,
-        coef: Number(c.coef_resultat), bareme: 20, note: (e) => sommatives.get(`${c.id}:${e.id}`) ?? null, brut: (e) => sommatives.get(`${c.id}:${e.id}`) ?? null });
+        coef: Number(c.coef_resultat), bareme: 20, note: (e) => (concerne(e, c.date_eval) ? sommatives.get(`${c.id}:${e.id}`) ?? null : null), brut: (e) => sommatives.get(`${c.id}:${e.id}`) ?? null });
     }
     for (const v of evaluations) {
       if (v.matiere_id !== m.id || !dansPeriode(v.date_eval)) continue;
       const bareme = Number(v.bareme) || 20;
       const brut = (e) => resultats.get(`${v.id}:${e.id}`) ?? '';
       cols.push({ type: 'eval', id: v.id, objet: v, titre: v.libelle || 'Résultat', sous: bareme !== 20 ? `noté sur ${virgule(bareme)}` : '', date: v.date_eval,
-        coef: Number(v.coefficient), bareme, brut, note: (e) => { const b = brut(e); return /^[0-9.]+$/.test(b) ? Number(b) * 20 / bareme : null; } });
+        coef: Number(v.coefficient), bareme, brut, note: (e) => { if (!concerne(e, v.date_eval)) return null; const b = brut(e); return /^[0-9.]+$/.test(b) ? Number(b) * 20 / bareme : null; } });
     }
     cols.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.type === b.type ? 0 : a.type === 'contrat' ? -1 : 1) || (a.seq?.numero || 0) - (b.seq?.numero || 0));
     return cols;
@@ -121,7 +122,7 @@ export async function pageResultats(zone, arg, ctx) {
           ctx.matieres.map((m) => h('td', {}, admin ? saisieCoef(Number(m.coefficient ?? 1), async (n) => { await db.modifier('matieres', m.id, { coefficient: n }); m.coefficient = n; dessiner(); })
             : virgule(Number(m.coefficient ?? 1)))),
           h('td', {}))),
-      h('tbody', {}, lignes.map((l) => h('tr', {}, h('th', { class: 'col-eleve' }, h('b', {}, l.e.nom), ' ', l.e.prenom),
+      h('tbody', {}, lignes.map((l) => h('tr', {}, h('th', { class: 'col-eleve' }, h('b', {}, l.e.nom), ' ', l.e.prenom, ' ', badgeRedoublant(l.e, ctx)),
         l.notes.map((n) => h('td', { class: 'note-res ' + classeNote(n) }, virgule(n))),
         h('td', { class: 'note-res gen ' + classeNote(l.gen) }, virgule(l.gen))))),
       h('tfoot', {}, piedLigne('Moyenne de la classe', 'moy'), piedLigne('Note la plus basse', 'min'), piedLigne('Note la plus haute', 'max'))));
@@ -185,8 +186,9 @@ export async function pageResultats(zone, arg, ctx) {
     const corps = eleves.map((e, i) => {
       const td = h('td', { class: 'note-res gen' });
       cellMoy.set(e.id, td);
-      return h('tr', {}, h('th', { class: 'col-eleve' }, h('b', {}, e.nom), ' ', e.prenom),
+      return h('tr', {}, h('th', { class: 'col-eleve' }, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx)),
         cols.map((c, j) => {
+          if (!concerne(e, c.date)) return h('td', { class: 'note-res hors', title: `${e.nom} ${e.prenom} n’était pas encore dans la promotion (arrivé(e) le ${dateFr(e.date_arrivee)}) : non concerné(e)` }, 'n.c.');
           if (c.type === 'contrat') { const n = c.note(e); return h('td', { class: 'note-res auto ' + classeNote(n), title: 'Calculée d’après le contrat' }, n === null ? '—' : virgule(n)); }
           if (!modif) { const b = c.brut(e); return h('td', { class: 'note-res ' + classeNote(c.note(e)) }, /^[0-9.]+$/.test(b) ? virgule(Number(b)) : b === 'ABS' ? 'abs' : b === 'NE' ? 'ne' : ''); }
           return h('td', { class: 'note-res saisie' }, saisieNote(c, e, i, j, recalculer));
