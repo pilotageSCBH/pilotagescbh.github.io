@@ -37,9 +37,9 @@ export async function exportSequence(sq) {
         sequencage: { titre: x.titre, duree: x.duree, objectif_intermediaire: x.objectif_inter, objectifs_operationnels: x.objectifs_ops,
           cours: x.cours, competences: x.competences, savoirs: x.savoirs, autres_prerequis: x.prerequis_texte || '' },
         fiche: { salle: texteVide(f.salle), prerequis: texteVide(f.prerequis), materiel: texteVide(f.materiel),
-          phases: Array.isArray(f.phases) ? f.phases.map((p) => ({ phase: p.phase || '', activite: p.activite || '', enseignant: p.enseignant || '', eleves: p.eleves || '', duree: p.duree || '' })) : [],
+          phases: Array.isArray(f.phases) ? f.phases.map((p) => ({ ...(p.id ? { id: p.id } : {}), phase: p.phase || '', activite: p.activite || '', enseignant: p.enseignant || '', eleves: p.eleves || '', duree: p.duree || '' })) : [],
           evaluation: texteVide(f.evaluation), differenciation: texteVide(f.differenciation), bilan: texteVide(f.bilan),
-          maison_avant: f.maison_avant ?? null, maison_apres: f.maison_apres ?? null },
+          maison_avant: f.maison_avant ?? null, maison_apres: f.maison_apres ?? null, activites: Array.isArray(f.activites) ? f.activites : [] },
         contrat_formatif: await donneesContrat('formatif', 'seance_id', x.id),
       };
     })),

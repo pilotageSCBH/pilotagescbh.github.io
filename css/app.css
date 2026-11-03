@@ -1427,3 +1427,31 @@ table.validation td.anterieur small:last-child { font-weight: 800; color: #3F2C6
 .livret .quand.anterieur { color: #6B4FA0; font-weight: 600; }
 td.note-res.hors, td.note.hors { background: repeating-linear-gradient(135deg, #F3F5F4 0 5px, #E8ECEA 5px 10px); color: #8A9794; font-size: 11px; text-align: center; }
 th.eleve.hors span { opacity: .55; }
+
+/* ===================================================================== fiches activité (fiche de déroulement) */
+.zone-activites { margin: 14px 0; }
+.bloc-activites { border: 2px solid var(--couleur, var(--teal)); border-radius: 12px; padding: 12px 14px; background: #FAFCFB; }
+.tete-activites h3 { font-size: 15px; color: var(--fonce); margin: 0 0 4px; }
+.tete-activites h3 small { color: var(--gris); font-weight: 600; font-size: 12px; }
+.tete-activites .aide { margin-bottom: 10px; }
+.carte-activite { background: #fff; border: 1px solid var(--ligne); border-left: 5px solid var(--couleur, var(--teal)); border-radius: 10px; margin: 8px 0; }
+.carte-activite > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
+.carte-activite > summary::-webkit-details-marker { display: none; }
+.carte-activite > summary::after { content: '▾'; color: var(--gris); margin-left: 4px; transition: transform .15s; }
+.carte-activite[open] > summary::after { transform: rotate(180deg); }
+.carte-activite[open] > summary { border-bottom: 1px solid var(--ligne); }
+.num-activite { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--couleur, var(--teal)); color: #fff; display: grid; place-items: center; font-weight: 800; }
+.titre-activite { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.titre-activite b { font-size: 14.5px; color: var(--texte); }
+.titre-activite small { color: var(--gris); font-size: 12px; }
+.actions-activite { display: flex; gap: 6px; flex-wrap: wrap; }
+.corps-activite { padding: 10px 12px 8px; }
+.corps-activite .grille-infos { margin-bottom: 8px; }
+.corps-activite .deux > .rubrique.pleine { grid-column: 1 / -1; }
+.corps-activite .rubrique h3 { display: flex; align-items: center; gap: 8px; }
+.tag-auto { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--teal); background: var(--clair); border-radius: 8px; padding: 1px 7px; cursor: help; }
+.reprendre { font-size: 11.5px; font-weight: 600; }
+.pied-activite { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; border-top: 1px dashed var(--ligne); }
+.pied-activite .case-form { padding: 0; align-self: center; font-weight: 500; }
+.carte-activite.exclue { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; color: var(--gris); font-style: italic; background: #F6F7F7; }
+.corps-activite .qr-liens { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }

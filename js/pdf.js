@@ -1,5 +1,6 @@
 // Documents PDF (A4 portrait) construits dans le navigateur avec pdf-lib (js/lib), regroupés dans un .zip (JSZip).
-// Un document = une liste de blocs : titre, infos (paires libellé / valeur), rubrique (bandeau + texte), table, cadre, note.
+// Un document = une liste de blocs : titre, infos (paires libellé / valeur), rubrique (bandeau + texte), table, cadre, note,
+// étapes numérotées, cases à cocher, lignes de réponse, QR codes.
 // Les bibliothèques ne sont chargées qu'au premier téléchargement.
 
 import { qrMatrice } from './qr.js';
@@ -119,6 +120,58 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
       }
       y -= 5; vider(y);
       y -= 8;
+    },
+    // bandeau de titre seul (début d'une rubrique dessinée à la main)
+    bandeau(titre, hMin) {
+      place(16 + hMin);
+      page.drawRectangle({ x: gauche, y: y - 16, width: largeur, height: 16, color: FONCE });
+      texte(nettoyer(titre).toUpperCase(), gauche + 6, y - 11.5, FB, 8.5, BLANC);
+      y -= 16;
+    },
+    // étapes numérotées (pastille avec le numéro, texte à côté)
+    etapes(b) {
+      const taille = 9, pas = 11.5, ret = 26;
+      B.bandeau(b.titre, 30);
+      y -= 6;
+      b.items.forEach((it, i) => {
+        const ls = lignes(it, F, taille, largeur - ret - 8);
+        const h = Math.max(18, ls.length * pas + 6);
+        if (place(h)) { /* suite sur une nouvelle page */ }
+        page.drawCircle({ x: gauche + 12, y: y - 9, size: 8, color: TEAL });
+        const n = String(i + 1), w = FB.widthOfTextAtSize(n, 8.5);
+        texte(n, gauche + 12 - w / 2, y - 12, FB, 8.5, BLANC);
+        ls.forEach((l, j) => texte(l, gauche + ret, y - 12 - j * pas, F, taille));
+        y -= h;
+      });
+      y -= 8;
+    },
+    // liste à cocher : une case vide devant chaque ligne
+    cases(b) {
+      const taille = 9, pas = 11.5, ret = 22;
+      B.bandeau(b.titre, 30);
+      y -= 6;
+      for (const it of b.items) {
+        const ls = lignes(it, F, taille, largeur - ret - 8);
+        const h = Math.max(16, ls.length * pas + 5);
+        place(h);
+        page.drawRectangle({ x: gauche + 6, y: y - 12.5, width: 9, height: 9, borderColor: FONCE, borderWidth: 0.9 });
+        ls.forEach((l, j) => texte(l, gauche + ret, y - 11 - j * pas, F, taille));
+        y -= h;
+      }
+      y -= 8;
+    },
+    // zone de réponse : n lignes pointillées
+    lignes(b) {
+      const pas = 20;
+      B.bandeau(b.titre, pas * 2);
+      let haut = y;
+      const cadre = (bas) => page.drawRectangle({ x: gauche, y: bas, width: largeur, height: haut - bas, borderColor: LIGNE, borderWidth: 0.6 });
+      for (let i = 0; i < b.n; i++) {
+        if (y - pas < MARGE + 14) { cadre(y - 4); nouvellePage(); haut = y; }
+        y -= pas;
+        page.drawLine({ start: { x: gauche + 8, y }, end: { x: gauche + largeur - 8, y }, thickness: 0.5, color: LIGNE, dashArray: [1.5, 2.5] });
+      }
+      y -= 8; cadre(y); y -= 8;
     },
     note(b) { lignes(b.texte, FI, 7.5, largeur).forEach((l) => { place(10); y -= 9.5; texte(l, gauche, y, FI, 7.5, GRIS); }); y -= 4; },
     // table : colonnes [{ titre, part, centre }], lignes : [[cellules]] ou { groupe: texte } ; teteVerticale : titres tournés (noms d'élèves)

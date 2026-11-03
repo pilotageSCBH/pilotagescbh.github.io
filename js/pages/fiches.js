@@ -3,7 +3,7 @@
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre } from '../ui.js';
-import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
+import { dessinerContrat, moyenne, niveau, arrondi, ORGAS, LIEUX } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
 
@@ -12,7 +12,8 @@ const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / rech
 const NB_PHASES = 5;
 const COLS_PHASES = [['phase', 'Phase'], ['activite', 'Activité proposée'], ['enseignant', 'Activités de l’enseignant'],
   ['eleves', 'Activités des élèves'], ['duree', 'Durée']];
-const phaseVide = () => ({ phase: '', activite: '', enseignant: '', eleves: '', duree: '' });
+const idPhase = () => 'p' + Math.random().toString(36).slice(2, 9);
+const phaseVide = () => ({ id: idPhase(), phase: '', activite: '', enseignant: '', eleves: '', duree: '' });
 // intitulé saisi sans son numéro (« 2. Découverte » → « Découverte ») ; intitulés par défaut d'avant effacés
 const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
@@ -122,9 +123,86 @@ export async function pageFiches(zone, arg, ctx) {
   async function seance(x) {
     const f = (await db.lire('fiches_seance', `seance_id=eq.${x.id}`))[0] || {};
     const maj = (col) => (v) => db.enregistrer('fiches_seance', [{ seance_id: x.id, [col]: v }], 'seance_id');
-    let phases = Array.isArray(f.phases) && f.phases.length ? f.phases.map((p) => ({ ...phaseVide(), ...p, phase: sansNumero(p.phase) }))
+    const sansId = Array.isArray(f.phases) && f.phases.some((p) => !p.id);
+    let phases = Array.isArray(f.phases) && f.phases.length ? f.phases.map((p) => ({ ...phaseVide(), ...p, phase: sansNumero(p.phase), id: p.id || idPhase() }))
       : Array.from({ length: NB_PHASES }, phaseVide);
-    const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
+    let attenteAct = null;
+    const sauverPhases = async () => {
+      await db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
+      clearTimeout(attenteAct); attenteAct = setTimeout(() => dessinerActivites(), 150);   // les fiches activité suivent le déroulement
+    };
+    // fiches activité : critères du contrat formatif de la séance (critères de réussite)
+    const ctF = (await db.lire('contrats', `type=eq.formatif&seance_id=eq.${x.id}`))[0];
+    const criteresF = ctF ? await db.lire('criteres', `contrat_id=eq.${ctF.id}&order=groupe_ordre,ordre,id`) : [];
+    let activitesEnreg = Array.isArray(f.activites) ? f.activites : [];
+    if (sansId && modif) {   // anciennes phases sans identifiant : rattachement des activités déjà enregistrées, puis identifiants enregistrés
+      activitesEnreg = activitesEnreg.map((a) => (!a.cle && Number.isInteger(a.index) && phases[a.index] ? { ...a, cle: phases[a.index].id } : a));
+      db.enregistrer('fiches_seance', [{ seance_id: x.id, phases, activites: activitesEnreg }], 'seance_id').catch(() => {});
+    }
+    const zoneAct = h('div', { class: 'zone-activites ecran', style: { '--couleur': m.couleur } });
+    const sauverAct = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, activites: activitesEnreg }], 'seance_id');
+    const modifActivite = async (a, k, v) => {
+      let o = activitesEnreg.find((e) => e.cle === a.cle);
+      if (!o) { o = { cle: a.cle }; activitesEnreg.push(o); }
+      if (k in a.auto && v === a.auto[k]) delete o[k]; else o[k] = v;
+      a[k] = v;
+      await sauverAct();
+    };
+    const S = { sq, m, promo, profs };
+    function dessinerActivites() {
+      const L = activitesSeance(x, { ...f, phases, activites: activitesEnreg }, criteresF, ref);
+      const ouvertes = new Set([...zoneAct.querySelectorAll('details[open]')].map((d) => d.dataset.cle));
+      vider(zoneAct, h('section', { class: 'bloc-activites' },
+        h('div', { class: 'tete-activites' }, h('h3', {}, '🧩  Fiches activité', h('small', {}, L.length ? `  ${L.filter((a) => !a.exclue).length} activité(s)` : '')),
+          h('p', { class: 'aide' }, 'Une fiche par phase dont la colonne « Activité proposée » est remplie. Elle se pré-remplit automatiquement avec la fiche de déroulement, le séquençage et le contrat formatif (repère « auto ») ; détaillez ensuite chaque rubrique autant que nécessaire : vos compléments sont conservés, les rubriques non modifiées continuent de suivre la fiche de déroulement.')),
+        L.length ? L.map((a) => carteActivite(a, ouvertes.has(a.cle)))
+          : h('p', { class: 'vide petit' }, 'Aucune activité prévue : remplissez la colonne « Activité proposée » d’une phase du déroulement, sa fiche activité apparaîtra ici.')));
+      ajusterTout(zoneAct);
+    }
+    function carteActivite(a, ouverte) {
+      const sortie = (version, mode) => envoyerPDF(modeleActivite(a, x, S, version), mode);
+      const boutons = h('span', { class: 'actions-activite' },
+        h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche élève (A4)', onclick: (e) => { e.preventDefault(); sortie('eleve', 'imprimer'); } }, '🖶  Imprimer'),
+        h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la fiche élève en PDF', onclick: (e) => { e.preventDefault(); sortie('eleve', 'pdf'); } }, '⬇  PDF élève'),
+        h('button', { class: 'btn petit', type: 'button', title: 'Télécharger la version enseignant (compétences, éléments de correction)', onclick: (e) => { e.preventDefault(); sortie('enseignant', 'pdf'); } }, '⬇  Version enseignant'));
+      if (a.exclue) return h('div', { class: 'carte-activite exclue' }, h('span', {}, `Phase ${a.index + 1} · ${a.titre} : pas de fiche activité`),
+        modif ? h('button', { class: 'lien petit', type: 'button', onclick: async () => { await modifActivite(a, 'exclue', false); dessinerActivites(); } }, 'Créer la fiche') : null);
+      const zone = (k, lib, aide, source) => {
+        const auto = a.auto[k] || '', change = a[k] !== auto;
+        const z = h('div', { class: 'rubrique' + (['contexte', 'objectif', 'consignes', 'ressources', 'corrige'].includes(k) ? ' pleine' : '') },
+          h('h3', {}, lib, auto && !change && source ? h('span', { class: 'tag-auto', title: 'Rempli automatiquement depuis : ' + source }, 'auto') : null,
+            change && auto && modif ? h('button', { class: 'lien petit reprendre', type: 'button', title: 'Remettre le texte de la fiche de déroulement (' + source + ')',
+              onclick: async () => { await modifActivite(a, k, auto); dessinerActivites(); } }, '↺ reprendre la fiche') : null),
+          champ(a[k], (v) => modifActivite(a, k, v), { multi: true, lecture: !modif, placeholder: modif ? aide : '' }));
+        if (k === 'ressources') {
+          const zqr = h('div', { class: 'qr-liens' });
+          const maj = (t) => vider(zqr, liensLibelles(t).map(({ url, lib: l }) => h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener' }, l ? h('b', {}, l) : null, qrSVG(url, 80), h('span', {}, url))));
+          maj(a[k]); z.querySelector('textarea')?.addEventListener('input', (e) => maj(e.target.value)); z.append(zqr);
+        }
+        return z;
+      };
+      const petit = (k, lib, opts = {}) => h('div', { class: 'info' }, h('span', { class: 'lib' }, lib), champ(a[k], (v) => modifActivite(a, k, v), { lecture: !modif, ...opts }));
+      const corps = h('div', { class: 'corps-activite' },
+        h('div', { class: 'grille-infos' }, petit('titre', 'Titre de l’activité'), petit('duree', 'Durée'),
+          petit('organisation', 'Organisation', { placeholder: modif ? 'Individuel, binôme…' : '' }), petit('lieu', 'Lieu / salle'),
+          petit('lignes', 'Lignes de réponse sur la fiche', { type: 'number' }),
+          h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Phase du déroulement'), h('span', { class: 'val' }, `${a.index + 1}. ${a.phase.phase || '(sans intitulé)'}`))),
+        h('div', { class: 'deux' }, CHAMPS_ACTIVITE.map(([k, lib, aide, source]) => zone(k, lib, aide, source))),
+        h('div', { class: 'pied-activite' },
+          h('label', { class: 'case-form' }, h('input', { type: 'checkbox', checked: a.aideFiche, disabled: !modif, onchange: (e) => modifActivite(a, 'aideFiche', e.target.checked) }), ' Imprimer les coups de pouce sur la fiche élève'),
+          modif ? h('button', { class: 'lien petit', type: 'button', onclick: async () => {
+            if (!(await confirmer('Pas de fiche activité', 'Ne pas faire de fiche activité pour cette phase ? (Vous pourrez la recréer ; vos compléments sont conservés.)', 'Confirmer'))) return;
+            await modifActivite(a, 'exclue', true); dessinerActivites(); } }, '✖ pas de fiche pour cette phase') : null));
+      corps.querySelectorAll('input[type=number]').forEach((i) => { i.min = 0; i.max = 40; });
+      const org = corps.querySelectorAll('.grille-infos input')[2]; if (org) org.setAttribute('list', 'dl-orgas-act');
+      const lieu = corps.querySelectorAll('.grille-infos input')[3]; if (lieu) lieu.setAttribute('list', 'dl-lieux-act');
+      const d = h('details', { class: 'carte-activite', 'data-cle': a.cle, open: ouverte },
+        h('summary', {}, h('span', { class: 'num-activite' }, a.numero),
+          h('span', { class: 'titre-activite' }, h('b', {}, a.titre), h('small', {}, [a.duree, a.organisation, a.lieu].filter(Boolean).join(' · ') || `phase ${a.index + 1}`)), boutons),
+        corps, h('datalist', { id: 'dl-orgas-act' }, ORGAS.map((o) => h('option', { value: o }))), h('datalist', { id: 'dl-lieux-act' }, LIEUX.map((o) => h('option', { value: o }))));
+      d.addEventListener('toggle', () => { if (d.open) ajusterTout(d); });
+      return d;
+    }
     const tablePhases = h('tbody', {});
     const dessinerPhases = () => {
       vider(tablePhases, phases.map((p, i) => h('tr', {},
@@ -166,12 +244,14 @@ export async function pageFiches(zone, arg, ctx) {
           modif ? h('button', { class: 'lien petit ecran', onclick: async () => {
             phases.push(phaseVide());
             try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '＋ ajouter une phase') : null),
+        zoneAct,
         cadreMaison(x, f, 'apres'),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
       h('p', { class: 'aide ecran' }, 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
     dessinerPhases();
+    dessinerActivites();
     ajusterTout(fiche);
   }
 
@@ -211,19 +291,7 @@ export async function pageFiches(zone, arg, ctx) {
           ...rub.flatMap(([k, l]) => [o[k] ? R(l, o[k]) : null, k === 'ressources' && liens.length ? { t: 'qr', liens } : null]).filter(Boolean),
           { t: 'note', texte: liens.length ? 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' : '' },
         ] };
-      const octets = await creerPDF(doc, logo);
-      const blob = new Blob([octets], { type: 'application/pdf' });
-      if (mode === 'pdf') { telecharger(doc.fichier, blob); toast('PDF téléchargé'); return; }
-      // impression : le PDF est chargé dans un cadre invisible puis envoyé à l'imprimante (imprimante du réseau ou « Enregistrer en PDF »)
-      const url = URL.createObjectURL(blob);
-      document.getElementById('cadre-impression')?.remove();
-      const ifr = h('iframe', { id: 'cadre-impression', src: url, style: { position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px', border: '0', opacity: '0' } });
-      ifr.onload = () => {
-        try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
-        catch { window.open(url, '_blank'); }               // navigateur qui refuse : le PDF s'ouvre dans un onglet, Ctrl+P pour imprimer
-      };
-      document.body.append(ifr);
-      setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+      await envoyerPDF(doc, mode, { creerPDF, logo });
     } catch (e) { erreur(e); }
   }
 
@@ -315,7 +383,7 @@ export async function pageFiches(zone, arg, ctx) {
   // choix des documents : préparation et contrat sommatif de la séquence, fiche de déroulement et contrat formatif de chaque séance
   async function menuTelecharger() {
     const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Fiche contrat sommatif', null],
-      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
+      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`activites-${x.id}`, `Fiches activité`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
     const coche = (k) => (idSeance ? k.endsWith('-' + idSeance) : true);
     const cases = new Map(docs.map(([k]) => [k, h('input', { type: 'checkbox', checked: coche(k) })]));
     const compte = h('b', {});
@@ -332,9 +400,9 @@ export async function pageFiches(zone, arg, ctx) {
       h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Fiche contrat sommatif')),
       seances.map((x) => h('fieldset', { class: 'groupe-docs' + (String(x.id) === idSeance ? ' courante' : '') },
         h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
-          cases.get(`seance-${x.id}`).checked = e.target.checked; cases.get(`formatif-${x.id}`).checked = e.target.checked; majCompte(); } }),
+          [`seance-${x.id}`, `activites-${x.id}`, `formatif-${x.id}`].forEach((k) => { cases.get(k).checked = e.target.checked; }); majCompte(); } }),
         `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
-        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
+        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`activites-${x.id}`, 'Fiches activité (version élève, s’il y en a)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
     [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
       if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
       return true;
@@ -454,8 +522,18 @@ export async function modelesSequence(S, ctx, choisis) {
         { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true }, { titre: 'Activité proposée', part: 21 },
           { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
         lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
+        (() => { const L = activitesSeance(x, f).filter((a) => !a.exclue);
+          return L.length ? R('Fiches activité (documents élèves séparés)', L.map((a) => `Activité ${a.numero} · ${a.titre}${a.duree ? ' · ' + a.duree : ''}  (phase ${a.index + 1})`).join('\n')) : null; })(),
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
+    } else if (k.startsWith('activites-')) {
+      const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
+      const ct = (await db.lire('contrats', `type=eq.formatif&seance_id=eq.${x.id}`))[0];
+      const ks = ct ? await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`) : [];
+      activitesSeance(x, f, ks, ref).filter((a) => !a.exclue).forEach((a) => {
+        const doc = modeleActivite(a, x, { sq, m, promo, profs });
+        out.push({ ...doc, fichier: `S${sq.numero}.${x.numero}_a${a.numero}_Fiche_activite.pdf` });
+      });
     } else if (k.startsWith('formatif-')) {
       out.push({ fichier: `S${sq.numero}.${x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
         blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
@@ -489,4 +567,106 @@ async function index(zone, ctx, mode = 'preparation') {
         sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}:${onglet}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
           : h('p', { class: 'profs' }, 'Aucune séquence pour cette promotion.'));
     })));
+}
+
+
+// ------------------------------------------------------------------------------------- fiches activité
+// Une fiche activité par phase du déroulement dont la colonne « Activité proposée » est remplie. Chaque rubrique se
+// remplit automatiquement à partir de la fiche de déroulement (et du séquençage, du contrat formatif) ; l'enseignant
+// peut la compléter ou la modifier : seules ses modifications sont enregistrées (fiches_seance.activites).
+export const CHAMPS_ACTIVITE = [
+  // [clé, libellé, aide, source automatique (texte)]
+  ['contexte', 'Mise en situation', 'Contexte professionnel, problème à résoudre…', 'colonne « Activité proposée » de la phase'],
+  ['objectif', 'Objectif de l’activité', 'À la fin de l’activité, je suis capable de…', 'objectif intermédiaire et objectifs opérationnels de la séance'],
+  ['consignes', 'Travail demandé (une étape par ligne)', 'Étape 1…\nÉtape 2…', 'colonne « Activités des élèves » de la phase'],
+  ['ressources', 'Documents, matériel et ressources', 'Plans, extraits du DCE, liens (https://…)…', 'rubrique « Matériel et ressources » de la fiche'],
+  ['production', 'Production attendue', 'Ce que je dois rendre : tableau complété, schéma, note de calcul…', ''],
+  ['criteres', 'Critères de réussite (un par ligne)', 'Le travail est réussi si…', 'critères de la fiche contrat formatif'],
+  ['aide', 'Coups de pouce', 'Indices pour les élèves en difficulté…', 'rubrique « Différenciation » de la fiche'],
+  ['plus', 'Pour aller plus loin', 'Prolongement pour les élèves qui ont terminé…', ''],
+  ['corrige', 'Éléments de correction (version enseignant)', 'Réponses attendues, points de vigilance…', ''],
+];
+const lignesDe = (t) => String(t || '').split('\n').map((l) => l.replace(/^\s*(?:[-•*]|\d+\s*[.)-])\s*/, '').trim()).filter(Boolean);
+const organisationDe = (t) => (/bin[oô]me/i.test(t) ? 'Binôme' : /groupe|îlot/i.test(t) ? 'En groupe' : /classe entière|collectif/i.test(t) ? 'Classe entière' : /individuel/i.test(t) ? 'Individuel' : '');
+export const cleActivite = (p, i) => p.id || `i${i}`;
+
+// activités d'une séance : valeurs automatiques + modifications de l'enseignant (a.auto[k] = valeur automatique, a[k] = valeur retenue)
+export function activitesSeance(x, f, criteres = [], ref = null) {
+  const phases = Array.isArray(f?.phases) ? f.phases : [];
+  const enreg = Array.isArray(f?.activites) ? f.activites : [];
+  const out = [];
+  phases.forEach((p, i) => {
+    if (!String(p.activite || '').trim()) return;
+    const cle = cleActivite(p, i);
+    const o = enreg.find((a) => a.cle === cle) || enreg.find((a) => a.index === i && !a.cle) || {};
+    const objectif = [x.objectif_inter, ...lignesDe(x.objectifs_ops)].filter(Boolean).join('\n');
+    const auto = {
+      titre: String(p.phase || '').trim() || lignesDe(p.activite)[0] || 'Activité',
+      duree: p.duree || '', organisation: organisationDe(`${p.activite} ${p.eleves}`), lieu: f?.salle || '',
+      contexte: p.activite || '', objectif, consignes: lignesDe(p.eleves).join('\n'), ressources: f?.materiel || '', production: '',
+      criteres: [...new Set(criteres.filter((k) => k.actif !== false && k.texte).map((k) => k.texte.trim()))].join('\n'),
+      aide: f?.differenciation || '', plus: '', corrige: '', lignes: '12',
+    };
+    const a = { cle, index: i, phase: p, numero: out.filter((y) => !y.exclue).length + 1, exclue: !!o.exclue, aideFiche: o.aideFiche !== false, auto };
+    for (const k of Object.keys(auto)) a[k] = o[k] !== undefined && o[k] !== null ? o[k] : auto[k];
+    a.competences = (x.competences || []).map((c) => `${c}  ${ref?.comp?.[c]?.libelle || ''}`.trim());
+    out.push(a);
+  });
+  return out;
+}
+
+// fiche activité en PDF A4 : version élève (à distribuer) ou enseignant (avec les éléments de correction)
+export function modeleActivite(a, x, { sq, m, promo, profs }, version = 'eleve') {
+  const prof = version === 'enseignant';
+  const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
+  const liens = liensLibelles(a.ressources);
+  const etapes = lignesDe(a.consignes), crit = lignesDe(a.criteres);
+  return {
+    fichier: nomFichier(`${m ? m.abreviation || m.nom : ''}_S${sq.numero}.${x.numero}_activite${a.numero}${prof ? '_enseignant' : ''}.pdf`),
+    titre: `Fiche activité ${a.numero} · séance ${sq.numero}.${x.numero}`,
+    pied: `${m?.nom || ''} · Séance ${sq.numero}.${x.numero} · Activité ${a.numero}${prof ? ' · version enseignant' : ''} · Promotion ${promo}`,
+    blocs: [
+      { t: 'titre', texte: prof ? 'FICHE ACTIVITÉ — VERSION ENSEIGNANT' : 'FICHE ACTIVITÉ', sous: `Activité ${a.numero} · ${a.titre}`, couleur: m?.couleur || '#146B63' },
+      { t: 'infos', paires: prof
+        ? [['Matière', m?.nom], ['Enseignant', profs], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Promotion', promo], ['Durée', a.duree], ['Organisation', a.organisation], ['Lieu', a.lieu], ['Phase', `${a.index + 1}. ${a.phase.phase || ''}`]]
+        : [['Nom et prénom', ' '], ['Date', ' '], ['Matière', m?.nom], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Durée', a.duree], ['Organisation', a.organisation], ['Lieu', a.lieu], ['Enseignant', profs]] },
+      a.contexte ? R('Mise en situation', a.contexte) : null,
+      a.objectif ? R('Objectif de l’activité', a.objectif, { gras: true, gris: true }) : null,
+      etapes.length ? { t: 'etapes', titre: 'Travail demandé', items: etapes } : null,
+      a.ressources ? R('Documents, matériel et ressources', a.ressources) : null,
+      liens.length ? { t: 'qr', liens } : null,
+      a.production ? R('Production attendue', a.production, { gras: true }) : null,
+      crit.length ? { t: 'cases', titre: prof ? 'Critères de réussite' : 'Critères de réussite — je vérifie mon travail', items: crit } : null,
+      a.aide && (prof || a.aideFiche) ? R('Coups de pouce', a.aide, { gris: true }) : null,
+      a.plus ? R('Pour aller plus loin', a.plus) : null,
+      prof && a.competences.length ? R('Compétences visées', a.competences.join('\n'), { gris: true }) : null,
+      prof && a.corrige ? R('Éléments de correction', a.corrige) : null,
+      !prof && Number(a.lignes) > 0 ? { t: 'lignes', titre: 'Mon travail', n: Math.min(40, Number(a.lignes)) } : null,
+      liens.length && !prof ? { t: 'note', texte: 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' } : null,
+    ].filter(Boolean),
+  };
+}
+
+
+// PDF d'une fiche : téléchargé, ou chargé dans un cadre invisible puis envoyé à l'imprimante (imprimante du réseau ou « Enregistrer en PDF »)
+export async function envoyerPDF(doc, mode, outils = null) {
+  try {
+    let creer = outils?.creerPDF, logo = outils?.logo;
+    if (!creer) {
+      toast(mode === 'pdf' ? 'Préparation du PDF…' : 'Préparation de l’impression…');
+      const P = await import('../pdf.js'); await P.chargerOutils(); creer = P.creerPDF;
+      logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
+    }
+    const blob = new Blob([await creer(doc, logo)], { type: 'application/pdf' });
+    if (mode === 'pdf') { telecharger(doc.fichier, blob); toast('PDF téléchargé'); return; }
+    const url = URL.createObjectURL(blob);
+    document.getElementById('cadre-impression')?.remove();
+    const ifr = h('iframe', { id: 'cadre-impression', src: url, style: { position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px', border: '0', opacity: '0' } });
+    ifr.onload = () => {
+      try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
+      catch { window.open(url, '_blank'); }               // navigateur qui refuse : le PDF s'ouvre dans un onglet, Ctrl+P pour imprimer
+    };
+    document.body.append(ifr);
+    setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+  } catch (e) { erreur(e); }
 }
