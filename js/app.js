@@ -218,6 +218,14 @@ function ecranNouveauCode() {
 }
 
 // ------------------------------------------------------------------------------------------- cadre
+// fiches : quel document du menu « Documents professeurs » est ouvert (d'après l'onglet de la page)
+function modeFiches(arg) {
+  const [sid, o = 'preparation'] = String(arg || '').split(':');
+  if (!/^\d+$/.test(sid || '')) return sid || 'preparation';
+  if (/^(seance|avant|apres)-/.test(o) || o === 'deroulement') return 'deroulement';
+  if (o.startsWith('formatif') ) return 'formatifs';
+  return o === 'sommatif' ? 'sommatif' : 'preparation';
+}
 // menu de gauche : rubriques repliables (état mémorisé), recherche, mode réduit (icônes seules), badges
 const CLE_MENU_FERME = 'pilotage-scbh-menu-replie', CLE_MENU_REDUIT = 'pilotage-scbh-menu-reduit';
 const lireL = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -244,10 +252,15 @@ function menu(route) {
       actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })).concat(
       { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' }) },
     { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
-      { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' }] },
-    { cle: 'evaluer', titre: 'Évaluation', icone: '✅', items: [
-      { href: '#/fiches', icone: '📝', texte: 'Fiches et contrats', actif: page === 'fiches' },
+      { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
       { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
+    { cle: 'evaluer', titre: 'Documents professeurs', icone: '📂', items: [
+      { sous: 'Documents de préparation' },
+      { href: '#/fiches/preparation', icone: '📋', texte: 'Fiches de préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
+      { href: '#/fiches/deroulement', icone: '📝', texte: 'Fiches de déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
+      { sous: 'Documents d’évaluation' },
+      { href: '#/fiches/formatifs', icone: '✅', texte: 'Fiches contrats formatifs', actif: page === 'fiches' && modeFiches(arg) === 'formatifs' },
+      { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' }] },
     { cle: 'resultats', titre: 'Résultats', icone: '🏆', items: [
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
@@ -266,15 +279,16 @@ function menu(route) {
   ];
   const sections = S.map((sec) => {
     const active = sec.items.some((x) => x.actif);
+    const nbLiens = sec.items.filter((x) => !x.sous).length;
     const ouverte = active || !fermees.has(sec.cle);
-    const corps = h('div', { class: 'corps-rubrique' }, sec.items.map(lien));
+    const corps = h('div', { class: 'corps-rubrique' }, sec.items.map((x) => (x.sous ? h('div', { class: 'sous-rubrique-menu' }, x.sous) : lien(x))));
     const el = h('div', { class: 'rubrique-menu' + (ouverte ? ' ouverte' : '') + (active ? ' active' : '') },
       h('button', { class: 'titre-menu', type: 'button', title: sec.titre, 'aria-expanded': String(ouverte), onclick: () => {
         const o = !el.classList.contains('ouverte');
         el.classList.toggle('ouverte', o); el.querySelector('.titre-menu').setAttribute('aria-expanded', String(o));
         o ? fermees.delete(sec.cle) : fermees.add(sec.cle);
         ecrireL(CLE_MENU_FERME, JSON.stringify([...fermees]));
-      } }, h('span', { class: 'ico' }, sec.icone), h('span', { class: 'txt' }, sec.titre), h('span', { class: 'nb' }, sec.items.length), h('span', { class: 'chevron' }, '▾')),
+      } }, h('span', { class: 'ico' }, sec.icone), h('span', { class: 'txt' }, sec.titre), h('span', { class: 'nb' }, nbLiens), h('span', { class: 'chevron' }, '▾')),
       corps);
     return el;
   });

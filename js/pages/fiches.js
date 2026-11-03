@@ -17,8 +17,8 @@ const phaseVide = () => ({ phase: '', activite: '', enseignant: '', eleves: '', 
 const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
 export async function pageFiches(zone, arg, ctx) {
-  const [sid, onglet = 'preparation'] = String(arg || '').split(':');
-  if (!sid) return index(zone, ctx);
+  let [sid, onglet = 'preparation'] = String(arg || '').split(':');
+  if (!sid || !/^\d+$/.test(sid)) return index(zone, ctx, MODES[sid] ? sid : 'preparation');
   const sq = (await db.lire('sequences', `id=eq.${sid}`))[0];
   if (!sq) { vider(zone, h('p', {}, 'Séquence introuvable.')); return; }
   const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
@@ -37,11 +37,14 @@ export async function pageFiches(zone, arg, ctx) {
   const volume = `${remplies.length} séance(s) · ${heures(remplies.reduce((a, x) => a + (Number(x.duree) || 0), 0)) || '0 h'}`;
   const ficheSeq = fs[0] || {};
   const lien = (o) => `#/fiches/${sq.id}:${o}`;
+  const premiereSeance = seances[0] ? `seance-${seances[0].id}` : 'preparation';
+  // onglets génériques (depuis le menu) : première fiche de déroulement / premier contrat formatif de la séquence
+  if (onglet === 'deroulement') onglet = premiereSeance;
+  if (onglet === 'formatifs') onglet = seances[0] ? `formatif-${seances[0].id}` : 'sommatif';
   const RE_SEANCE = /^(seance|formatif|avant|apres)-/;
   const idSeance = RE_SEANCE.test(onglet) ? onglet.split('-')[1] : null;
   // trois onglets : fiche de préparation · fiches de déroulement (une par séance) · fiches contrats (sommatif + formatifs)
   const groupe = onglet === 'preparation' || !onglet ? 'preparation' : onglet.startsWith('seance-') || onglet.startsWith('avant-') || onglet.startsWith('apres-') ? 'deroulement' : 'contrats';
-  const premiereSeance = seances[0] ? `seance-${seances[0].id}` : 'preparation';
   const sousOnglets = () => {
     const tab = (k, t, titre = '') => h('a', { href: lien(k), class: k === onglet ? 'actif' : '', title: titre }, t);
     if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, `Séance ${sq.numero}.${x.numero}`, x.titre || '')));
@@ -59,7 +62,7 @@ export async function pageFiches(zone, arg, ctx) {
       h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`),
         h('p', { class: 'sous-titre' }, `${m.nom}  ·  Promotion ${promo}  ·  ${volume}`)),
       h('div', { class: 'actions-page' },
-        h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}`; } },
+        h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}:${groupe === 'deroulement' ? 'deroulement' : onglet === 'sommatif' ? 'sommatif' : onglet.startsWith('formatif') ? 'formatifs' : 'preparation'}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
         modif ? boutonAnnuler(ctx, 'fiches') : null,
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
@@ -463,18 +466,27 @@ export async function modelesSequence(S, ctx, choisis) {
 
 
 // ------------------------------------------------------------------------------------- liste des séquences
-async function index(zone, ctx) {
+// documents ouverts depuis le menu « Documents professeurs » : titre de la page et onglet à ouvrir dans chaque séquence
+const MODES = {
+  preparation: ['Fiches de préparation de séquence', 'preparation', '📋', 'Documents de préparation'],
+  deroulement: ['Fiches de déroulement de séance', 'deroulement', '📝', 'Documents de préparation'],
+  formatifs: ['Fiches contrats formatifs', 'formatifs', '✅', 'Documents d’évaluation'],
+  sommatif: ['Fiches contrats sommatifs', 'sommatif', '🏁', 'Documents d’évaluation'],
+};
+async function index(zone, ctx, mode = 'preparation') {
+  const [titre, onglet, icone, groupe] = MODES[mode];
   const sequences = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`);
   vider(zone,
-    h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, 'Fiches et contrats'),
-      h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
+    h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, `${icone}  ${titre}`),
+      h('p', { class: 'sous-titre' }, `Documents professeurs · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
+    h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
     h('section', { class: 'grille-matieres' }, ctx.matieres.map((m) => {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },
         h('div', { class: 'bandeau' }, h('h3', {}, m.nom)),
         sq.length ? h('button', { class: 'btn petit classeur', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats', onclick: async () => {
           const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF de la matière') : null,
-        sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
+        sq.length ? h('ul', { class: 'liste-seq' }, sq.map((s) => h('li', {}, h('a', { href: `#/fiches/${s.id}:${onglet}` }, h('b', {}, `Séquence ${s.numero}`), ' · ', s.intitule || 'sans intitulé'))))
           : h('p', { class: 'profs' }, 'Aucune séquence pour cette promotion.'));
     })));
 }
