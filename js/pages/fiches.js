@@ -129,43 +129,55 @@ export async function pageFiches(zone, arg, ctx) {
       : Array.from({ length: NB_PHASES }, phaseVide);
     const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
     if (sansId && modif) sauverPhases().catch(() => {});
-    // liens et QR codes d'une phase (lignes « Titre : adresse » dans phases[i].liens)
+    // liens et QR codes d'une phase (lignes « Titre : adresse » dans phases[i].liens) : vignettes en bas de la case, bouton à côté du titre
     const liensPhase = (i) => {
-      const z = h('div', { class: 'qr-liens liens-phase' });
-      const maj = () => vider(z, liensLibelles(phases[i].liens).map(({ url, lib }) => h('div', { class: 'qr-carte' },
-        h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' }, lib ? h('b', {}, lib) : null, qrSVG(url, 80), h('span', {}, url)),
+      const cartes = h('div', { class: 'qr-liens liens-phase' });
+      const maj = () => { vider(cartes, liensLibelles(phases[i].liens).map(({ url, lib }) => h('div', { class: 'qr-carte' },
+        h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' }, lib ? h('b', {}, lib) : null, qrSVG(url, 72), h('span', {}, url)),
         modif ? h('button', { class: 'qr-retirer ecran', type: 'button', title: 'Retirer ce lien', onclick: async () => {
           if (!(await confirmer('Retirer le lien', `Retirer ce lien (et son QR code) de la phase ?\n${url}`, 'Retirer'))) return;
           const court = url.replace(/^https:\/\/(?=www\.)/i, '');
           phases[i] = { ...phases[i], liens: String(phases[i].liens || '').split('\n').filter((l) => !(l.includes(url) || l.includes(court))).join('\n') };
           try { await sauverPhases(); maj(); } catch (e) { erreur(e); }
-        } }, '✖') : null)),
-      modif ? h('button', { class: 'qr-ajout ecran', type: 'button', onclick: async () => {
+        } }, '✖') : null))); cartes.classList.toggle('vide', !cartes.children.length); };
+      const bouton = modif ? h('button', { class: 'ajout-lien-phase ecran', type: 'button', title: 'Ajouter un lien vers une ressource du net, avec son QR code', onclick: async () => {
         const r = await dialogueLien(); if (!r) return;
         const v = String(phases[i].liens || '').replace(/\s+$/, '');
         phases[i] = { ...phases[i], liens: (v ? v + '\n' : '') + (r.t ? `${r.t} : ` : '') + r.u };
         try { await sauverPhases(); maj(); } catch (e) { erreur(e); }
-      } }, h('span', { class: 'plus' }, '＋'), 'Ajouter un lien', h('small', {}, 'avec son QR code')) : null);
+      } }, '＋ lien / QR code') : null;
       maj();
-      return z;
+      return { cartes, bouton };
     };
     const tablePhases = h('tbody', {});
-    // une phase = deux lignes : activité proposée sur toute la largeur (avec liens et QR codes), puis enseignant | élèves
+    // insertion d'une phase vide à la position n (0 = en tête)
+    const inserer = async (n) => { phases.splice(n, 0, phaseVide()); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } };
+    const ligneInsertion = (n) => h('tr', { class: 'ligne-insertion ecran' }, h('td', { colspan: 4 },
+      h('button', { class: 'inserer-phase', type: 'button', title: n === 0 ? 'Insérer une phase au début' : `Insérer une phase entre la phase ${n} et la phase ${n + 1}`, onclick: () => inserer(n) }, '＋ insérer une phase ici')));
+    // une phase = deux lignes : à gauche n°, durée et ✖ ; l'intitulé ; l'activité sur toute la largeur, puis rôle de l'enseignant | rôle des élèves
     const dessinerPhases = () => {
       const c = (i, k, opts = {}) => champ(phases[i][k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
         { multi: k !== 'duree', lecture: !modif, ...opts });
-      vider(tablePhases, phases.flatMap((p, i) => [
-        h('tr', { class: 'ligne-activite' + (i % 2 ? ' impaire' : '') },
-          h('td', { class: 'num-phase', rowspan: 2 }, i + 1),
-          h('td', { class: 'phase', rowspan: 2 }, c(i, 'phase', { placeholder: modif && i === 0 ? 'Intitulé de la phase' : '' })),
-          h('td', { class: 'activite', colspan: 2 }, h('span', { class: 'lib-cellule' }, 'Activité proposée'),
-            c(i, 'activite', { placeholder: modif ? 'Description détaillée de l’activité : contexte, consignes, organisation, supports…' : '' }), liensPhase(i)),
-          h('td', { class: 'duree', rowspan: 2 }, c(i, 'duree', { placeholder: modif ? 'durée' : '' })),
-          modif ? h('td', { class: 'ecran', rowspan: 2 }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
-            phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null),
-        h('tr', { class: 'ligne-roles' + (i % 2 ? ' impaire' : '') },
-          h('td', { class: 'enseignant' }, h('span', { class: 'lib-cellule' }, 'Activités de l’enseignant'), c(i, 'enseignant')),
-          h('td', { class: 'eleves' }, h('span', { class: 'lib-cellule' }, 'Activités des élèves'), c(i, 'eleves')))]));
+      const lignes = [];
+      phases.forEach((p, i) => {
+        if (modif && i > 0) lignes.push(ligneInsertion(i));
+        const L = liensPhase(i);
+        lignes.push(
+          h('tr', { class: 'ligne-activite' },
+            h('td', { class: 'num-phase', rowspan: 2 },
+              h('span', { class: 'n' }, i + 1),
+              h('span', { class: 'lib-duree' }, 'durée'), c(i, 'duree', { placeholder: modif ? '…' : '', classe: 'duree-phase' }),
+              modif ? h('button', { class: 'icone petit retirer-phase ecran', title: 'Retirer cette phase', onclick: async () => {
+                if ((p.activite || p.enseignant || p.eleves || p.phase) && !(await confirmer('Retirer la phase', `Retirer la phase ${i + 1}${p.phase ? ' « ' + p.phase + ' »' : ''} et son contenu ?`, 'Retirer'))) return;
+                phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖') : null),
+            h('td', { class: 'phase', rowspan: 2 }, h('span', { class: 'lib-cellule' }, 'Phase'), c(i, 'phase', { placeholder: modif ? 'Intitulé' : '' })),
+            h('td', { class: 'activite', colspan: 2 }, h('div', { class: 'tete-cellule' }, h('span', { class: 'lib-cellule' }, 'Activité'), L.bouton),
+              c(i, 'activite', { placeholder: modif ? 'Description de l’activité : contexte, consignes, organisation, supports…' : '' }), L.cartes)),
+          h('tr', { class: 'ligne-roles' },
+            h('td', { class: 'enseignant' }, h('span', { class: 'lib-cellule' }, 'Rôle de l’enseignant'), c(i, 'enseignant')),
+            h('td', { class: 'eleves' }, h('span', { class: 'lib-cellule' }, 'Rôle des élèves'), c(i, 'eleves'))));
+      });
+      vider(tablePhases, lignes);
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});
@@ -193,12 +205,12 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
-          h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-phase' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' }), h('col', { class: 'c-duree' }), modif ? h('col', { class: 'c-act ecran' }) : null),
-            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', {}, 'Phase'), h('th', { colspan: 2 }, 'Activité proposée · activités de l’enseignant et des élèves'), h('th', {}, 'Durée'),
-            modif ? h('th', { class: 'ecran' }) : null)), tablePhases),
-          modif ? h('button', { class: 'lien petit ecran', onclick: async () => {
-            phases.push(phaseVide());
-            try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '＋ ajouter une phase') : null),
+          h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-phase' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
+            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', {}, 'Phase'), h('th', { colspan: 2 }, 'Activité · rôle de l’enseignant et des élèves'))), tablePhases),
+          modif ? h('div', { class: 'ajout-phases ecran' },
+            h('button', { class: 'btn petit', onclick: () => inserer(0) }, '＋ phase au début'),
+            h('button', { class: 'btn petit', onclick: () => inserer(phases.length) }, '＋ phase à la fin'),
+            h('span', { class: 'aide' }, 'ou « ＋ insérer une phase ici » entre deux phases.')) : null),
         cadreMaison(x, f, 'apres'),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
@@ -472,10 +484,10 @@ export async function modelesSequence(S, ctx, choisis) {
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
         lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
         maison(f.maison_avant, 'avant'),
-        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 14, gras: true },
-          { titre: 'Activité proposée · activités de l’enseignant et des élèves', part: 73 }, { titre: 'Durée', part: 9 }],
-        lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase,
-          [p.activite, p.enseignant ? 'Enseignant : ' + p.enseignant : '', p.eleves ? 'Élèves : ' + p.eleves : '', liensLibelles(p.liens).length ? 'Liens : voir les QR codes de la phase ' + (i + 1) : ''].filter(Boolean).join('\n\n'), p.duree]) },
+        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N° · durée', part: 8, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true },
+          { titre: 'Activité · rôle de l’enseignant et des élèves', part: 77 }],
+        lignes: (f.phases || []).map((p, i) => [`${i + 1}${p.duree ? '\n' + p.duree : ''}`, p.phase,
+          [p.activite, p.enseignant ? 'Rôle de l’enseignant : ' + p.enseignant : '', p.eleves ? 'Rôle des élèves : ' + p.eleves : '', liensLibelles(p.liens).length ? 'Liens : voir les QR codes de la phase ' + (i + 1) : ''].filter(Boolean).join('\n\n')]) },
         ...(f.phases || []).flatMap((p, i) => { const l = liensLibelles(p.liens); return l.length ? [{ t: 'texte', gras: true, texte: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''} : liens et QR codes` }, { t: 'qr', liens: l }] : []; }),
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
