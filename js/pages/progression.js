@@ -109,6 +109,15 @@ export async function pageProgression(zone, arg, ctx) {
     while (i0 > 0 && v[i0 - 1] === v[i]) i0--;
     while (i1 < v.length - 1 && v[i1 + 1] === v[i]) i1++;
     if (p >= i0 && p <= i1) return;
+    // cases d'arrivée libres (pour toute la durée de la séance) : la séance y va seule, les autres ne bougent pas
+    const n = i1 - i0 + 1;
+    if (p + n <= v.length && Array.from({ length: n }, (_, k) => p + k).every((k) => !v[k] || (k >= i0 && k <= i1))) {
+      const apres = v.slice();
+      for (let k = i0; k <= i1; k++) apres[k] = '';
+      for (let k = 0; k < n; k++) apres[p + k] = v[i0];
+      await appliquer(m, T, v, apres, 'Séance déplacée sur la case libre');
+      return;
+    }
     const bloc = v.slice(i0, i1 + 1), reste = v.slice(0, i0).concat(v.slice(i1 + 1));
     const q = Math.min(p, reste.length);
     const apres = reste.slice(0, q).concat(bloc, reste.slice(q));
