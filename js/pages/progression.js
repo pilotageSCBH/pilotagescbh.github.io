@@ -105,6 +105,19 @@ export async function pageProgression(zone, arg, ctx) {
     const T = semainesCours(), v = T.map((w) => cleDe(m, w));
     const i = T.indexOf(de), p = T.indexOf(vers);
     if (i < 0 || p < 0 || !v[i]) return;
+    // semaine de suite glissée : elle seule se déplace, la séance de base reste en place
+    if (estSuite(m, de)) {
+      if (p === i) return;
+      if (!v[p]) { const apres = v.slice(); apres[i] = ''; apres[p] = v[i]; await appliquer(m, T, v, apres, 'Semaine de suite déplacée'); return; }
+      const sans = v.slice(); sans.splice(i, 1); sans.push('');
+      const q = p > i ? p - 1 : p;
+      const e = sans.findIndex((x, k) => k > q && !x);
+      if (e < 0) return erreur(new Error('Plus aucune semaine libre après celle-ci dans cette matière.'));
+      for (let k = e; k > q; k--) sans[k] = sans[k - 1];
+      sans[q] = v[i];
+      await appliquer(m, T, v, sans, 'Semaine de suite déplacée : les suivantes se sont décalées');
+      return;
+    }
     let i0 = i, i1 = i;
     while (i0 > 0 && v[i0 - 1] === v[i]) i0--;
     while (i1 < v.length - 1 && v[i1 + 1] === v[i]) i1++;
@@ -161,7 +174,8 @@ export async function pageProgression(zone, arg, ctx) {
   // de la matière ; les semaines de vacances / stage / épreuves sont sautées, les notes restent sur leurs semaines
   function debutBloc(m, T, v, w) { let i = T.indexOf(w); while (i > 0 && v[i - 1] === v[i] && v[i]) i--; return i; }
   async function decaler(m, w, sens) {
-    const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i0 = debutBloc(m, T, v, w);
+    const T = semainesCours(), v = T.map((x) => cleDe(m, x));
+    const i0 = estSuite(m, w) ? T.indexOf(w) : debutBloc(m, T, v, w);   // depuis une semaine de suite : la séance de base ne bouge pas
     if (i0 < 0 || !v[i0]) return;
     let apres;
     if (sens > 0) {
@@ -567,7 +581,7 @@ export async function pageProgression(zone, arg, ctx) {
       if (c.seance_id || c.texte) boutons.push({ texte: estSuite(m, w) ? '✖  Supprimer cette suite' : '✖  Retirer de la progression', classe: 'gauche danger-texte',
         action: async () => (await demanderRetrait(m, w)) ? true : false });
       if (c.seance_id || c.texte) {
-        const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i0 = debutBloc(m, T, v, w);
+        const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i0 = estSuite(m, w) ? T.indexOf(w) : debutBloc(m, T, v, w);
         boutons.push({ texte: '⇣  Décaler d’une semaine (et la suite)', classe: 'gauche', action: async () => { await decaler(m, w, +1); return true; } });
         if (i0 > 0 && !v[i0 - 1]) boutons.push({ texte: '⇡  Avancer d’une semaine (et la suite)', classe: 'gauche', action: async () => { await decaler(m, w, -1); return true; } });
       }
