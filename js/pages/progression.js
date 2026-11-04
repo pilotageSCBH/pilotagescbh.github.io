@@ -148,6 +148,22 @@ export async function pageProgression(zone, arg, ctx) {
     return !!ok;
   }
 
+  // décaler d'une semaine de cours (sens = +1 : plus tard, -1 : plus tôt) la séance de la semaine w et toutes les suivantes
+  // de la matière ; les semaines de vacances / stage / épreuves sont sautées, les notes restent sur leurs semaines
+  function debutBloc(m, T, v, w) { let i = T.indexOf(w); while (i > 0 && v[i - 1] === v[i] && v[i]) i--; return i; }
+  async function decaler(m, w, sens) {
+    const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i0 = debutBloc(m, T, v, w);
+    if (i0 < 0 || !v[i0]) return;
+    let apres;
+    if (sens > 0) {
+      if (v[v.length - 1]) throw new Error('La dernière semaine de cours de la formation est occupée : impossible de tout décaler.');
+      apres = v.slice(0, i0).concat('', v.slice(i0, -1));
+    } else {
+      if (i0 === 0 || v[i0 - 1]) throw new Error('La semaine de cours précédente n’est pas libre : impossible d’avancer.');
+      apres = v.slice(0, i0 - 1).concat(v.slice(i0), '');
+    }
+    await appliquer(m, T, v, apres, sens > 0 ? 'Séance et suivantes décalées d’une semaine' : 'Séance et suivantes avancées d’une semaine');
+  }
   async function inserer(m, w, cle, message = 'Séance placée') {
     const T = semainesCours(), v = T.map((x) => cleDe(m, x)), p = T.indexOf(w);
     if (p < 0) return erreur(new Error('Semaine de vacances / stage / épreuves : choisissez une semaine de cours.'));
@@ -541,6 +557,11 @@ export async function pageProgression(zone, arg, ctx) {
     if (modif && !vac) {
       if (c.seance_id || c.texte) boutons.push({ texte: estSuite(m, w) ? '✖  Supprimer cette suite' : '✖  Retirer de la progression', classe: 'gauche danger-texte',
         action: async () => (await demanderRetrait(m, w)) ? true : false });
+      if (c.seance_id || c.texte) {
+        const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i0 = debutBloc(m, T, v, w);
+        boutons.push({ texte: '⇣  Décaler d’une semaine (et la suite)', classe: 'gauche', action: async () => { await decaler(m, w, +1); return true; } });
+        if (i0 > 0 && !v[i0 - 1]) boutons.push({ texte: '⇡  Avancer d’une semaine (et la suite)', classe: 'gauche', action: async () => { await decaler(m, w, -1); return true; } });
+      }
       if (c.seance_id || c.texte) boutons.push({ texte: 'Prolonger d’une semaine', classe: 'gauche', action: async () => {
         const T = semainesCours(); let i = T.indexOf(w);
         while (i < T.length - 1 && cleDe(m, T[i + 1]) === cleDe(m, w)) i++;
