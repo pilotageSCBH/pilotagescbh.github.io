@@ -429,9 +429,17 @@ export async function pageProgression(zone, arg, ctx) {
             pb.length ? h('i', { class: 'frise-alerte', title: 'Antériorité non respectée' }, '⚠') : null,
             nbc ? h('i', { class: 'frise-com' }, '💬' + nbc) : null,
             c?.note ? h('i', { class: 'frise-note', title: c.note }, '✎') : null);
-          b.addEventListener('click', (e) => { if (b.classList.contains('glisse')) return; e.stopPropagation(); ouvrirCase(m, p.debut); });
+          // bloc de plusieurs semaines : la semaine visée (sous la souris) est retenue ; une semaine de suite se glisse ou se décale seule
+          let sous = p.debut;
+          const viser = (e) => { const r = b.getBoundingClientRect(); sous = p.debut + Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width) * n))); };
+          if (n > 1) {
+            b.style.backgroundImage = `repeating-linear-gradient(to right, transparent 0 calc(100% / ${n} - 1px), rgba(255,255,255,.65) calc(100% / ${n} - 1px) calc(100% / ${n}))`;
+            b.title += '\n(glisser ou cliquer une semaine de suite pour la déplacer ou la décaler seule)';
+          }
+          b.addEventListener('pointerdown', viser);
+          b.addEventListener('click', (e) => { if (b.classList.contains('glisse')) return; e.stopPropagation(); viser(e); ouvrirCase(m, sous); });
           if (modif) {
-            glisserDepuis(b, m, p.debut);
+            glisserDepuis(b, m, () => sous);
             const actions = h('span', { class: 'actions-bloc' });
             if (n > 1) actions.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Raccourcir : supprimer la dernière semaine (suite)',
               onclick: (e) => { e.stopPropagation(); demanderRetrait(m, p.fin); } }, '－'));
@@ -537,7 +545,7 @@ export async function pageProgression(zone, arg, ctx) {
   }
 
   function glisserDepuis(el, m, w, nouvelle = null) {
-    el.addEventListener('dragstart', (e) => { glisse = { m, w, nouvelle }; el.classList.add('glisse'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'seance'); e.stopPropagation(); });
+    el.addEventListener('dragstart', (e) => { glisse = { m, w: typeof w === 'function' ? w() : w, nouvelle }; el.classList.add('glisse'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'seance'); e.stopPropagation(); });
     el.addEventListener('dragend', () => { el.classList.remove('glisse'); zone.querySelectorAll('.cible').forEach((x) => x.classList.remove('cible')); });
     el.addEventListener('click', (e) => { if (el.classList.contains('glisse')) e.stopPropagation(); });
   }
