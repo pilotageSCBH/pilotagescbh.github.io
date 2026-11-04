@@ -1569,3 +1569,12 @@ th.eleve.hors span { opacity: .55; }
 .ajout-phases { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .ajout-phases .aide { margin: 0; }
 @media print { .phases td.num-phase .duree-phase { border: 0; } }
+/* déroulement v3 : intitulé de la phase sur une ligne pleine largeur */
+.phases col.c-phase { width: 0; }
+.phases tr.ligne-phase > td { border-top: 3px solid var(--fonce) !important; }
+.phases tr.ligne-activite > td { border-top: 1px solid #A9BEBA !important; }
+.phases td.phase { background: #DCEBE8 !important; padding: 0 !important; }
+.phases .ligne-intitule { display: flex; align-items: center; gap: 10px; padding: 4px 8px; }
+.phases .lib-phase { flex: none; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--fonce); }
+.phases .intitule-phase { flex: 1; font-weight: 700; font-size: 14px; background: transparent; border: 0; padding: 4px 6px; }
+.phases .intitule-phase:focus { background: #fff; }

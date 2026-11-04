@@ -152,7 +152,7 @@ export async function pageFiches(zone, arg, ctx) {
     const tablePhases = h('tbody', {});
     // insertion d'une phase vide à la position n (0 = en tête)
     const inserer = async (n) => { phases.splice(n, 0, phaseVide()); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } };
-    const ligneInsertion = (n) => h('tr', { class: 'ligne-insertion ecran' }, h('td', { colspan: 4 },
+    const ligneInsertion = (n) => h('tr', { class: 'ligne-insertion ecran' }, h('td', { colspan: 3 },
       h('button', { class: 'inserer-phase', type: 'button', title: n === 0 ? 'Insérer une phase au début' : `Insérer une phase entre la phase ${n} et la phase ${n + 1}`, onclick: () => inserer(n) }, '＋ insérer une phase ici')));
     // une phase = deux lignes : à gauche n°, durée et ✖ ; l'intitulé ; l'activité sur toute la largeur, puis rôle de l'enseignant | rôle des élèves
     const dessinerPhases = () => {
@@ -163,14 +163,16 @@ export async function pageFiches(zone, arg, ctx) {
         if (modif && i > 0) lignes.push(ligneInsertion(i));
         const L = liensPhase(i);
         lignes.push(
-          h('tr', { class: 'ligne-activite' },
-            h('td', { class: 'num-phase', rowspan: 2 },
+          h('tr', { class: 'ligne-phase' },
+            h('td', { class: 'num-phase', rowspan: 3 },
               h('span', { class: 'n' }, i + 1),
               h('span', { class: 'lib-duree' }, 'durée'), c(i, 'duree', { placeholder: modif ? '…' : '', classe: 'duree-phase' }),
               modif ? h('button', { class: 'icone petit retirer-phase ecran', title: 'Retirer cette phase', onclick: async () => {
                 if ((p.activite || p.enseignant || p.eleves || p.phase) && !(await confirmer('Retirer la phase', `Retirer la phase ${i + 1}${p.phase ? ' « ' + p.phase + ' »' : ''} et son contenu ?`, 'Retirer'))) return;
                 phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖') : null),
-            h('td', { class: 'phase', rowspan: 2 }, h('span', { class: 'lib-cellule' }, 'Phase'), c(i, 'phase', { placeholder: modif ? 'Intitulé' : '' })),
+            h('td', { class: 'phase', colspan: 2 }, h('div', { class: 'ligne-intitule' }, h('span', { class: 'lib-phase' }, 'Phase'),
+              c(i, 'phase', { multi: false, placeholder: modif ? 'Intitulé de la phase' : '', classe: 'intitule-phase' })))),
+          h('tr', { class: 'ligne-activite' },
             h('td', { class: 'activite', colspan: 2 }, h('div', { class: 'tete-cellule' }, h('span', { class: 'lib-cellule' }, 'Activité'), L.bouton),
               c(i, 'activite', { placeholder: modif ? 'Description de l’activité : contexte, consignes, organisation, supports…' : '' }), L.cartes)),
           h('tr', { class: 'ligne-roles' },
@@ -205,8 +207,8 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
-          h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-phase' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
-            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', {}, 'Phase'), h('th', { colspan: 2 }, 'Activité · rôle de l’enseignant et des élèves'))), tablePhases),
+          h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
+            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', { colspan: 2 }, 'Phase · activité · rôle de l’enseignant et des élèves'))), tablePhases),
           modif ? h('div', { class: 'ajout-phases ecran' },
             h('button', { class: 'btn petit', onclick: () => inserer(0) }, '＋ phase au début'),
             h('button', { class: 'btn petit', onclick: () => inserer(phases.length) }, '＋ phase à la fin'),
@@ -484,10 +486,9 @@ export async function modelesSequence(S, ctx, choisis) {
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
         lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
         maison(f.maison_avant, 'avant'),
-        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N° · durée', part: 8, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true },
-          { titre: 'Activité · rôle de l’enseignant et des élèves', part: 77 }],
-        lignes: (f.phases || []).map((p, i) => [`${i + 1}${p.duree ? '\n' + p.duree : ''}`, p.phase,
-          [p.activite, p.enseignant ? 'Rôle de l’enseignant : ' + p.enseignant : '', p.eleves ? 'Rôle des élèves : ' + p.eleves : '', liensLibelles(p.liens).length ? 'Liens : voir les QR codes de la phase ' + (i + 1) : ''].filter(Boolean).join('\n\n')]) },
+        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'Activité', part: 52 }, { titre: 'Rôle de l’enseignant', part: 24 }, { titre: 'Rôle des élèves', part: 24 }],
+        lignes: (f.phases || []).flatMap((p, i) => [{ groupe: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''}${p.duree ? '   (' + p.duree + ')' : ''}` },
+          [[p.activite, liensLibelles(p.liens).length ? 'Liens : voir les QR codes de la phase ' + (i + 1) : ''].filter(Boolean).join('\n\n'), p.enseignant, p.eleves]]) },
         ...(f.phases || []).flatMap((p, i) => { const l = liensLibelles(p.liens); return l.length ? [{ t: 'texte', gras: true, texte: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''} : liens et QR codes` }, { t: 'qr', liens: l }] : []; }),
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
