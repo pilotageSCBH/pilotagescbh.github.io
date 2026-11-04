@@ -3,7 +3,7 @@
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre } from '../ui.js';
-import { dessinerContrat, moyenne, niveau, arrondi, ORGAS, LIEUX } from './contrat.js';
+import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
 import { bandeauCreation } from './contratsLibres.js';
@@ -14,7 +14,7 @@ const NB_PHASES = 5;
 const COLS_PHASES = [['phase', 'Phase'], ['activite', 'Activité proposée'], ['enseignant', 'Activités de l’enseignant'],
   ['eleves', 'Activités des élèves'], ['duree', 'Durée']];
 const idPhase = () => 'p' + Math.random().toString(36).slice(2, 9);
-const phaseVide = () => ({ id: idPhase(), phase: '', activite: '', enseignant: '', eleves: '', duree: '' });
+const phaseVide = () => ({ id: idPhase(), phase: '', activite: '', enseignant: '', eleves: '', duree: '', liens: '' });
 // intitulé saisi sans son numéro (« 2. Découverte » → « Découverte ») ; intitulés par défaut d'avant effacés
 const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
@@ -127,100 +127,45 @@ export async function pageFiches(zone, arg, ctx) {
     const sansId = Array.isArray(f.phases) && f.phases.some((p) => !p.id);
     let phases = Array.isArray(f.phases) && f.phases.length ? f.phases.map((p) => ({ ...phaseVide(), ...p, phase: sansNumero(p.phase), id: p.id || idPhase() }))
       : Array.from({ length: NB_PHASES }, phaseVide);
-    let attenteAct = null;
-    const sauverPhases = async () => {
-      await db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
-      clearTimeout(attenteAct); attenteAct = setTimeout(() => dessinerActivites(), 150);   // les fiches activité suivent le déroulement
+    const sauverPhases = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id');
+    if (sansId && modif) sauverPhases().catch(() => {});
+    // liens et QR codes d'une phase (lignes « Titre : adresse » dans phases[i].liens)
+    const liensPhase = (i) => {
+      const z = h('div', { class: 'qr-liens liens-phase' });
+      const maj = () => vider(z, liensLibelles(phases[i].liens).map(({ url, lib }) => h('div', { class: 'qr-carte' },
+        h('a', { class: 'qr-lien', href: url, target: '_blank', rel: 'noopener', title: 'Ouvrir le lien' }, lib ? h('b', {}, lib) : null, qrSVG(url, 80), h('span', {}, url)),
+        modif ? h('button', { class: 'qr-retirer ecran', type: 'button', title: 'Retirer ce lien', onclick: async () => {
+          if (!(await confirmer('Retirer le lien', `Retirer ce lien (et son QR code) de la phase ?\n${url}`, 'Retirer'))) return;
+          const court = url.replace(/^https:\/\/(?=www\.)/i, '');
+          phases[i] = { ...phases[i], liens: String(phases[i].liens || '').split('\n').filter((l) => !(l.includes(url) || l.includes(court))).join('\n') };
+          try { await sauverPhases(); maj(); } catch (e) { erreur(e); }
+        } }, '✖') : null)),
+      modif ? h('button', { class: 'qr-ajout ecran', type: 'button', onclick: async () => {
+        const r = await dialogueLien(); if (!r) return;
+        const v = String(phases[i].liens || '').replace(/\s+$/, '');
+        phases[i] = { ...phases[i], liens: (v ? v + '\n' : '') + (r.t ? `${r.t} : ` : '') + r.u };
+        try { await sauverPhases(); maj(); } catch (e) { erreur(e); }
+      } }, h('span', { class: 'plus' }, '＋'), 'Ajouter un lien', h('small', {}, 'avec son QR code')) : null);
+      maj();
+      return z;
     };
-    // fiches activité : critères du contrat formatif de la séance (critères de réussite)
-    const ctF = (await db.lire('contrats', `type=eq.formatif&seance_id=eq.${x.id}`))[0];
-    const criteresF = ctF ? await db.lire('criteres', `contrat_id=eq.${ctF.id}&order=groupe_ordre,ordre,id`) : [];
-    // fiche activité de la séance (une seule) : enregistrée dans fiches_seance.activites[0] = { phases: [id…], parties: { id: {…} }, rubriques modifiées }
-    let FA = (Array.isArray(f.activites) && f.activites[0] && !f.activites[0].cle) ? f.activites[0] : {};
-    if (sansId && modif) db.enregistrer('fiches_seance', [{ seance_id: x.id, phases }], 'seance_id').catch(() => {});
-    const zoneAct = h('div', { class: 'zone-activites ecran', style: { '--couleur': m.couleur } });
-    const sauverAct = () => db.enregistrer('fiches_seance', [{ seance_id: x.id, activites: [FA] }], 'seance_id');
-    const S = { sq, m, promo, profs, situation: ficheSeq.situation };
-    let ouverte = false;
-    // modification d'une rubrique (générale, ou d'une partie) : identique au texte automatique → plus de modification enregistrée
-    const modifier = async (auto, cible, k, v) => { if (v === auto) delete cible[k]; else cible[k] = v; await sauverAct(); };
-    function dessinerActivites() {
-      const A = ficheActivite(x, { ...f, phases, activites: [FA] }, criteresF, ref, S.situation);
-      const choisies = new Set(FA.phases || []);
-      const zone = (k, lib, aide, source, auto, val, cible, pleine = true) => {
-        const change = val !== auto;
-        return h('div', { class: 'rubrique' + (pleine ? ' pleine' : '') },
-          h('h3', {}, lib, auto && !change && source ? h('span', { class: 'tag-auto', title: 'Rempli automatiquement depuis : ' + source }, 'auto') : null,
-            change && auto && modif ? h('button', { class: 'lien petit reprendre', type: 'button', title: 'Remettre le texte automatique (' + source + ')',
-              onclick: async () => { await modifier(auto, cible, k, auto); dessinerActivites(); } }, '↺ reprendre la fiche') : null),
-          champ(val, (v) => modifier(auto, cible, k, v), { multi: true, lecture: !modif, placeholder: modif ? aide : '' }));
-      };
-      // la fiche est recalculée au moment de l'impression (dernières modifications comprises)
-      const sortie = (version, mode) => envoyerPDF(modeleActivite(ficheActivite(x, { ...f, phases, activites: [FA] }, criteresF, ref, S.situation), x, S, version), mode);
-      // choix des phases
-      const choix = h('div', { class: 'choix-phases' },
-        h('p', { class: 'lib-choix' }, 'Phases du déroulement à mettre sur la fiche activité :'),
-        phases.map((p, i) => {
-          const vide = !String(p.phase || p.activite || p.eleves || '').trim();
-          return h('label', { class: 'phase-choix' + (choisies.has(p.id) ? ' oui' : '') + (vide ? ' vide' : '') },
-            h('input', { type: 'checkbox', checked: choisies.has(p.id), disabled: !modif || (vide && !choisies.has(p.id)), onchange: async (e) => {
-              const l = phases.map((q) => q.id).filter((id) => (id === p.id ? e.target.checked : choisies.has(id)));
-              FA.phases = l; try { await sauverAct(); ouverte = true; dessinerActivites(); } catch (er) { erreur(er); } } }),
-            h('span', { class: 'n' }, i + 1), h('span', {}, h('b', {}, p.phase || (vide ? '(phase vide)' : 'Phase sans intitulé')), p.duree ? h('small', {}, '  ·  ' + p.duree) : null));
-        }));
-      let corps = null;
-      if (A) {
-        const g = (k) => [k, A.auto[k] || '', A[k]];
-        const petit = (k, lib, opts = {}) => h('div', { class: 'info' }, h('span', { class: 'lib' }, lib), champ(A[k], (v) => modifier(A.auto[k], FA, k, v), { lecture: !modif, ...opts }));
-        const C = Object.fromEntries(CHAMPS_ACTIVITE.map((c) => [c[0], c]));
-        const rub = (k, pleine = true) => { const [, lib, aide, source] = C[k]; return zone(k, lib, aide, source, A.auto[k] || '', A[k], FA, pleine); };
-        corps = h('div', { class: 'corps-activite' },
-          h('div', { class: 'grille-infos' }, petit('titre', 'Titre de la fiche'), petit('duree', 'Durée totale'),
-            petit('organisation', 'Organisation', { placeholder: modif ? 'Individuel, binôme…' : '' }), petit('lieu', 'Lieu / salle')),
-          A.parties.map((pt, n) => {
-            FA.parties = FA.parties || {};
-            const cible = () => (FA.parties[pt.id] = FA.parties[pt.id] || {});
-            const zp = (k, lib, aide, source) => {
-              const auto = pt.auto[k] || '', val = pt[k], change = val !== auto;
-              return h('div', { class: 'rubrique pleine' },
-                h('h3', {}, lib, auto && !change ? h('span', { class: 'tag-auto', title: 'Rempli automatiquement depuis : ' + source }, 'auto') : null,
-                  change && auto && modif ? h('button', { class: 'lien petit reprendre', type: 'button', onclick: async () => { await modifier(auto, cible(), k, auto); dessinerActivites(); } }, '↺ reprendre la fiche') : null),
-                champ(val, (v) => modifier(auto, cible(), k, v), { multi: true, lecture: !modif, placeholder: modif ? aide : '' }));
-            };
-            return h('section', { class: 'partie-activite' },
-              h('div', { class: 'tete-partie' }, h('span', { class: 'num-activite' }, n + 1),
-                champ(pt.titre, (v) => modifier(pt.auto.titre, cible(), 'titre', v), { lecture: !modif, classe: 'titre-partie' }),
-                champ(pt.duree, (v) => modifier(pt.auto.duree, cible(), 'duree', v), { lecture: !modif, classe: 'duree-partie', placeholder: 'durée' }),
-                h('small', { class: 'gris' }, `phase ${pt.index + 1} du déroulement`)),
-              h('div', { class: 'deux' }, zp('contexte', 'Activité', 'Ce que les élèves vont faire dans cette partie…', 'colonne « Activité proposée » de la phase'),
-                zp('consignes', 'Travail demandé (une étape par ligne)', 'Étape 1…\nÉtape 2…', 'colonne « Activités des élèves » de la phase')));
-          }),
-          h('div', { class: 'deux' }, rub('ressources')));
-        corps.querySelectorAll('input[type=number]').forEach((i) => { i.min = 0; i.max = 40; });
-        const ins = corps.querySelectorAll('.grille-infos input');
-        ins[2]?.setAttribute('list', 'dl-orgas-act'); ins[3]?.setAttribute('list', 'dl-lieux-act');
-      }
-      const d = h('div', { class: 'carte-activite' },
-        h('div', { class: 'entete-activite' }, h('span', { class: 'titre-activite' }, h('b', {}, A ? A.titre : 'Fiche activité'),
-          h('small', {}, A ? `${A.parties.length} partie(s)${A.duree ? ' · ' + A.duree : ''}${A.organisation ? ' · ' + A.organisation : ''}` : 'aucune phase cochée')),
-          A ? h('span', { class: 'actions-activite' },
-            h('button', { class: 'btn petit', type: 'button', title: 'Imprimer la fiche activité (A4)', onclick: () => sortie('enseignant', 'imprimer') }, '🖶  Imprimer')) : null),
-        choix, corps, h('datalist', { id: 'dl-orgas-act' }, ORGAS.map((o) => h('option', { value: o }))), h('datalist', { id: 'dl-lieux-act' }, LIEUX.map((o) => h('option', { value: o }))));
-      vider(zoneAct, h('section', { class: 'bloc-activites' },
-        h('div', { class: 'tete-activites' }, h('h3', {}, '🧩  Fiche activité'),
-          h('p', { class: 'aide' }, 'Cochez les phases qui demandent une fiche : elles sont regroupées sur une seule fiche activité, une partie par phase. La fiche se remplit avec la fiche de déroulement (repère « auto ») ; détaillez ensuite chaque partie : vos compléments sont conservés, les rubriques non modifiées suivent la fiche de déroulement.')),
-        d));
-      ajusterTout(d);
-    }
     const tablePhases = h('tbody', {});
+    // une phase = deux lignes : activité proposée sur toute la largeur (avec liens et QR codes), puis enseignant | élèves
     const dessinerPhases = () => {
-      vider(tablePhases, phases.map((p, i) => h('tr', {},
-        h('td', { class: 'num-phase' }, i + 1),
-        COLS_PHASES.map(([k]) => h('td', { class: k },
-          champ(p[k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
-            { multi: k !== 'duree', lecture: !modif, placeholder: modif && i === 0 ? { phase: 'Intitulé de la phase' }[k] || '' : '' }))),
-        modif ? h('td', { class: 'ecran' }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
-          phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null)));
+      const c = (i, k, opts = {}) => champ(phases[i][k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
+        { multi: k !== 'duree', lecture: !modif, ...opts });
+      vider(tablePhases, phases.flatMap((p, i) => [
+        h('tr', { class: 'ligne-activite' + (i % 2 ? ' impaire' : '') },
+          h('td', { class: 'num-phase', rowspan: 2 }, i + 1),
+          h('td', { class: 'phase', rowspan: 2 }, c(i, 'phase', { placeholder: modif && i === 0 ? 'Intitulé de la phase' : '' })),
+          h('td', { class: 'activite', colspan: 2 }, h('span', { class: 'lib-cellule' }, 'Activité proposée'),
+            c(i, 'activite', { placeholder: modif ? 'Description détaillée de l’activité : contexte, consignes, organisation, supports…' : '' }), liensPhase(i)),
+          h('td', { class: 'duree', rowspan: 2 }, c(i, 'duree', { placeholder: modif ? 'durée' : '' })),
+          modif ? h('td', { class: 'ecran', rowspan: 2 }, h('button', { class: 'icone petit', title: 'Retirer cette phase', onclick: async () => {
+            phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖')) : null),
+        h('tr', { class: 'ligne-roles' + (i % 2 ? ' impaire' : '') },
+          h('td', { class: 'enseignant' }, h('span', { class: 'lib-cellule' }, 'Activités de l’enseignant'), c(i, 'enseignant')),
+          h('td', { class: 'eleves' }, h('span', { class: 'lib-cellule' }, 'Activités des élèves'), c(i, 'eleves')))]));
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});
@@ -248,19 +193,18 @@ export async function pageFiches(zone, arg, ctx) {
         h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
-          h('table', { class: 'table-fiche phases' }, h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), COLS_PHASES.map(([, t]) => h('th', {}, t)),
+          h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-phase' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' }), h('col', { class: 'c-duree' }), modif ? h('col', { class: 'c-act ecran' }) : null),
+            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', {}, 'Phase'), h('th', { colspan: 2 }, 'Activité proposée · activités de l’enseignant et des élèves'), h('th', {}, 'Durée'),
             modif ? h('th', { class: 'ecran' }) : null)), tablePhases),
           modif ? h('button', { class: 'lien petit ecran', onclick: async () => {
             phases.push(phaseVide());
             try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '＋ ajouter une phase') : null),
-        zoneAct,
         cadreMaison(x, f, 'apres'),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
       h('p', { class: 'aide ecran' }, 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
     dessinerPhases();
-    dessinerActivites();
     ajusterTout(fiche);
   }
 
@@ -392,7 +336,7 @@ export async function pageFiches(zone, arg, ctx) {
   // choix des documents : préparation et contrat sommatif de la séquence, fiche de déroulement et contrat formatif de chaque séance
   async function menuTelecharger() {
     const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Fiche contrat sommatif', null],
-      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`activites-${x.id}`, `Fiches activité`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
+      ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
     const coche = (k) => (idSeance ? k.endsWith('-' + idSeance) : true);
     const cases = new Map(docs.map(([k]) => [k, h('input', { type: 'checkbox', checked: coche(k) })]));
     const compte = h('b', {});
@@ -409,9 +353,9 @@ export async function pageFiches(zone, arg, ctx) {
       h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Fiche contrat sommatif')),
       seances.map((x) => h('fieldset', { class: 'groupe-docs' + (String(x.id) === idSeance ? ' courante' : '') },
         h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
-          [`seance-${x.id}`, `activites-${x.id}`, `formatif-${x.id}`].forEach((k) => { cases.get(k).checked = e.target.checked; }); majCompte(); } }),
+          [`seance-${x.id}`, `formatif-${x.id}`].forEach((k) => { cases.get(k).checked = e.target.checked; }); majCompte(); } }),
         `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
-        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`activites-${x.id}`, 'Fiche activité (si des phases sont cochées)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
+        ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
     [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
       if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
       return true;
@@ -528,19 +472,13 @@ export async function modelesSequence(S, ctx, choisis) {
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
         lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
         maison(f.maison_avant, 'avant'),
-        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 15, gras: true }, { titre: 'Activité proposée', part: 21 },
-          { titre: 'Activités de l’enseignant', part: 22 }, { titre: 'Activités des élèves', part: 22 }, { titre: 'Durée', part: 9 }],
-        lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase, p.activite, p.enseignant, p.eleves, p.duree]) },
-        (() => { const A = ficheActivite(x, f);
-          return A ? R('Fiche activité (document séparé)', A.parties.map((p, n) => `Partie ${n + 1} · ${p.titre}${p.duree ? ' · ' + p.duree : ''}  (phase ${p.index + 1})`).join('\n')) : null; })(),
+        { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'N°', part: 4, centre: true, gras: true }, { titre: 'Phase', part: 14, gras: true },
+          { titre: 'Activité proposée · activités de l’enseignant et des élèves', part: 73 }, { titre: 'Durée', part: 9 }],
+        lignes: (f.phases || []).map((p, i) => [String(i + 1), p.phase,
+          [p.activite, p.enseignant ? 'Enseignant : ' + p.enseignant : '', p.eleves ? 'Élèves : ' + p.eleves : '', liensLibelles(p.liens).length ? 'Liens : voir les QR codes de la phase ' + (i + 1) : ''].filter(Boolean).join('\n\n'), p.duree]) },
+        ...(f.phases || []).flatMap((p, i) => { const l = liensLibelles(p.liens); return l.length ? [{ t: 'texte', gras: true, texte: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''} : liens et QR codes` }, { t: 'qr', liens: l }] : []; }),
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
-    } else if (k.startsWith('activites-')) {
-      const f = d.seances.find((y) => y.numero === x.numero)?.fiche || {};
-      const ct = (await db.lire('contrats', `type=eq.formatif&seance_id=eq.${x.id}`))[0];
-      const ks = ct ? await db.lire('criteres', `contrat_id=eq.${ct.id}&order=groupe_ordre,ordre,id`) : [];
-      const A = ficheActivite(x, f, ks, ref, d.preparation?.situation || '');
-      if (A) out.push({ ...modeleActivite(A, x, { sq, m, promo, profs }, 'enseignant'), fichier: `S${sq.numero}.${x.numero}_a_Fiche_activite.pdf` });
     } else if (k.startsWith('formatif-')) {
       out.push({ fichier: `S${sq.numero}.${x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
         blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
@@ -579,67 +517,22 @@ async function index(zone, ctx, mode = 'preparation') {
 }
 
 
-// ------------------------------------------------------------------------------------- fiches activité
-// Une fiche activité par phase du déroulement dont la colonne « Activité proposée » est remplie. Chaque rubrique se
-// remplit automatiquement à partir de la fiche de déroulement (et du séquençage, du contrat formatif) ; l'enseignant
-// peut la compléter ou la modifier : seules ses modifications sont enregistrées (fiches_seance.activites).
-export const CHAMPS_ACTIVITE = [
-  // [clé, libellé, aide, source automatique (texte)]
-  ['ressources', 'Documents, matériel et ressources', 'Plans, extraits du DCE, liens (https://…)…', 'rubrique « Matériel et ressources » de la fiche'],
-];
-const lignesDe = (t) => String(t || '').split('\n').map((l) => l.replace(/^\s*(?:[-•*]|\d+\s*[.)-])\s*/, '').trim()).filter(Boolean);
-const organisationDe = (t) => (/bin[oô]me/i.test(t) ? 'Binôme' : /groupe|îlot/i.test(t) ? 'En groupe' : /classe entière|collectif/i.test(t) ? 'Classe entière' : /individuel/i.test(t) ? 'Individuel' : '');
-// durées « 10 min », « 1 h 30 », « 45' » additionnées ; sinon les textes sont joints
-const minutesDe = (t) => { const s = String(t || '').toLowerCase().replace(',', '.'); if (!s.trim()) return 0;
-  const hm = s.match(/(\d+(?:\.\d+)?)\s*h\s*(\d+)?/); if (hm) return Math.round(Number(hm[1]) * 60 + Number(hm[2] || 0));
-  const mn = s.match(/(\d+)\s*(?:min|mn|')/); if (mn) return Number(mn[1]); return NaN; };
-const dureeTotale = (l) => { const m = l.map(minutesDe); if (m.some((v) => Number.isNaN(v))) return l.filter(Boolean).join(' + ');
-  const t = m.reduce((a, b) => a + b, 0); return !t ? '' : t < 60 ? `${t} min` : `${Math.floor(t / 60)} h${t % 60 ? ' ' + String(t % 60).padStart(2, '0') : ''}`; };
-
-// fiche activité d'une séance (null si aucune phase cochée) : valeurs automatiques (auto) + modifications de l'enseignant
-export function ficheActivite(x, f, criteres = [], ref = null, situation = '') {
-  const phases = Array.isArray(f?.phases) ? f.phases : [];
-  const o = (Array.isArray(f?.activites) && f.activites[0] && !f.activites[0].cle) ? f.activites[0] : {};
-  const ids = new Set(o.phases || []);
-  const sel = phases.map((p, i) => ({ p, i })).filter(({ p }) => p.id && ids.has(p.id));
-  if (!sel.length) return null;
-  const parties = sel.map(({ p, i }) => {
-    const auto = { titre: String(p.phase || '').trim() || lignesDe(p.activite)[0] || `Phase ${i + 1}`, duree: p.duree || '', contexte: p.activite || '', consignes: lignesDe(p.eleves).join('\n') };
-    const m = (o.parties || {})[p.id] || {};
-    return { id: p.id, index: i, enseignant: p.enseignant || '', auto, ...Object.fromEntries(Object.keys(auto).map((k) => [k, m[k] ?? auto[k]])) };
-  });
-  const auto = {
-    titre: x.titre || 'Activité', duree: dureeTotale(parties.map((pt) => pt.duree)), organisation: organisationDe(sel.map(({ p }) => `${p.activite} ${p.eleves}`).join(' ')),
-    lieu: f?.salle || '', ressources: f?.materiel || '', lignes: '12',
-  };
-  const A = { auto, parties };
-  for (const k of Object.keys(auto)) A[k] = o[k] ?? auto[k];
-  A.competences = (x.competences || []).map((c) => `${c}  ${ref?.comp?.[c]?.libelle || ''}`.trim());
-  return A;
-}
-
-// fiche activité en PDF A4 : version élève (à distribuer) ou enseignant (compétences, éléments de correction)
-export function modeleActivite(A, x, { sq, m, promo, profs }, version = 'eleve') {
-  const prof = version === 'enseignant';
-  const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
-  const liens = liensLibelles(A.ressources), coul = m?.couleur || '#146B63';
-  return {
-    fichier: nomFichier(`${m ? m.abreviation || m.nom : ''}_S${sq.numero}.${x.numero}_fiche_activite${prof ? '_enseignant' : ''}.pdf`),
-    titre: `Fiche activité · séance ${sq.numero}.${x.numero}`,
-    pied: `${m?.nom || ''} · Séance ${sq.numero}.${x.numero} · Fiche activité · Promotion ${promo}`,
-    blocs: [
-      { t: 'titre', texte: 'FICHE ACTIVITÉ', sous: A.titre, couleur: coul },
-      { t: 'infos', paires: prof
-        ? [['Matière', m?.nom], ['Enseignant', profs], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Promotion', promo], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Phases', A.parties.map((p) => p.index + 1).join(', ')]]
-        : [['Nom et prénom', ' '], ['Date', ' '], ['Matière', m?.nom], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`], ['Durée', A.duree], ['Organisation', A.organisation], ['Lieu', A.lieu], ['Enseignant', profs]] },
-      ...A.parties.map((pt, n) => ({ t: 'cadre', couleur: coul, titre: `Partie ${n + 1} · ${pt.titre}${pt.duree ? '  (' + pt.duree + ')' : ''}`,
-        blocs: [pt.contexte ? { t: 'texte', texte: pt.contexte } : null, lignesDe(pt.consignes).length ? { t: 'etapes', titre: 'Travail demandé', items: lignesDe(pt.consignes) } : null,
-          prof && pt.enseignant ? R('Activités de l’enseignant', pt.enseignant, { gris: true }) : null].filter(Boolean) })),
-      A.ressources ? R('Documents, matériel et ressources', A.ressources) : null,
-      liens.length ? { t: 'qr', liens } : null,
-      liens.length && !prof ? { t: 'note', texte: 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' } : null,
-    ].filter(Boolean),
-  };
+// fenêtre « ajouter un lien » : titre (facultatif) + adresse, aperçu du QR code ; renvoie { u, t } ou null
+async function dialogueLien() {
+  const titre = h('input', { class: 'champ', placeholder: 'ex. Vidéo de présentation' });
+  const adr = h('input', { class: 'champ', type: 'url', placeholder: 'https://…' });
+  const apercu = h('div', { class: 'qr-apercu' });
+  adr.addEventListener('input', () => { const u = liensLibelles(adr.value.trim())[0]?.url; vider(apercu, u ? qrSVG(u, 110) : h('span', { class: 'gris' }, 'Le QR code apparaît ici')); });
+  vider(apercu, h('span', { class: 'gris' }, 'Le QR code apparaît ici'));
+  return fenetre('Ajouter un lien et son QR code', h('div', { class: 'formulaire form-qr' },
+    h('div', {}, h('label', {}, 'Titre (facultatif)', titre), h('label', {}, 'Adresse du lien', adr),
+      h('p', { class: 'aide' }, 'Collez l’adresse complète (vidéo, document de l’ENT, site…). Le lien est ajouté avec son QR code, à l’écran et dans le PDF.')), apercu),
+  [{ texte: 'Annuler', valeur: null }, { texte: '＋  Ajouter', classe: 'principal', action: () => {
+    let u = adr.value.trim();
+    if (u && !/^(https?:\/\/|www\.)/i.test(u)) u = 'https://' + u;
+    if (!liensLibelles(u).length) throw new Error('Adresse invalide : elle doit commencer par https://, http:// ou www.');
+    return { u, t: titre.value.trim().replace(/:$/, '') };
+  } }]);
 }
 
 // PDF d'une fiche : téléchargé, ou chargé dans un cadre invisible puis envoyé à l'imprimante (imprimante du réseau ou « Enregistrer en PDF »)

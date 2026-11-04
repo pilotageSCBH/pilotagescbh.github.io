@@ -1522,3 +1522,21 @@ th.eleve.hors span { opacity: .55; }
 .tete-video .gris { color: #A9C2BE; font-size: 12.5px; flex: 1; }
 .tete-video .fermer { background: rgba(255,255,255,.12); color: #fff; border: 0; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 16px; }
 .boite-video video { display: block; width: 100%; max-height: 80vh; background: #000; }
+
+/* ===================================================================== tableau du déroulement : activité sur toute la largeur */
+.phases { table-layout: fixed; width: 100%; }
+.phases col.c-num { width: 38px; } .phases col.c-phase { width: 15%; } .phases col.c-duree { width: 9%; } .phases col.c-act { width: 38px; }
+.phases tr.ligne-activite > td { border-top: 2px solid var(--fonce); }
+.phases tr.impaire > td:not(.num-phase) { background: #FBFCFC; }
+.phases td.activite, .phases td.enseignant, .phases td.eleves { position: relative; vertical-align: top; }
+.phases .lib-cellule { display: block; padding: 4px 8px 0; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--teal); }
+.phases td.activite .champ { min-height: 110px; }
+.phases td.enseignant .champ, .phases td.eleves .champ { min-height: 56px; }
+.phases td.phase, .phases td.duree { vertical-align: top; }
+.phases td.phase .champ, .phases td.duree .champ { min-height: 100%; }
+.liens-phase { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 8px 8px; }
+.liens-phase:empty { display: none; }
+@media print { .phases tr.ligne-activite, .phases tr.ligne-roles { break-inside: avoid; } }
+.liens-phase .qr-ajout { min-height: 0; height: auto; width: auto; flex-direction: row; gap: 6px; padding: 6px 12px; align-self: flex-start; }
+.liens-phase .qr-ajout .plus { font-size: 16px; }
+.liens-phase .qr-ajout small { display: none; }
