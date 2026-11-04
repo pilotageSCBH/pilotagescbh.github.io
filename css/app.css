@@ -1578,3 +1578,5 @@ th.eleve.hors span { opacity: .55; }
 .phases .lib-phase { flex: none; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--fonce); }
 .phases .intitule-phase { flex: 1; font-weight: 700; font-size: 14px; background: transparent; border: 0; padding: 4px 6px; }
 .phases .intitule-phase:focus { background: #fff; }
+.phases td.num-phase .lib-num { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--fonce); margin-bottom: 3px; }
+.phases td.num-phase { padding-top: 7px !important; }

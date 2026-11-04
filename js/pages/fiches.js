@@ -165,12 +165,12 @@ export async function pageFiches(zone, arg, ctx) {
         lignes.push(
           h('tr', { class: 'ligne-phase' },
             h('td', { class: 'num-phase', rowspan: 3 },
-              h('span', { class: 'n' }, i + 1),
+              h('span', { class: 'lib-num' }, 'Phase'), h('span', { class: 'n' }, i + 1),
               h('span', { class: 'lib-duree' }, 'durée'), c(i, 'duree', { placeholder: modif ? '…' : '', classe: 'duree-phase' }),
               modif ? h('button', { class: 'icone petit retirer-phase ecran', title: 'Retirer cette phase', onclick: async () => {
                 if ((p.activite || p.enseignant || p.eleves || p.phase) && !(await confirmer('Retirer la phase', `Retirer la phase ${i + 1}${p.phase ? ' « ' + p.phase + ' »' : ''} et son contenu ?`, 'Retirer'))) return;
                 phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖') : null),
-            h('td', { class: 'phase', colspan: 2 }, h('div', { class: 'ligne-intitule' }, h('span', { class: 'lib-phase' }, 'Phase'),
+            h('td', { class: 'phase', colspan: 2 }, h('div', { class: 'ligne-intitule' },
               c(i, 'phase', { multi: false, placeholder: modif ? 'Intitulé de la phase' : '', classe: 'intitule-phase' })))),
           h('tr', { class: 'ligne-activite' },
             h('td', { class: 'activite', colspan: 2 }, h('div', { class: 'tete-cellule' }, h('span', { class: 'lib-cellule' }, 'Activité'), L.bouton),
@@ -208,7 +208,7 @@ export async function pageFiches(zone, arg, ctx) {
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
-            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, 'N°'), h('th', { colspan: 2 }, 'Phase · activité · rôle de l’enseignant et des élèves'))), tablePhases),
+            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, ''), h('th', { colspan: 2 }, 'Intitulé de la phase · activité · rôle de l’enseignant et des élèves'))), tablePhases),
           modif ? h('div', { class: 'ajout-phases ecran' },
             h('button', { class: 'btn petit', onclick: () => inserer(0) }, '＋ phase au début'),
             h('button', { class: 'btn petit', onclick: () => inserer(phases.length) }, '＋ phase à la fin'),
