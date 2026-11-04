@@ -67,7 +67,8 @@ export async function chargerSuivi(ctx) {
     P, Y: P.annee_debut, sequences, seqs, seances, contrats, criteres, evaluations, couverture,
     eleves: eleves.filter((e) => !e.arret),
     semaines: new Map(semainesL.map((s) => [s.semaine, s])), jours: new Map(joursL.map((j) => [j.jour, j.evenement])),
-    cases: casesL, fiches: new Map(fiches.map((f) => [f.seance_id, f])),
+    // une case à deux séances compte comme deux placements (copie avec la 2e séance)
+    cases: casesL.concat(casesL.filter((c) => c.seance_id && c.seance2_id).map((c) => ({ ...c, seance_id: c.seance2_id, seance2_id: null, texte: '', note: '', deuxieme: true }))), fiches: new Map(fiches.map((f) => [f.seance_id, f])),
     noteesContrats: new Set((sommes || []).map((r) => r.contrat_id)), noteesEvals: new Set(resultats.map((r) => r.evaluation_id)),
   };
 }

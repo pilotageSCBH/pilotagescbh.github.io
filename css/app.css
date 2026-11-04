@@ -1580,3 +1580,6 @@ th.eleve.hors span { opacity: .55; }
 .phases .intitule-phase:focus { background: #fff; }
 .phases td.num-phase .lib-num { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--fonce); margin-bottom: 3px; }
 .phases td.num-phase { padding-top: 7px !important; }
+/* progression : deuxième séance dans la même case */
+.puce.deuxieme { margin-top: 4px; border-left-style: dashed; }
+.deuxieme-seance { padding-left: 10px; border-left: 3px solid var(--clair); }

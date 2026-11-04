@@ -25,12 +25,12 @@ export async function pageSemaine(zone, arg, ctx) {
     const fin = jourDe(Y, w, 6), iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const dDeb = iso(debut), dFin = iso(fin);
     // séances de la semaine, par matière
-    const blocs = mats.map((m) => {
-      const c = caseDe(m, w), x = c?.seance_id ? D.seances.get(c.seance_id) : null;
+    const blocs = mats.flatMap((m) => D.cases.filter((k) => k.matiere_id === m.id && k.semaine === w).map((c) => {
+      const x = c?.seance_id ? D.seances.get(c.seance_id) : null;
       if (!c || (!x && !c.texte && !c.note)) return null;
       const prec = x ? D.cases.find((k) => k.matiere_id === m.id && k.seance_id === x.id && k.semaine < w) : null;
       return { m, c, x, suite: !!prec };
-    }).filter(Boolean);
+    })).filter(Boolean);
     // travail à la maison
     const aPreparer = [], aRecuperer = [];
     for (const b of blocs) { const f = b.x && D.fiches.get(b.x.id); if (f?.maison_avant && !b.suite) aPreparer.push({ ...b, o: f.maison_avant }); }

@@ -45,7 +45,10 @@ export async function pageProgression(zone, arg, ctx) {
     .sort((a, b) => a.seq.numero - b.seq.numero || a.numero - b.numero);
   const num = (x) => `${x.seq.numero}.${x.numero}`;
   // prérequis (antériorités) : chaque séance prérequise doit commencer une semaine AVANT la séance
-  const debutDe = (id) => { let d = null; for (const c of cases.values()) if (c.seance_id === id && (d === null || c.semaine < d)) d = c.semaine; return d; };
+  const debutDe = (id) => { let d = null; for (const c of cases.values()) if ((c.seance_id === id || c.seance2_id === id) && (d === null || c.semaine < d)) d = c.semaine; return d; };
+  // séances placées d'une matière (1re et 2e séance des cases)
+  const placeesDe = (m) => new Set([...cases.values()].filter((c) => c.matiere_id === m.id).flatMap((c) => [c.seance_id, c.seance2_id]).filter(Boolean));
+  const seance2De = (m, w) => { const c = caseDe(m, w); return c?.seance_id && c?.seance2_id ? seances.get(c.seance2_id) || null : null; };
   const etiq = (y) => `${ctx.codeMat(ctx.matieres.find((z) => z.id === y.seq.matiere_id))} ${num(y)}`;
   function etatPrerequis(x) {
     const d = debutDe(x.id);
@@ -58,7 +61,7 @@ export async function pageProgression(zone, arg, ctx) {
   const enCours = (w) => !(semaines.get(w)?.vacances);
   const caseDe = (m, w) => cases.get(`${m.id}:${w}`);
   const seanceDe = (m, w) => { const c = caseDe(m, w); return c?.seance_id ? seances.get(c.seance_id) : null; };
-  const cleDe = (m, w) => { const c = caseDe(m, w); if (!c) return ''; if (c.seance_id && seances.has(c.seance_id)) return 's' + c.seance_id; return c.texte ? 't' + c.texte : ''; };
+  const cleDe = (m, w) => { const c = caseDe(m, w); if (!c) return ''; if (c.seance_id && seances.has(c.seance_id)) return 's' + c.seance_id + (c.seance2_id && seances.has(c.seance2_id) ? '+' + c.seance2_id : ''); return c.texte ? 't' + c.texte : ''; };
 
   // ------------------------------------------------------------------------------------- dates
   function lundi(w) {
@@ -92,7 +95,8 @@ export async function pageProgression(zone, arg, ctx) {
 
   // valeurs des semaines de cours d'une matière, puis réécriture des seules semaines qui changent
   function semainesCours() { const t = []; for (let w = 0; w < 2 * SEM_AN; w++) if (enCours(w)) t.push(w); return t; }
-  const contenu = (cle) => (cle.startsWith('s') ? { seance_id: Number(cle.slice(1)), texte: '' } : { seance_id: null, texte: cle ? cle.slice(1) : '' });
+  const contenu = (cle) => { if (cle.startsWith('s')) { const [a, b] = cle.slice(1).split('+'); return { seance_id: Number(a), seance2_id: b ? Number(b) : null, texte: '' }; }
+    return { seance_id: null, seance2_id: null, texte: cle ? cle.slice(1) : '' }; };
   async function appliquer(m, T, avant, apres, message) {
     const lignes = [];
     T.forEach((w, i) => { if (avant[i] !== apres[i]) lignes.push({ semaine: w, ...contenu(apres[i]) }); });
@@ -235,7 +239,7 @@ export async function pageProgression(zone, arg, ctx) {
     const tete = h('tr', {}, h('th', { class: 'col-sem' }, 'Semaine'), h('th', { class: 'col-jours' }, 'Évènements du jour'),
       h('th', { class: 'col-app' }, 'Apprentis'), h('th', { class: 'col-vac' }, 'Vacances / autres'),
       mats.map((m) => {
-        const toutes = seancesDe(m), placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+        const toutes = seancesDe(m), placees = placeesDe(m);
         return h('th', { class: 'col-mat', style: { '--couleur': m.couleur } }, h('div', { class: 'nom-mat' }, m.nom),
           h('div', { class: 'compte' }, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
       }));
@@ -306,8 +310,8 @@ export async function pageProgression(zone, arg, ctx) {
         vacances: (w) => semaines.get(w)?.vacances || '', apprentis: (w) => semaines.get(w)?.apprentis || '',
         evenements: (w) => JOURS.map((_, k) => ({ k, ev: jours.get(w * 7 + k) || '' })).filter((x) => x.ev),
         cle: (m, w) => cleDe(m, w), suite: (m, w) => estSuite(m, w), texte: (m, w) => caseDe(m, w)?.texte || '',
-        seance: (m, w) => { const x = seanceDe(m, w); return x ? { num: num(x), titre: x.titre, seq: x.seq } : null; },
-        compte: (m) => { const t = seancesDe(m), pl = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id)); return [t.filter((x) => pl.has(x.id)).length, t.length]; },
+        seance: (m, w) => { const x = seanceDe(m, w), y = seance2De(m, w); return x ? { num: num(x) + (y ? ' + ' + num(y) : ''), titre: x.titre + (y ? ' · ' + (y.titre || '') : ''), seq: x.seq } : null; },
+        compte: (m) => { const t = seancesDe(m), pl = placeesDe(m); return [t.filter((x) => pl.has(x.id)).length, t.length]; },
       }, logo);
       telecharger(nomFichier(`Progression_${P.libelle}.pdf`), new Blob([octets], { type: 'application/pdf' }));
       toast('PDF téléchargé');
@@ -372,7 +376,7 @@ export async function pageProgression(zone, arg, ctx) {
     // une bande par matière : séquences (fine bande) et séances (blocs)
     const bandes = mats.map((m) => {
       const modif = ctx.enseigne(m.id);
-      const toutes = seancesDe(m), placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+      const toutes = seancesDe(m), placees = placeesDe(m);
       // séquence de chaque semaine (les semaines de vacances au milieu d'une séquence la prolongent)
       const seqDe = semaines0.map((w) => { const x = seanceDe(m, w); return x ? x.seq : null; });
       semaines0.forEach((w, i) => {
@@ -421,7 +425,7 @@ export async function pageProgression(zone, arg, ctx) {
               + (x.objectif_inter ? `\nObjectif : ${x.objectif_inter}` : '') + (c?.note ? `\nNote : ${c.note}` : '')
               + (pb.length ? '\n⚠ Prérequis pas encore faits : ' + pb.map((q) => etiq(q.y)).join(', ') : '')
               : `${c?.texte || ''}${c?.note ? '\nNote : ' + c.note : ''}` },
-            h('b', {}, x ? num(x) : '✎'), h('span', {}, x ? (suite ? '(suite)' : x.titre || '') : c?.texte || ''),
+            h('b', {}, x ? num(x) + (seance2De(m, p.debut) ? ' + ' + num(seance2De(m, p.debut)) : '') : '✎'), h('span', {}, x ? (suite ? '(suite)' : seance2De(m, p.debut) ? `${x.titre || ''} · ${seance2De(m, p.debut).titre || ''}` : x.titre || '') : c?.texte || ''),
             pb.length ? h('i', { class: 'frise-alerte', title: 'Antériorité non respectée' }, '⚠') : null,
             nbc ? h('i', { class: 'frise-com' }, '💬' + nbc) : null,
             c?.note ? h('i', { class: 'frise-note', title: c.note }, '✎') : null);
@@ -476,7 +480,7 @@ export async function pageProgression(zone, arg, ctx) {
     const td = h('td', { class: 'col-mat' + (vac ? ' hors-cours' : ''), style: { '--couleur': m.couleur } });
     if (se) {
       const suite = enCours(w) && prec.get(m.id) === cle;
-      const precSe = prec.get(m.id)?.startsWith('s') ? seances.get(Number(prec.get(m.id).slice(1))) : null;
+      const precSe = prec.get(m.id)?.startsWith('s') ? seances.get(parseInt(prec.get(m.id).slice(1), 10)) : null;
       if (!suite && (!precSe || precSe.seq.id !== se.seq.id)) td.append(h('div', { class: 'bande-seq' }, `Séquence ${se.seq.numero}`, se.seq.intitule ? ' · ' + se.seq.intitule : ''));
       const puce = h('div', { class: 'puce' + (suite ? ' suite' : ''), draggable: modif && !vac ? 'true' : null,
         title: se.objectifs_ops ? 'Objectifs opérationnels :\n' + se.objectifs_ops : (se.objectif_inter || '') },
@@ -494,6 +498,15 @@ export async function pageProgression(zone, arg, ctx) {
       if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
       if (modif && !vac) puce.append(boutonRetrait(m, w, suite));
       td.append(puce);
+      const se2 = seance2De(m, w);
+      if (se2) {
+        const p2 = h('div', { class: 'puce deuxieme' + (suite ? ' suite' : ''), title: (se2.objectif_inter || '') + '\n(2e séance de la semaine : elle suit la 1re si on la déplace)' },
+          h('b', {}, num(se2)), ' ', suite ? h('span', { class: 'gris' }, '(suite)') : h('span', {}, se2.titre || 'Séance sans titre'));
+        if (detail && !suite && se2.objectif_inter) p2.append(h('div', { class: 'obj' }, se2.objectif_inter));
+        if (modif && !vac) p2.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Retirer cette 2e séance de la semaine',
+          onclick: async (e) => { e.stopPropagation(); try { await enregistrerCases(m, [{ semaine: w, seance2_id: null }]); toast('2e séance retirée'); dessiner(); } catch (er) { erreur(er); } } }, '✖'));
+        td.append(p2);
+      }
     } else if (c?.texte) {
       const puce = h('div', { class: 'puce libre', draggable: modif && !vac ? 'true' : null }, c.texte);
       if (modif && !vac) { glisserDepuis(puce, m, w); puce.append(boutonRetrait(m, w, estSuite(m, w))); }
@@ -531,7 +544,7 @@ export async function pageProgression(zone, arg, ctx) {
 
   // séances de la matière pas encore placées (affichées quand une seule matière est choisie)
   function aPlacer(m) {
-    const placees = new Set([...cases.values()].filter((c) => c.matiere_id === m.id && c.seance_id).map((c) => c.seance_id));
+    const placees = placeesDe(m);
     const liste = seancesDe(m).filter((x) => !placees.has(x.id));
     const modif = ctx.enseigne(m.id);
     return h('section', { class: 'a-placer', style: { '--couleur': m.couleur } },
@@ -550,12 +563,19 @@ export async function pageProgression(zone, arg, ctx) {
     const vac = semaines.get(w)?.vacances;
     const liste = seancesDe(m);
     const ou = new Map();
-    for (const x of cases.values()) if (x.matiere_id === m.id && x.seance_id) ou.set(x.seance_id, (ou.get(x.seance_id) || []).concat('S' + semaineIso(lundi(x.semaine))));
+    for (const x of cases.values()) if (x.matiere_id === m.id) [x.seance_id, x.seance2_id].filter(Boolean).forEach((id) => ou.set(id, (ou.get(id) || []).concat('S' + semaineIso(lundi(x.semaine)))));
     const choix = h('select', { class: 'champ', disabled: !modif },
       h('option', { value: '' }, '— aucune séance —'),
       [...new Map(liste.map((x) => [x.seq.id, x.seq])).values()].map((sq) => h('optgroup', { label: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
         liste.filter((x) => x.seq.id === sq.id).map((x) => h('option', { value: x.id, selected: x.id === c.seance_id },
           `${num(x)} – ${x.titre || 'sans titre'}${ou.has(x.id) ? '   (placée : ' + ou.get(x.id).join(', ') + ')' : ''}`)))));
+    const choix2 = h('select', { class: 'champ', disabled: !modif },
+      h('option', { value: '' }, '— pas de deuxième séance —'),
+      [...new Map(liste.map((x) => [x.seq.id, x.seq])).values()].map((sq) => h('optgroup', { label: `Séquence ${sq.numero}${sq.intitule ? ' · ' + sq.intitule : ''}` },
+        liste.filter((x) => x.seq.id === sq.id).map((x) => h('option', { value: x.id, selected: x.id === c.seance2_id },
+          `${num(x)} – ${x.titre || 'sans titre'}${ou.has(x.id) ? '   (placée : ' + ou.get(x.id).join(', ') + ')' : ''}`)))));
+    const zone2 = h('label', { class: 'deuxieme-seance' }, 'Deuxième séance la même semaine (facultatif)', choix2);
+    const majZone2 = () => { zone2.style.display = choix.value ? '' : 'none'; };
     const libre = h('input', { class: 'champ', value: c.seance_id ? '' : (c.texte || ''), placeholder: 'ex. révisions, évaluation, intervenant…', readonly: !modif });
     const note = h('textarea', { class: 'champ', rows: 3, placeholder: 'Note de la semaine (visible par tous)', readonly: !modif });
     note.value = c.note || '';
@@ -573,8 +593,9 @@ export async function pageProgression(zone, arg, ctx) {
         x.prerequis_texte ? h('p', {}, h('b', {}, 'Autres prérequis : '), x.prerequis_texte) : null,
       ] : []);
     };
-    choix.addEventListener('change', () => { if (choix.value) libre.value = ''; montrer(); });
-    libre.addEventListener('input', () => { if (libre.value) { choix.value = ''; montrer(); } });
+    choix.addEventListener('change', () => { if (choix.value) libre.value = ''; if (choix2.value === choix.value) choix2.value = ''; majZone2(); montrer(); });
+    majZone2();
+    libre.addEventListener('input', () => { if (libre.value) { choix.value = ''; choix2.value = ''; majZone2(); montrer(); } });
     montrer();
     const boutons = [];
     if (modif && !vac) {
@@ -594,7 +615,8 @@ export async function pageProgression(zone, arg, ctx) {
       } });
       boutons.push({ texte: 'Annuler', valeur: false });
       boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
-        const nv = choix.value ? { seance_id: Number(choix.value), texte: '' } : { seance_id: null, texte: libre.value.trim() };
+        if (choix2.value && choix2.value === choix.value) throw new Error('Choisissez deux séances différentes.');
+        const nv = choix.value ? { seance_id: Number(choix.value), seance2_id: choix2.value ? Number(choix2.value) : null, texte: '' } : { seance_id: null, seance2_id: null, texte: libre.value.trim() };
         await enregistrerCases(m, [{ semaine: w, ...nv, note: note.value.trim() }]);
         toast('Enregistré'); dessiner(); return true;
       } });
@@ -603,7 +625,7 @@ export async function pageProgression(zone, arg, ctx) {
     await fenetre(`${m.nom} · ${libSemaine(w)}`, h('div', { class: 'formulaire etroit' },
       vac ? h('p', { class: 'aide' }, `Semaine « ${vac} » : pas de séance.`) : null,
       !modif ? h('p', { class: 'aide' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
-      vac ? null : h('label', {}, 'Séance', choix), vac ? null : h('label', {}, 'ou texte libre', libre),
+      vac ? null : h('label', {}, 'Séance', choix), vac ? null : zone2, vac ? null : h('label', {}, 'ou texte libre', libre),
       h('label', {}, 'Note', note), infos, com?.el), boutons, { large: true });
     if (com?.change()) dessiner();
   }
