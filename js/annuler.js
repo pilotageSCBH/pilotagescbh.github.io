@@ -52,10 +52,15 @@ export function boutonAnnuler(ctx, page) {
     } catch (e) { erreur(e); maj(); }
   });
   // après chaque enregistrement de la page, le bouton se met à jour (tant qu'il est affiché)
-  let attente = null, vu = false;
+  // (l'écoute s'arrête dès que le bouton a quitté la page, même s'il n'y a eu aucune modification entre-temps :
+  // sinon chaque page visitée laissait une écoute qui relançait une requête à chaque enregistrement)
+  let attente = null;
+  const cree = Date.now();
   const ecoute = () => {
-    if (b.isConnected) vu = true;
-    else if (vu) { window.removeEventListener(MODIFICATION, ecoute); return; }
+    if (!b.isConnected) {
+      if (Date.now() - cree > 3000) window.removeEventListener(MODIFICATION, ecoute);
+      return;
+    }
     clearTimeout(attente); attente = setTimeout(maj, 400);
   };
   window.addEventListener(MODIFICATION, ecoute);

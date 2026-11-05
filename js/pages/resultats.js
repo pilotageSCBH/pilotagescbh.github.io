@@ -172,7 +172,7 @@ export async function pageResultats(zone, arg, ctx) {
     const entete = h('tr', {}, h('th', { class: 'col-eleve' }, 'Élève'),
       cols.map((c) => h('th', { class: 'col-res ' + c.type, title: c.sous || '' },
         c.type === 'contrat'
-          ? h('a', { href: `#/fiches/${c.seq.id}:sommatif`, title: 'Ouvrir le contrat' }, c.titre)
+          ? h('a', { href: c.seq ? `#/fiches/${c.seq.id}:sommatif` : `#/contrats/${c.id}`, title: 'Ouvrir le contrat' }, c.titre)
           : modif ? h('button', { class: 'lien', type: 'button', title: 'Modifier ou supprimer', onclick: () => editerEvaluation(m, c.objet) }, c.titre) : c.titre,
         h('small', {}, c.type === 'contrat' ? c.sous : c.sous || 'résultat intermédiaire'),
         h('small', { class: 'date' }, c.date ? dateFr(c.date) : 'sans date'))),
