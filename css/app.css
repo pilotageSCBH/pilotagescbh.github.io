@@ -1701,3 +1701,13 @@ th.eleve.hors span { opacity: .55; }
 .code.via-cours b { background: #DCEFD6; color: #2E6B1F; }
 .code .marque-cours { font-style: normal; font-size: 10px; }
 @media print { .cours-lie { background: none; border: 0; padding: 0; } }
+.deux-colonnes-partage { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 800px) { .deux-colonnes-partage { grid-template-columns: 1fr; } }
+.deux-colonnes-partage .liste-choix { max-height: 30vh; margin-top: 4px; }
+.deux-colonnes-partage .choix-dossier { max-height: 46vh; }
+.deja-partage { color: #2E6B1F; margin-left: 4px; }
+.compte-choix { color: var(--teal); font-weight: 700; font-size: 12.5px; }
+.partage-lot .entete-bloc .sous-titre-choix { margin: 0; }
+.partage-lot .option.tous { display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--clair); border-radius: 8px; margin: 4px 0 6px; cursor: pointer; }
+.partage-lot .option.tous small { color: var(--gris); }
+.partage-lot .option.tous b { white-space: nowrap; }

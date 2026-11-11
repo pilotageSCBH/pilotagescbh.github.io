@@ -188,6 +188,7 @@ export async function pageCours(zone, arg, ctx) {
         h('button', { class: 'btn', onclick: () => nouveau('dossier') }, '📁  Nouveau dossier'),
         h('button', { class: 'btn principal', onclick: () => nouveau('cours') }, '＋  Nouveau cours'),
         h('button', { class: 'btn', title: 'Créer des cours en reprenant le titre et les titres (sommaire) de fichiers Word : le fichier lui-même n’est pas copié', onclick: () => importerWord() }, '📄  Sommaires depuis Word'),
+        h('button', { class: 'btn', title: 'Partager un, plusieurs ou tous vos cours avec les collègues de votre choix', onclick: () => partagerPlusieurs() }, '👥  Partager des cours'),
         h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'))),
     onglets,
     h('div', { class: 'barre-cours' }, recherche, choixSavoir, compteur,
@@ -403,6 +404,79 @@ export async function pageCours(zone, arg, ctx) {
     } catch (e) { erreur(e); }
     dessinerArbre(); dessinerDetail();
   }
+  // partage en lot : un, plusieurs ou tous les cours (et dossiers), avec un ou plusieurs collègues, à tout moment
+  async function partagerPlusieurs() {
+    const autres = (collegues || []).filter((c) => c.id !== moi);
+    const mes = [...R.values()].filter(aMoi);
+    if (!mes.length) { toast('Créez d’abord des cours', 'erreur'); return; }
+    const coches = new Set();
+    const s0 = sel && R.get(sel);
+    if (s0 && aMoi(s0)) [s0, ...descendants(s0.id)].forEach((x) => coches.add(x.id));
+    const boite = h('div', { class: 'choix-dossier arbre-pdf' });
+    const compte = h('span', { class: 'compte-choix' });
+    const avec = (r) => [r.partage_tous ? 'toute l’équipe' : null, ...partagesDe(r.id).map((p) => nomDe(p.destinataire))].filter(Boolean);
+    const dessiner = () => {
+      const ligne = (r, prof) => [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } },
+        h('input', { type: 'checkbox', checked: coches.has(r.id), onchange: (e) => { [r, ...descendants(r.id)].forEach((x) => (e.target.checked ? coches.add(x.id) : coches.delete(x.id))); dessiner(); } }),
+        r.type === 'dossier' ? '📁 ' : '📘 ', titreDe(r),
+        avec(r).length ? h('small', { class: 'deja-partage' }, ' 👥 ' + avec(r).join(', ')) : null),
+      ...(r.type === 'dossier' ? enfants(r.id, moi).flatMap((f) => ligne(f, prof + 1)) : [])];
+      vider(boite, enfants(null, moi).flatMap((r) => ligne(r, 0)));
+      const n = [...coches].filter((id) => R.get(id)?.type === 'cours').length;
+      compte.textContent = `${n} cours sélectionné(s)`;
+    };
+    dessiner();
+    const qui = new Set();
+    const tous = h('input', { type: 'checkbox' });
+    const mode = h('select', { class: 'champ' },
+      h('option', { value: 'ajouter' }, 'Ajouter ces collègues (garder les partages existants)'),
+      h('option', { value: 'retirer' }, 'Retirer ces collègues'),
+      h('option', { value: 'remplacer' }, 'Partager uniquement avec eux (remplacer)'),
+      h('option', { value: 'prive' }, 'Rendre privé (retirer tous les partages)'));
+    const ok = await fenetre('Partager des cours', h('div', { class: 'partage-lot' },
+      h('p', { class: 'aide' }, 'Cochez un cours, plusieurs cours, un dossier (tout son contenu) ou tous vos cours, puis les collègues. Vous pouvez revenir ici à tout moment pour ajouter ou retirer des collègues. Les collègues consultent, impriment et copient ; ils ne modifient rien.'),
+      h('div', { class: 'deux-colonnes-partage' },
+        h('div', {}, h('div', { class: 'entete-bloc' }, h('p', { class: 'sous-titre-choix' }, '1. Les cours'), compte),
+          h('div', { class: 'boutons-detail' },
+            h('button', { class: 'btn petit', type: 'button', onclick: () => { mes.forEach((x) => coches.add(x.id)); dessiner(); } }, 'Tous mes cours'),
+            h('button', { class: 'btn petit', type: 'button', onclick: () => { coches.clear(); dessiner(); } }, 'Aucun')),
+          boite),
+        h('div', {}, h('p', { class: 'sous-titre-choix' }, '2. Les collègues'),
+          h('label', { class: 'option tous' }, tous, h('b', {}, 'Toute l’équipe'), h('small', {}, ' (y compris les collègues qui arriveront plus tard)')),
+          h('div', { class: 'liste-choix' }, autres.length ? autres.map((c) => h('label', { class: 'option' },
+            h('input', { type: 'checkbox', onchange: (e) => (e.target.checked ? qui.add(c.id) : qui.delete(c.id)) }), c.nom)) : h('p', { class: 'vide' }, 'Aucun autre enseignant n’a encore de compte.')),
+          h('p', { class: 'sous-titre-choix' }, '3. Action'), mode))),
+    [{ texte: 'Annuler', valeur: false }, { texte: 'Appliquer', classe: 'principal', action: () => {
+      if (!coches.size) throw new Error('Cochez au moins un cours ou un dossier.');
+      if (mode.value !== 'prive' && !qui.size && !tous.checked) throw new Error('Cochez au moins un collègue (ou « Toute l’équipe »).');
+      return true;
+    } }], { large: true });
+    if (!ok) return;
+    const ids = [...coches].filter((id) => R.has(id));
+    try {
+      const m = mode.value;
+      // toute l'équipe
+      const tousVoulu = (r) => (m === 'ajouter' ? (tous.checked || r.partage_tous) : m === 'retirer' ? (tous.checked ? false : r.partage_tous) : m === 'remplacer' ? tous.checked : false);
+      for (const id of ids) { const r = R.get(id), v = tousVoulu(r); if (v !== r.partage_tous) { await db.modifier('cours', id, { partage_tous: v }); r.partage_tous = v; } }
+      // collègues : lignes à ajouter et à retirer
+      const ajout = [], retrait = [];
+      for (const id of ids) {
+        const actuels = new Set(partagesDe(id).map((p) => p.destinataire));
+        const voulus = m === 'ajouter' ? new Set([...actuels, ...qui]) : m === 'retirer' ? new Set([...actuels].filter((u) => !qui.has(u))) : m === 'remplacer' ? new Set(qui) : new Set();
+        for (const u of voulus) if (!actuels.has(u)) ajout.push({ cours_id: id, destinataire: u });
+        for (const u of actuels) if (!voulus.has(u)) retrait.push({ cours_id: id, destinataire: u });
+      }
+      for (let i = 0; i < ajout.length; i += 200) await db.ajouter('cours_partages', ajout.slice(i, i + 200));
+      for (const x of retrait) await db.supprimer('cours_partages', x.destinataire, `cours_id=eq.${x.cours_id}&destinataire`);
+      const cle = (x) => x.cours_id + ':' + x.destinataire;
+      const sup = new Set(retrait.map(cle));
+      P = P.filter((p) => !sup.has(cle(p))).concat(ajout);
+      const nc = ids.filter((id) => R.get(id).type === 'cours').length;
+      toast(m === 'prive' ? `${nc} cours rendus privés` : m === 'retirer' ? `Partage retiré pour ${nc} cours` : `${nc} cours partagés`);
+    } catch (e) { erreur(e); }
+    dessinerArbre(); dessinerDetail();
+  }
+
   async function choisirSavoirs(r, apres) {
     const choix = new Set(r.savoirs || []);
     const rech = h('input', { class: 'champ', placeholder: 'Rechercher (code ou mot)…' });
@@ -585,7 +659,7 @@ export async function pageCours(zone, arg, ctx) {
         h('li', {}, h('b', {}, 'Ranger : '), 'créez des dossiers et sous-dossiers, puis glissez-déposez les cours (ou bouton « ⇄ Déplacer »).'),
         h('li', {}, h('b', {}, 'Remplir vite : '), '« 📄 Sommaires depuis Word » crée un cours par fichier en reprenant seulement son titre, son sommaire et les savoirs cités (le fichier n’est pas copié).'),
         h('li', {}, h('b', {}, 'Retrouver : '), 'la recherche porte sur les titres, les sommaires et les savoirs ; la liste « savoirs associés » montre tous les cours d’un savoir.'),
-        h('li', {}, h('b', {}, 'Partager : '), 'ouvrez un dossier ou un cours puis « 👥 Partager » : vos collègues le consultent, l’impriment ou le copient, sans pouvoir le modifier.'),
+        h('li', {}, h('b', {}, 'Partager : '), '« 👥 Partager des cours » : cochez un cours, plusieurs ou tous, puis les collègues (à tout moment, pour ajouter ou retirer). Vos collègues consultent, impriment ou copient, sans pouvoir modifier.'),
         h('li', {}, h('b', {}, 'Séquençage : '), 'dans « Cours mobilisés », « ＋ depuis mes cours » coche vos cours : leurs savoirs associés s’ajoutent à la séance.'),
         h('li', {}, h('b', {}, 'Imprimer : '), '« ⬇ PDF / Imprimer » : cochez tout ou partie de vos cours, avec ou sans les sommaires.'))
         : h('p', { class: 'aide' }, 'Cours et dossiers que vos collègues ont partagés avec vous, en consultation. « ⧉ Copier dans mes cours » en fait une copie modifiable dans votre espace.')));
