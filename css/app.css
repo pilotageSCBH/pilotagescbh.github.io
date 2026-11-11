@@ -1583,3 +1583,112 @@ th.eleve.hors span { opacity: .55; }
 /* progression : deuxième séance dans la même case */
 .puce.deuxieme { margin-top: 4px; border-left-style: dashed; }
 .deuxieme-seance { padding-left: 10px; border-left: 3px solid var(--clair); }
+
+/* ===================================================================== Mes cours ressources */
+.actions-page { flex-wrap: wrap; }
+.onglets-cours button { font: inherit; background: none; border: 0; padding: 8px 14px; cursor: pointer; color: var(--gris); font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.onglets-cours button.actif { color: var(--fonce); border-color: var(--teal); }
+.onglets-cours button:hover { color: var(--fonce); }
+.barre-cours { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.barre-cours .recherche-cours { flex: 1 1 340px; border-color: var(--ligne); background: #fff; padding: 8px 12px; font-size: 14px; }
+.barre-cours .filtre-savoir { flex: 0 1 300px; width: auto; border-color: var(--ligne); background: #fff; padding: 7px 8px; }
+.compte-recherche { color: var(--teal); font-weight: 700; font-size: 13px; }
+.grille-cours { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1000px) { .grille-cours { grid-template-columns: 1fr; } }
+.panneau-arbre { background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); padding: 8px; position: sticky; top: 12px; max-height: calc(100vh - 40px); overflow: auto; }
+@media (max-width: 1000px) { .panneau-arbre { position: static; max-height: 60vh; } }
+.noeud { display: flex; align-items: center; gap: 5px; padding: 5px 6px 5px calc(6px + var(--prof, 0) * 18px); border-radius: 7px; cursor: pointer; font-size: 13.5px; border: 1px solid transparent; user-select: none; }
+.noeud:hover { background: #F2F8F7; }
+.noeud.choisi { background: var(--clair); border-color: var(--teal); }
+.noeud.dossier > .nom { font-weight: 700; color: var(--fonce); }
+.noeud .pli { flex: none; width: 18px; height: 18px; border: 0; background: none; cursor: pointer; color: var(--gris); font-size: 12px; padding: 0; border-radius: 4px; }
+.noeud .pli:hover { background: #DCEDEA; }
+.noeud .pli.vide { cursor: default; }
+.noeud .ic { flex: none; }
+.noeud .nom { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.noeud .extraits { display: flex; flex-direction: column; margin-top: 2px; }
+.noeud .extraits small { color: var(--gris); font-weight: 400; font-size: 11.5px; }
+.noeud mark, .detail-cours mark { background: #FFE58A; color: inherit; border-radius: 2px; padding: 0 1px; }
+.codes-mini { display: flex; gap: 2px; flex: none; }
+.codes-mini i { font-style: normal; background: var(--clair); color: var(--fonce); font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; }
+.nb-cours { flex: none; font-size: 11px; color: var(--gris); background: #EEF2F1; border-radius: 9px; padding: 0 7px; }
+.marque-partage { flex: none; font-size: 12px; }
+.noeud.glisse { opacity: .45; }
+.noeud.dessus { background: #DFF3E9; border: 1px dashed var(--teal); }
+.noeud.avant { box-shadow: inset 0 3px 0 var(--teal); }
+.depot-racine { margin-top: 8px; padding: 8px; border: 1px dashed var(--ligne); border-radius: 7px; color: var(--gris); font-size: 12px; text-align: center; }
+.depot-racine.cible { border-color: var(--teal); background: #DFF3E9; color: var(--fonce); }
+.arbre-vide { padding: 12px; }
+.groupe-proprio + .groupe-proprio { margin-top: 10px; }
+.tete-proprio { font-weight: 800; color: var(--fonce); font-size: 13px; padding: 6px 8px; background: #F2F6F5; border-radius: 6px; margin-bottom: 3px; }
+.detail-cours { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.tete-detail { background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); padding: 12px 16px; }
+.fil-cours { font-size: 12.5px; color: var(--gris); display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 4px; }
+.fil-cours .lien { font-size: 12.5px; }
+.ligne-titre { display: flex; align-items: center; gap: 10px; }
+.ic-grand { font-size: 26px; }
+.champ.titre-cours, h2.titre-cours { font-size: 20px; font-weight: 800; color: var(--fonce); margin: 0; }
+.boutons-detail { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn.partage-actif { background: #E6F4EA; border-color: #7FB98F; color: #24603A; }
+.info-partage { margin: 8px 0 0; font-size: 12.5px; color: var(--gris); }
+.carte-detail { background: #fff; border-radius: var(--rayon); box-shadow: var(--ombre); padding: 14px 16px; }
+.carte-detail h3 { margin: 0 0 8px; font-size: 15px; color: var(--fonce); }
+.entete-bloc { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.entete-bloc h3 { margin: 0; }
+.entete-bloc .boutons-detail { margin-top: 0; }
+.liste-contenu { list-style: none; margin: 8px 0 0; padding: 0; }
+.liste-contenu li { border-bottom: 1px solid #EEF2F1; }
+.liste-contenu .lien { display: block; width: 100%; text-align: left; padding: 7px 4px; color: var(--texte); text-decoration: none; }
+.liste-contenu .lien:hover { background: #F2F8F7; }
+.liste-contenu small { color: var(--gris); }
+.sommaire-double { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 6px; }
+@media (max-width: 1250px) { .sommaire-double { grid-template-columns: 1fr; } }
+.lib-col { display: block; font-size: 11px; font-weight: 700; color: var(--gris); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+.champ.saisie-sommaire { border-color: var(--ligne); background: #FBFDFC; min-height: 220px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 1.55; white-space: pre; overflow-x: auto; tab-size: 2; }
+.zone-apercu { border: 1px solid #E4ECEA; border-radius: 6px; padding: 8px 10px; min-height: 100px; background: #fff; }
+.apercu-sommaire { list-style: none; margin: 0; padding: 0; font-size: 13.5px; line-height: 1.45; }
+.apercu-sommaire li { padding: 1px 0; }
+.apercu-sommaire li.niv0 { font-weight: 700; color: var(--fonce); margin-top: 6px; }
+.apercu-sommaire li.niv0:first-child { margin-top: 0; }
+.apercu-sommaire li.niv1 { padding-left: 20px; position: relative; }
+.apercu-sommaire li.niv2 { padding-left: 40px; font-size: 13px; color: #34433F; position: relative; }
+.apercu-sommaire li.niv3, .apercu-sommaire li.niv4 { padding-left: 60px; font-size: 12.5px; color: var(--gris); position: relative; }
+.apercu-sommaire li.niv1::before, .apercu-sommaire li.niv2::before, .apercu-sommaire li.niv3::before, .apercu-sommaire li.niv4::before { content: '•'; position: absolute; margin-left: -11px; color: var(--teal); }
+.vide-sommaire { color: var(--gris); font-style: italic; margin: 4px 0; font-size: 13px; }
+.savoirs-cours { display: flex; flex-direction: column; gap: 4px; }
+.savoirs-cours .code { font-size: 13px; }
+.savoirs-cours .lien { align-self: flex-start; margin-top: 4px; }
+.grille-champs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+@media (max-width: 900px) { .grille-champs { grid-template-columns: 1fr; } }
+.grille-champs label { display: flex; flex-direction: column; gap: 3px; }
+.grille-champs .lib { font-size: 12px; font-weight: 700; color: var(--gris); }
+.grille-champs .champ { border-color: var(--ligne); background: #fff; }
+.ligne-lien { display: flex; gap: 6px; align-items: center; overflow-wrap: anywhere; }
+.dates-cours { margin: -4px 4px 0; font-size: 11.5px; color: var(--gris); }
+.accueil-cours h2 { margin: 0 0 12px; color: var(--fonce); font-size: 18px; }
+.chiffres-cours { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.chiffres-cours div { flex: 1 1 120px; background: var(--clair); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; }
+.chiffres-cours b { font-size: 24px; color: var(--fonce); }
+.chiffres-cours span { font-size: 12px; color: var(--gris); }
+.conseils-cours { margin: 0; padding-left: 18px; line-height: 1.55; font-size: 13.5px; }
+.conseils-cours li { margin-bottom: 4px; }
+.choix-dossier { max-height: 45vh; overflow-y: auto; border: 1px solid var(--ligne); border-radius: 8px; padding: 4px 0; margin-top: 6px; }
+.choix-dossier .option { display: flex; align-items: center; gap: 6px; padding: 5px 8px; cursor: pointer; font-size: 13px; }
+.choix-dossier .option:hover { background: #F2F8F7; }
+.choix-dossier .option small { color: var(--gris); }
+.liste-choix.colonnes { column-width: 220px; max-height: 40vh; }
+.liste-choix.colonnes .option { break-inside: avoid; }
+.partage-cours .option.tous { display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--clair); border-radius: 8px; margin: 8px 0; cursor: pointer; }
+.partage-cours .option.tous small { color: var(--gris); }
+.info-herite { background: #FFF8E1; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+.sous-titre-choix { margin: 12px 0 2px; font-weight: 700; font-size: 13px; color: var(--fonce); }
+.import-word label.case, .options-pdf label.case { flex-direction: row; align-items: center; gap: 6px; color: var(--texte); }
+.apercu-import { margin-top: 10px; }
+.table-import { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table-import th { text-align: left; background: var(--clair); color: var(--fonce); padding: 5px 8px; }
+.table-import td { border-bottom: 1px solid #EEF2F1; padding: 4px 8px; vertical-align: middle; }
+.table-import td .champ { border-color: var(--ligne); background: #fff; }
+.table-import td.alerte { color: var(--orange); }
+.table-import td.erreur { color: var(--rouge); }
+.options-pdf { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 10px; font-size: 13px; }
+.options-pdf label.case { display: flex; }

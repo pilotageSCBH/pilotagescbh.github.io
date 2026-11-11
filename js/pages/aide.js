@@ -99,6 +99,16 @@ const SECTIONS = [
     ['Équipe et matières', "« Matières et équipe » : en haut, une carte par matière (nom, abréviation, couleur, nombre d'enseignants, avancement du séquençage ; cliquer les chiffres ouvre le séquençage). En bas, le tableau des attributions : une ligne par enseignant, une colonne par matière ; l'administrateur coche qui enseigne quoi. La dernière ligne compte les enseignants de chaque matière (en rouge : aucun)."],
     ['Reprendre une promotion', "Administration → « Reprendre une promotion » : recopie séquençages, calendrier, progression, fiches et contrats (sans les notes) d'une promotion vers une autre. Seules les parties encore vides sont remplies."],
   ]],
+  ['cours', 'Mes cours ressources', [
+    ['À quoi sert cet espace', "« Documents professeurs → 📚 Mes cours ressources » (ou le bouton du tableau de bord) : chaque enseignant y liste ses cours ressources, rangés en dossiers et sous-dossiers, avec pour chacun son sommaire détaillé, les savoirs associés du référentiel, des mots-clés et un lien vers le cours (Nuage, ENT…). Cet espace est personnel : personne d’autre ne le voit tant que vous ne partagez rien."],
+    ['Créer, ranger, supprimer', "« 📁 Nouveau dossier » et « ＋ Nouveau cours » créent l’élément dans le dossier ouvert (ou à la racine) ; tapez aussitôt son titre. Glissez-déposez un cours ou un dossier dans l’arborescence : sur un dossier il entre dedans, sur un cours il se place juste avant. Les boutons ↑ ↓ changent l’ordre, « ⇄ Déplacer » choisit un dossier, « A→Z Classer » range un dossier par ordre alphabétique (K2 avant K10), « ✖ Supprimer » retire un cours ou un dossier avec tout son contenu (vos fichiers ne sont jamais touchés)."],
+    ['Sommaire détaillé', "Une ligne par titre, enregistrée automatiquement. Tab décale la ligne (ou les lignes sélectionnées) d’un niveau, Maj+Tab la ramène ; on peut aussi commencer la ligne par « - » ou « -- ». L’aperçu à droite montre le sommaire mis en forme. « 📄 Lire les titres d’un fichier Word » remplace le sommaire par les titres du document (styles Titre 1, Titre 2…)."],
+    ['Importer des cours Word', "« 📄 Importer des cours Word » : choisissez un ou plusieurs fichiers .docx ; chacun devient un cours avec son titre, son sommaire (titres du document, numérotés 1., 1.1… si vous le souhaitez) et les savoirs du référentiel cités dans le texte (S11-1…). Vérifiez les titres proposés, choisissez le dossier de rangement puis « Créer les cours ». Les fichiers sont lus sur votre ordinateur : ils ne sont pas envoyés sur le site."],
+    ['Savoirs associés', "Dans un cours, « ＋ choisir dans le référentiel » ouvre la liste des savoirs (recherche par code ou par mot) : cochez ceux que le cours traite. La liste « Tous les savoirs associés », au-dessus de l’arborescence, affiche tous les cours d’un savoir ; le panneau d’accueil indique combien de savoirs du référentiel sont couverts par vos cours."],
+    ['Rechercher un cours', "Le champ de recherche trouve les cours dont le titre, le sommaire, les mots-clés, les savoirs (code ou libellé) ou le dossier contiennent tous les mots tapés (sans tenir compte des accents ni des majuscules). Les mots trouvés sont surlignés et les lignes du sommaire concernées s’affichent sous le titre du cours."],
+    ['Partager avec des collègues', "Ouvrez un dossier ou un cours puis « 👥 Partager » : cochez les collègues choisis ou « Toute l’équipe ». Le partage d’un dossier comprend tout son contenu, y compris les cours ajoutés plus tard. Vos collègues le retrouvent dans l’onglet « 👥 Partagés avec moi » : ils peuvent le consulter, l’imprimer et le copier dans leur propre espace (« ⧉ Copier dans mes cours »), mais pas le modifier. Décochez tout pour le rendre de nouveau privé ; le symbole 👥 signale vos éléments partagés."],
+    ['Imprimer ou PDF', "« ⬇ PDF / Imprimer » (ou « ⬇ PDF » sur un dossier ou un cours) : cochez tout ou partie de l’arborescence et le contenu voulu (sommaires détaillés, savoirs associés, mots-clés et liens). Le document commence par la liste des cours, groupée par dossier, puis donne le sommaire détaillé de chaque cours. Sans les sommaires, on obtient seulement le tableau des cours."],
+  ]],
   ['historique', 'Historique des modifications', [
     ['Retrouver une modification', "Chaque ajout, modification ou suppression est noté : qui, quand, quoi. Filtrez par type, matière ou personne ; cliquez une ligne pour voir les valeurs avant / après (utile pour retrouver un texte effacé par erreur)."],
   ]],
@@ -110,7 +120,7 @@ const SECTIONS = [
 ];
 
 const ICONES = { demarrer: '🚀', sequencage: '🧱', progression: '📅', fiches: '📝', validation: '✅', resultats: '📈', eleve: '🎓', pilotage: '🗓', dupliquer: '⧉', couverture: '🧩',
-  impressions: '🖨', admin: '🛡', historique: '🕘', questions: '❓' };
+  impressions: '🖨', cours: '📚', admin: '🛡', historique: '🕘', questions: '❓' };
 const normaliser = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 export async function pageAide(zone, arg) {

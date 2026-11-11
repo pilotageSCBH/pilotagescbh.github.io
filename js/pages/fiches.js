@@ -554,7 +554,7 @@ export async function envoyerPDF(doc, mode, outils = null) {
     let creer = outils?.creerPDF, logo = outils?.logo;
     if (!creer) {
       toast(mode === 'pdf' ? 'Préparation du PDF…' : 'Préparation de l’impression…');
-      const P = await import('../pdf.js?v=20261103b'); await P.chargerOutils(); creer = P.creerPDF;   // ?v= : jamais une ancienne version gardée en cache
+      const P = await import('../pdf.js?v=20261111'); await P.chargerOutils(); creer = P.creerPDF;   // ?v= : jamais une ancienne version gardée en cache
       logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
     }
     const blob = new Blob([await creer(doc, logo)], { type: 'application/pdf' });

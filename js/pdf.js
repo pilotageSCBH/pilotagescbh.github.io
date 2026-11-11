@@ -249,6 +249,56 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
         y -= hRang + 4;
       }
     },
+    // cours ressources : bandeau d'un dossier (chemin complet)
+    dossier(b) {
+      const ls = lignes(b.texte, FB, 10, largeur - 30);
+      const h = ls.length * 13 + 10;
+      place(h + 60);
+      y -= 4;
+      page.drawRectangle({ x: gauche, y: y - h, width: largeur, height: h, color: FONCE });
+      texte('>', gauche + 8, y - 15, FB, 10, coul('#B9D98A'));
+      ls.forEach((l, j) => texte(l, gauche + 22, y - 15 - j * 13, FB, 10, BLANC));
+      y -= h + 8;
+    },
+    // cours ressources : titre du cours, sommaire en retrait par niveau, savoirs associés, mots-clés et lien
+    cours(b) {
+      const tt = lignes(b.titre, FB, 11, largeur - 20);
+      const hT = tt.length * 13 + 9;
+      place(hT + 40);
+      page.drawRectangle({ x: gauche, y: y - hT, width: largeur, height: hT, color: CLAIR });
+      page.drawRectangle({ x: gauche, y: y - hT, width: 4, height: hT, color: TEAL });
+      tt.forEach((l, j) => texte(l, gauche + 12, y - 14 - j * 13, FB, 11, FONCE));
+      y -= hT + 5;
+      if (!b.lignes.length) { place(12); y -= 11; texte('Sommaire non renseigné.', gauche + 12, y, FI, 8.5, GRIS); y -= 3; }
+      for (const it of b.lignes) {
+        const n = it.n || 0, ret = 12 + n * 16, font = n === 0 ? FB : F, taille = n === 0 ? 9.5 : n === 1 ? 9 : 8.5, pas = taille + 3;
+        const ls = lignes(it.t, font, taille, largeur - ret - 14);
+        ls.forEach((l, j) => {
+          if (place(pas + 1)) { /* suite sur une nouvelle page */ }
+          y -= pas + (n === 0 && j === 0 ? 2 : 0);
+          if (j === 0 && n > 0) texte(n === 1 ? '•' : '-', gauche + ret - 8, y, F, taille, TEAL);
+          texte(l, gauche + ret, y, font, taille, n === 0 ? FONCE : TEXTE);
+        });
+      }
+      const pied = [];
+      if (b.savoirs?.length) pied.push(['Savoirs associés', b.savoirs]);
+      if (b.motsCles) pied.push(['Mots-clés', [b.motsCles]]);
+      if (b.lien) pied.push(['Lien', [b.lien]]);
+      if (pied.length) y -= 4;
+      for (const [lib, vals] of pied) {
+        const wl = FB.widthOfTextAtSize(lib + ' :', 8) + 6;
+        vals.forEach((v, i) => {
+          lignes(v, F, 8, largeur - 12 - wl).forEach((l, j) => {
+            place(11); y -= 10.5;
+            if (i === 0 && j === 0) texte(lib + ' :', gauche + 12, y, FB, 8, FONCE);
+            texte(l, gauche + 12 + wl, y, F, 8, lib === 'Lien' ? TEAL : GRIS);
+          });
+        });
+      }
+      y -= 7;
+      page.drawLine({ start: { x: gauche, y }, end: { x: gauche + largeur, y }, thickness: 0.5, color: LIGNE });
+      y -= 10;
+    },
     // cadre de couleur autour d'un groupe de blocs (travail à la maison)
     cadre(b) {
       const c = coul(b.couleur || '#E8893A');

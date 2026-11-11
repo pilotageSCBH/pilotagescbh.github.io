@@ -22,6 +22,7 @@ import { pageEleve } from './pages/eleve.js';
 import { pageSemaine } from './pages/semaine.js';
 import { pageEvaluations } from './pages/evaluations.js';
 import { pageAlertes } from './pages/alertes.js';
+import { pageCours } from './pages/cours.js';
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';
@@ -82,7 +83,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -262,7 +263,9 @@ function menu(route) {
       { sous: 'Documents d’évaluation' },
       { href: '#/fiches/formatifs', icone: '✅', texte: 'Fiches contrats formatifs', actif: page === 'fiches' && modeFiches(arg) === 'formatifs' },
       { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' },
-      { href: '#/contrats', icone: '📌', texte: 'Contrats hors séquence', actif: page === 'contrats' }] },
+      { href: '#/contrats', icone: '📌', texte: 'Contrats hors séquence', actif: page === 'contrats' }].concat(ctx.peutEcrire() ? [
+      { sous: 'Ressources' },
+      { href: '#/cours', icone: '📚', texte: 'Mes cours ressources', actif: page === 'cours' }] : []) },
     { cle: 'resultats', titre: 'Résultats', icone: '🏆', items: [
       { href: '#/validation', icone: '🏅', texte: 'Validation des compétences', actif: page === 'validation' },
       { href: '#/resultats', icone: '📈', texte: 'Résultats et moyennes', actif: page === 'resultats' },
@@ -396,7 +399,7 @@ async function afficher() {
     await PAGES[r[0]](zone, r[1], ctx);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches',
-      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'cours', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
