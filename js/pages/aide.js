@@ -111,6 +111,13 @@ const SECTIONS = [
     ['Partager avec des collègues', "« 👥 Partager des cours » (en haut de la page) : cochez un cours, une série de cours, un dossier ou « Tous mes cours », puis un ou plusieurs collègues (ou « Toute l’équipe »), et l’action : ajouter ces collègues, les retirer, partager uniquement avec eux, ou rendre privé. On peut y revenir à tout moment, même longtemps après la création des cours ; à côté de chaque cours s’affiche avec qui il est déjà partagé. Pour un seul élément, ouvrez aussi un dossier ou un cours puis « 👥 Partager » : cochez les collègues choisis ou « Toute l’équipe ». Le partage d’un dossier comprend tout son contenu, y compris les cours ajoutés plus tard. Vos collègues le retrouvent dans l’onglet « 👥 Partagés avec moi » : ils peuvent le consulter, l’imprimer et le copier dans leur propre espace (« ⧉ Copier dans mes cours »), mais pas le modifier. Décochez tout pour le rendre de nouveau privé ; le symbole 👥 signale vos éléments partagés."],
     ['Imprimer ou PDF', "« ⬇ PDF / Imprimer » (ou « ⬇ PDF » sur un dossier ou un cours) : cochez tout ou partie de l’arborescence et le contenu voulu (sommaires détaillés, savoirs associés). Le document commence par la liste des cours, groupée par dossier, puis donne le sommaire détaillé de chaque cours. Sans les sommaires, on obtient seulement le tableau des cours."],
   ]],
+  ['ia', 'Remplir avec une IA', [
+    ['Le principe', "Le bouton violet « 🤖 Remplir avec une IA » (séquençage, fiches de préparation et de déroulement, fiches contrats, contrats hors séquence, Mes cours ressources) permet de rédiger un document avec l’IA de votre choix : ChatGPT, Le Chat (Mistral), Claude, Copilot, Gemini… Le site n’est relié à aucune IA et n’envoie rien : vous faites un copier-coller, avec votre propre compte."],
+    ['Étape 1 : la demande', "Ajoutez si besoin vos précisions (durée, lieu, organisation, public, chantier support…), puis « 📋 Copier la demande ». Elle contient tout le contexte utile (matière, séquence, séance, objectifs, compétences et savoirs du référentiel…) et le format de réponse que le site sait relire. Ouvrez votre IA (liens proposés, le dernier utilisé est mis en avant) et collez la demande (Ctrl+V)."],
+    ['Étape 2 : la réponse', "Copiez toute la réponse de l’IA et collez-la dans la deuxième zone. Le site affiche aussitôt ce qu’il a compris, avec une case à cocher par élément (séance, phase, rubrique, critères…) : décochez ce que vous ne voulez pas. Si la réponse n’est pas reconnue, demandez à l’IA de « respecter exactement le format demandé »."],
+    ['Étape 3 : remplir', "« ✔ Remplir avec les éléments cochés » complète seulement les cases vides ; cochez « Remplacer aussi ce qui est déjà rempli » pour écraser l’existant. Séquençage : les séances manquantes sont créées. Déroulement : les phases remplacent un déroulement vide, sinon s’ajoutent à la suite. Contrats : les critères proposés s’ajoutent à chaque rubrique (« Remplacer » retire d’abord ceux qui n’ont pas encore de note). Tout reste modifiable, et « ↶ Annuler » ou l’historique permettent de revenir en arrière."],
+    ['Données et prudence', "Les demandes ne contiennent jamais de données d’élèves (ni noms, ni notes, ni appréciations) : seulement l’effectif global et vos contenus pédagogiques. Chacun ne peut remplir que les documents de ses matières. Relisez toujours la proposition de l’IA : elle peut se tromper. Suivez aussi les recommandations de l’académie sur l’usage de l’IA."],
+  ]],
   ['historique', 'Historique des modifications', [
     ['Retrouver une modification', "Chaque ajout, modification ou suppression est noté : qui, quand, quoi. Filtrez par type, matière ou personne ; cliquez une ligne pour voir les valeurs avant / après (utile pour retrouver un texte effacé par erreur)."],
   ]],
@@ -122,7 +129,7 @@ const SECTIONS = [
 ];
 
 const ICONES = { demarrer: '🚀', sequencage: '🧱', progression: '📅', fiches: '📝', validation: '✅', resultats: '📈', eleve: '🎓', pilotage: '🗓', dupliquer: '⧉', couverture: '🧩',
-  impressions: '🖨', cours: '📚', admin: '🛡', historique: '🕘', questions: '❓' };
+  impressions: '🖨', cours: '📚', ia: '🤖', admin: '🛡', historique: '🕘', questions: '❓' };
 const normaliser = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 export async function pageAide(zone, arg) {

@@ -5,6 +5,7 @@ import { concerne } from '../redoublants.js';
 import { db } from '../api.js';
 import { h, vider, champ, toast, erreur, confirmer, dateFr, fenetre } from '../ui.js';
 import { empileH, colonnes, carteGraph } from '../graphiques.js';
+import { boutonIA, champs, aEcrire, resume } from '../ia.js';
 
 export const FORMES = ['Devoir surveillé', 'Travaux pratiques', 'QCM', 'Exposé oral', 'Dossier', 'Étude de cas', 'Mise en situation'];
 export const LIEUX = ['En salle', 'En atelier', 'En extérieur', 'À la maison'];
@@ -121,6 +122,7 @@ export async function dessinerContrat(zone, opts) {
         type === 'sommatif' && modif && !libre ? h('button', { class: 'btn petit', onclick: actualiser }, '↻ Ajouter les compétences ajoutées au séquençage') : null,
         libre && modif ? h('button', { class: 'btn petit', onclick: ajouterCompetences }, '＋ Compétences du référentiel') : null,
         libre && modif ? h('button', { class: 'btn petit', onclick: ajouterRubrique }, '＋ Rubrique libre') : null,
+        modif ? boutonIA(() => configIA(groupes), 'btn petit') : null,
         criteres.some((k) => !k.actif) ? h('label', { class: 'interrupteur' }, h('input', { type: 'checkbox', checked: voirRetires, onchange: (e) => { voirRetires = e.target.checked; dessiner(); } }), 'voir les critères retirés') : null),
       eleves.length ? null : h('p', { class: 'aide' }, 'Aucun élève dans cette promotion : ajoutez-les dans la page Élèves.'),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'grille-notes' },
@@ -168,6 +170,69 @@ export async function dessinerContrat(zone, opts) {
       } catch (x) { erreur(x); s.value = v; }
     });
     return h('td', { class: 'note' }, s);
+  }
+
+  // ------------------------------------------------------------------ remplir avec une IA : critères par rubrique et en-tête (aucune donnée d'élève)
+  function configIA(groupes) {
+    const ENTETE = [['forme', 'Forme'], ['lieu', 'Lieu'], ['organisation', 'Organisation'], ['duree', 'Durée']];
+    const nom = libre ? `la fiche contrat ${type} hors séquence « ${contrat.titre || 'sans titre'} »` : type === 'sommatif' ? 'la fiche contrat sommatif de la séquence' : 'la fiche contrat formatif de la séance';
+    const aNotes = (k) => [...notes.keys()].some((c) => c.startsWith(k.id + ':'));
+    return {
+      titre: libre ? `Contrat hors séquence · ${contrat.titre || ''}` : type === 'sommatif' ? 'Fiche contrat sommatif' : 'Fiche contrat formatif',
+      demande: async () => `DOCUMENT À REMPLIR : ${nom}.
+${typeof opts.contexteIA === 'function' ? await opts.contexteIA() : opts.contexteIA || ''}
+
+En-tête actuel : ${ENTETE.map(([k, n]) => `${n} : ${contrat[k] || '(vide)'}`).join(' · ')}
+Formes possibles : ${FORMES.join(', ')} · lieux : ${LIEUX.join(', ')} · organisations : ${ORGAS.join(', ')}.
+
+RUBRIQUES DU CONTRAT (garde leur numéro) :
+${groupes.length ? groupes.map((g, i) => { const t = opts.titreGroupe(g.nom); const ks = g.criteres.filter((k) => k.actif && k.texte.trim());
+    return `Rubrique ${i + 1} · ${t.code}${t.libelle ? ' – ' + t.libelle : ''}\n  critères actuels : ${ks.length ? ks.map((k) => k.texte.replace(/\n/g, ' ')).join(' | ') : 'aucun'}`; }).join('\n') : '(aucune rubrique : ajoutez d’abord des compétences ou une rubrique au contrat)'}
+
+TÂCHE : pour chaque rubrique, propose 2 à 5 critères d’évaluation observables et mesurables (ce qui est vérifié concrètement, avec le niveau d’exigence attendu), chacun avec un coefficient de 1 à 3 ; propose aussi la forme, le lieu, l’organisation et la durée de l’évaluation.`,
+      format: `=== CONTRAT ===\nForme : …\nLieu : …\nOrganisation : …\nDurée : …\n=== RUBRIQUE ===\nNuméro : 1\nCritères :\n- … (coef 1)\n- … (coef 2)\n(un bloc === RUBRIQUE === par rubrique)\n=== FIN ===`,
+      lire: (B) => {
+        const items = [], data = { entete: {}, rubriques: [] };
+        const c0 = B.find((b) => b.nom === 'CONTRAT');
+        if (c0) {
+          const c = champs(c0.corps, Object.fromEntries(ENTETE.map(([k, n]) => [k, [n]])));
+          for (const [k, n] of ENTETE) if (c[k]) { data.entete[k] = c[k].split('\n')[0].trim(); items.push({ cle: 'e-' + k, titre: n, detail: data.entete[k] + (contrat[k] ? ` (actuel : ${contrat[k]})` : '') }); }
+        }
+        B.filter((b) => b.nom === 'RUBRIQUE').forEach((b, j) => {
+          const c = champs(b.corps, { num: ['Numéro', 'Rubrique', 'N°'], crit: ['Critères', 'Critères d’évaluation', 'Critères d\'évaluation', 'Indicateurs'] });
+          const n = parseInt(c.num, 10) || j + 1, g = groupes[n - 1];
+          if (!g || !c.crit) return;
+          const ks = c.crit.split('\n').map((l) => l.replace(/^\s*(?:[-*•–]+|\d+[.)])\s*/, '').trim()).filter(Boolean).map((l) => {
+            const m = l.match(/[\s(\[]*(?:coef(?:ficient)?\.?\s*:?\s*|×\s*|x\s*)(\d+(?:[.,]\d+)?)\s*[)\]]?\s*$/i);
+            return { texte: (m ? l.slice(0, m.index) : l).replace(/[\s–-]+$/, '').trim(), coef: m ? Number(m[1].replace(',', '.')) : 1 };
+          }).filter((k) => k.texte);
+          if (!ks.length) return;
+          const t = opts.titreGroupe(g.nom), i = data.rubriques.length;
+          data.rubriques.push({ g, ks });
+          items.push({ cle: 'r-' + i, titre: `Rubrique ${n} · ${resume(t.code, 70)} : ${ks.length} critère(s)`, detail: ks.map((k) => `${k.texte}${k.coef !== 1 ? ` (coef ${k.coef})` : ''}`).join(' · ') });
+        });
+        return { items, data };
+      },
+      appliquer: async (d, coches, remplacer) => {
+        const patch = {};
+        for (const [k] of ENTETE) if (coches.has('e-' + k) && aEcrire(contrat[k], d.entete[k], remplacer)) patch[k] = d.entete[k];
+        if (Object.keys(patch).length) { await db.modifier('contrats', contrat.id, patch); Object.assign(contrat, patch); }
+        let nk = 0;
+        for (const [i, r] of d.rubriques.entries()) {
+          if (!coches.has('r-' + i)) continue;
+          // « Remplacer » : les critères de la rubrique sans note sont retirés (ceux du référentiel restent récupérables)
+          // les critères libres restés vides sont toujours supprimés
+          for (const k of r.g.criteres.filter((x) => x.actif && !aNotes(x) && (remplacer || (x.libre && !x.texte.trim())))) {
+            if (k.libre) await db.supprimer('criteres', k.id); else await db.modifier('criteres', k.id, { actif: false });
+          }
+          let ordre = Math.max(0, ...r.g.criteres.map((k) => k.ordre));
+          for (const k of r.ks) { await db.ajouter('criteres', { contrat_id: contrat.id, groupe: r.g.nom, groupe_ordre: r.g.ordre, ordre: ++ordre, texte: k.texte, coefficient: k.coef, libre: true }); nk++; }
+        }
+        criteres = await db.lire('criteres', `contrat_id=eq.${contrat.id}&order=groupe_ordre,ordre,id`);
+        dessiner();
+        return `Contrat rempli : ${nk} critère(s) ajouté(s)${Object.keys(patch).length ? `, ${Object.keys(patch).length} rubrique(s) d’en-tête` : ''}`;
+      },
+    };
   }
 
   async function ajouterCritere(g) {

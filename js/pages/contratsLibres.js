@@ -103,5 +103,7 @@ async function fiche(zone, id, ctx) {
       corps));
   const ref = await ctx.referentiel();
   await dessinerContrat(corps, { type: c.type, contratId: c.id, modif, ctx,
+    contexteIA: `Matière : ${m.nom} · promotion ${promo?.libelle || ''}. Évaluation ${c.type === 'sommatif' ? 'sommative' : 'formative'} hors séquence « ${c.titre || 'sans titre'} »${c.date_eval ? ' prévue le ' + dateFr(c.date_eval) : ''}, `
+      + 'destinée à évaluer des compétences (souvent transversales) non prévues dans le séquençage. Les rubriques sont les compétences du référentiel ou des rubriques libres.',
     titreGroupe: (g) => ({ code: g, libelle: ref.comp[g]?.libelle || '' }) });
 }

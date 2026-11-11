@@ -7,6 +7,7 @@ import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
 import { bandeauCreation } from './contratsLibres.js';
+import { boutonIA, champs, codesDans, nombreDe, enListe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];
@@ -83,12 +84,48 @@ export async function pageFiches(zone, arg, ctx) {
     champ(valeur || '', enregistrer, { multi: true, lecture: !modif, placeholder: modif ? aide || 'À compléter' : '' }));
   const codes = (liste, index) => (liste || []).length ? h('div', { class: 'codes-fiche' }, liste.map((c) => h('div', {}, h('b', {}, c), ' ', index[c]?.libelle || ''))) : h('span', { class: 'gris' }, '—');
 
+  // ------------------------------------------------------------------------------------- remplir avec une IA (contexte commun)
+  // aucune donnée d'élève : seulement l'effectif global (nombre de scolaires et d'apprentis)
+  const libCodes = (liste, index) => (liste || []).map((c) => `${c} (${index[c]?.libelle || '?'})`).join(' ; ') || '—';
+  const contexteSequence = () => `Matière : ${m.nom} · promotion ${promo} · ${actifs.length} étudiants (${app} apprentis, ${actifs.length - app} scolaires).
+Séquence ${sq.numero} : ${sq.intitule || '(sans intitulé)'}
+Objectif principal : ${sq.objectif || '—'}
+Séances de la séquence :
+${seances.map((x) => `- Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'} · ${x.duree ? x.duree + ' h' : 'durée ?'} · objectif intermédiaire : ${x.objectif_inter || '—'}`
+  + `${x.objectifs_ops ? '\n  objectifs opérationnels : ' + x.objectifs_ops.replace(/\n/g, ' / ') : ''}\n  compétences : ${libCodes(x.competences, ref.comp)}\n  savoirs : ${libCodes(x.savoirs, ref.sav)}`
+  + `${coursMobilises(x) ? '\n  cours mobilisés : ' + coursMobilises(x).replace(/\n/g, ' / ') : ''}`).join('\n') || '(aucune)'}`;
+
   // ------------------------------------------------------------------------------------- préparation de séquence
   async function preparation() {
     const maj = (col) => (v) => db.enregistrer('fiches_sequence', [{ sequence_id: sq.id, [col]: v }], 'sequence_id');
     const taches = [...new Set(seances.flatMap((x) => (x.objectifs_ops.match(/\[(A\d+-T\d+)\]/g) || []).map((t) => t.slice(1, -1))))];
     const sugg = taches.map((t) => `${t} – ${ref.taches.find((x) => x.code === t)?.libelle || ''}`).join('\n');
-    vider(fiche, h('article', { class: 'feuille' },
+    const RUB = [['activites', 'Activités et tâches', 'Activités et tâches professionnelles du référentiel visées (codes et libellés, une par ligne)'],
+      ['situation', 'Situation professionnelle', 'Situation professionnelle / support de la séquence (contexte d’entreprise ou de chantier réaliste)'],
+      ['prerequis', 'Prérequis', 'Prérequis nécessaires (savoirs et savoir-faire, une ligne par prérequis)'],
+      ['modalites', 'Modalités d’évaluation', 'Modalités d’évaluation (formatives et sommatives, forme, moment, critères principaux)'],
+      ['ressources', 'Ressources', 'Ressources et supports (documents, logiciels, matériel, normes, DTU, sites de référence)']];
+    const ia = modif ? boutonIA(() => ({
+      titre: `Fiche de préparation · séquence ${sq.numero}`,
+      demande: async () => `DOCUMENT À REMPLIR : la fiche de préparation de la séquence ${sq.numero}.\n${contexteSequence()}\n\nContenu actuel de la fiche :\n${RUB.map(([k, n]) => `${n} : ${ficheSeq[k] ? ficheSeq[k].replace(/\n/g, ' / ') : '(vide)'}`).join('\n')}\n\n`
+        + `TÂCHE : rédige les rubriques de la fiche de préparation de cette séquence :\n${RUB.map(([, n, d]) => `- ${n} : ${d}`).join('\n')}\n\nTÂCHES PROFESSIONNELLES DU RÉFÉRENTIEL :\n${ref.taches.map((t) => `${t.code} : ${t.libelle}`).join('\n')}`,
+      format: `=== FICHE ===\n${RUB.map(([, n]) => `${n} :\n…`).join('\n')}\n=== FIN ===`,
+      lire: (B) => {
+        const f = B.find((x) => x.nom === 'FICHE'); if (!f) return null;
+        const c = champs(f.corps, Object.fromEntries(RUB.map(([k, n]) => [k, [n, n.replace(/ .*/, '')]])));
+        const items = RUB.filter(([k]) => c[k]).map(([k, n]) => ({ cle: k, titre: n, detail: resume(c[k]) + (ficheSeq[k] ? ' (rubrique déjà remplie)' : '') }));
+        return { items, data: c };
+      },
+      appliquer: async (c, coches, remplacer) => {
+        const patch = { sequence_id: sq.id };
+        for (const [k] of RUB) if (coches.has(k) && aEcrire(ficheSeq[k], c[k], remplacer)) patch[k] = c[k];
+        const n = Object.keys(patch).length - 1;
+        if (n) { await db.enregistrer('fiches_sequence', [patch], 'sequence_id'); Object.assign(ficheSeq, patch); }
+        preparation();
+        return n ? `${n} rubrique(s) remplie(s)` : 'Rien à remplir : les rubriques étaient déjà remplies (cochez « Remplacer »)';
+      },
+    })) : null;
+    vider(fiche, ia ? h('div', { class: 'barre-ia ecran' }, ia, h('span', { class: 'aide' }, 'Rédiger cette fiche avec l’IA de votre choix, à partir du séquençage.')) : null, h('article', { class: 'feuille' },
       entete('FICHE DE PRÉPARATION DE SÉQUENCE', `Séquence ${sq.numero} · ${sq.intitule || ''}`),
       h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif),
         info('Volume', volume)),
@@ -116,7 +153,7 @@ export async function pageFiches(zone, arg, ctx) {
       entete('FICHE CONTRAT SOMMATIF', `Séquence ${sq.numero} · ${sq.intitule || ''}`),
       h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
       h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif principal'), h('p', { class: 'fort' }, sq.objectif || '—')), corps));
-    await dessinerContrat(corps, { type: 'sommatif', id: sq.id, modif, ctx,
+    await dessinerContrat(corps, { type: 'sommatif', id: sq.id, modif, ctx, contexteIA: contexteSequence,
       titreGroupe: (g) => ({ code: g, libelle: ref.comp[g]?.libelle || '' }) });
   }
 
@@ -192,7 +229,57 @@ export async function pageFiches(zone, arg, ctx) {
       return { t: `${ctx.codeMat(mm)} ${q?.numero}.${y.numero} · ${y.titre || 'sans titre'}`, r: [ctx.matieres.indexOf(mm), q?.numero, y.numero] }; })
       .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.r[2] - b.r[2]).map((l) => l.t);
     if (x.prerequis_texte) lignesPre.push(x.prerequis_texte);
-    vider(fiche,
+    const CHAMPS_F = [['salle', 'Salle', 'salle ou atelier'], ['prerequis', 'Prérequis', 'prérequis des étudiants'], ['materiel', 'Matériel et ressources', 'matériel, documents, logiciels'],
+      ['evaluation', 'Évaluation', 'comment les acquis sont vérifiés pendant ou en fin de séance'], ['differenciation', 'Différenciation', 'adaptations scolaires / apprentis, aides, approfondissements']];
+    const phasesVides = () => phases.every((p) => !(p.phase || p.activite || p.enseignant || p.eleves || p.duree));
+    const ia = modif ? boutonIA(() => ({
+      titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`,
+      demande: async () => `DOCUMENT À REMPLIR : la fiche de déroulement de la séance ${sq.numero}.${x.numero} « ${x.titre || 'sans titre'} » (durée : ${x.duree ? x.duree + ' h' : 'non précisée'}).
+Objectif intermédiaire : ${x.objectif_inter || '—'}
+Objectifs opérationnels :\n${x.objectifs_ops || '—'}
+Compétences : ${libCodes(x.competences, ref.comp)}
+Savoirs associés : ${libCodes(x.savoirs, ref.sav)}
+Cours mobilisés : ${coursMobilises(x).replace(/\n/g, ' / ') || '—'}
+Prérequis (séquençage) : ${lignesPre.join(' / ') || '—'}
+
+CONTEXTE :\n${contexteSequence()}
+
+${phasesVides() ? 'Le déroulement est vide.' : `Déroulement actuel :\n${phases.map((p, i) => `Phase ${i + 1} · ${p.phase || '—'} (${p.duree || 'durée ?'}) : ${resume(p.activite, 200) || '—'}`).join('\n')}`}
+
+TÂCHE : propose le déroulement détaillé de la séance en phases successives (en général 3 à 6), dont les durées additionnées correspondent à la durée de la séance ; pour chaque phase : un intitulé court, une durée (ex. 20 min), l’activité (contexte, consignes, organisation, supports), le rôle de l’enseignant et le rôle des élèves. Complète aussi les rubriques de la fiche : ${CHAMPS_F.map(([, n, d]) => `${n} (${d})`).join(', ')}.`,
+      format: `=== FICHE ===\n${CHAMPS_F.map(([, n]) => `${n} : …`).join('\n')}\n=== PHASE ===\nIntitulé : …\nDurée : …\nActivité : …\nRôle de l’enseignant : …\nRôle des élèves : …\n(un bloc === PHASE === par phase, dans l’ordre)\n=== FIN ===`,
+      lire: (B) => {
+        const items = [], data = { fiche: {}, phases: [] };
+        const fb = B.find((b) => b.nom === 'FICHE');
+        if (fb) {
+          const c = champs(fb.corps, Object.fromEntries(CHAMPS_F.map(([k, n]) => [k, [n, n.replace(/ .*/, ''), k]])));
+          for (const [k, n] of CHAMPS_F) if (c[k]) { data.fiche[k] = c[k]; items.push({ cle: 'f-' + k, titre: n, detail: resume(c[k]) + (f[k] ? ' (déjà rempli)' : '') }); }
+        }
+        B.filter((b) => b.nom === 'PHASE').forEach((b) => {
+          const c = champs(b.corps, { phase: ['Intitulé', 'Intitulé de la phase', 'Titre', 'Phase'], duree: ['Durée'], activite: ['Activité', 'Activités', 'Activité proposée'],
+            enseignant: ['Rôle de l’enseignant', 'Rôle de l\'enseignant', 'Rôle enseignant', 'Enseignant'], eleves: ['Rôle des élèves', 'Rôle des étudiants', 'Élèves', 'Étudiants'] });
+          if (!c.phase && !c.activite) return;
+          const i = data.phases.length;
+          data.phases.push({ ...phaseVide(), phase: sansNumero(c.phase || ''), duree: c.duree || '', activite: c.activite || '', enseignant: c.enseignant || '', eleves: c.eleves || '' });
+          items.push({ cle: 'p-' + i, titre: `Phase ${i + 1} · ${c.phase || 'sans intitulé'}${c.duree ? ' (' + c.duree + ')' : ''}`, detail: resume(c.activite) });
+        });
+        return { items, data };
+      },
+      appliquer: async (d, coches, remplacer) => {
+        const patch = { seance_id: x.id };
+        for (const [k] of CHAMPS_F) if (coches.has('f-' + k) && aEcrire(f[k], d.fiche[k], remplacer)) patch[k] = d.fiche[k];
+        const nouvelles = d.phases.filter((_, i) => coches.has('p-' + i));
+        // phases : remplacent un déroulement vide (ou tout le déroulement si « Remplacer » est coché), sinon s'ajoutent à la suite
+        if (nouvelles.length) {
+          phases = remplacer || phasesVides() ? nouvelles : [...phases.filter((p) => p.phase || p.activite || p.enseignant || p.eleves || p.duree), ...nouvelles];
+          patch.phases = phases;
+        }
+        if (Object.keys(patch).length > 1) await db.enregistrer('fiches_seance', [patch], 'seance_id');
+        await seance(x);
+        return `Fiche remplie : ${nouvelles.length} phase(s)${Object.keys(patch).filter((k) => !['seance_id', 'phases'].includes(k)).length ? ' et ' + Object.keys(patch).filter((k) => !['seance_id', 'phases'].includes(k)).length + ' rubrique(s)' : ''}`;
+      },
+    })) : null;
+    vider(fiche, ia ? h('div', { class: 'barre-ia ecran' }, ia, h('span', { class: 'aide' }, 'Rédiger le déroulement (phases, rôles) et les rubriques avec l’IA de votre choix.')) : null,
       h('article', { class: 'feuille' },
         entete('FICHE DE DÉROULEMENT DE SÉANCE', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif),
@@ -343,7 +430,9 @@ export async function pageFiches(zone, arg, ctx) {
         entete('FICHE CONTRAT FORMATIF', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire évalué'), h('p', { class: 'fort' }, x.objectif_inter || '—')), corps));
-    await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }) });
+    await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }),
+      contexteIA: () => `Séance ${sq.numero}.${x.numero} « ${x.titre || 'sans titre'} » (${x.duree ? x.duree + ' h' : 'durée ?'}).\nObjectif intermédiaire évalué : ${x.objectif_inter || '—'}\n`
+        + `Objectifs opérationnels :\n${x.objectifs_ops || '—'}\nCompétences : ${libCodes(x.competences, ref.comp)}\nSavoirs associés : ${libCodes(x.savoirs, ref.sav)}\n\nCONTEXTE :\n${contexteSequence()}` });
   }
 
   // ------------------------------------------------------------------------------------- téléchargement (PDF A4 portrait dans un .zip)

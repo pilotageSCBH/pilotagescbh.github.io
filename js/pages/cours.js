@@ -6,6 +6,7 @@ import { db } from '../api.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, ajuster } from '../ui.js';
 import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
+import { boutonIA, champs, codesDans, listeSavoirs, aEcrire, resume } from '../ia.js';
 
 const CLE_OUVERTS = 'pilotage-scbh-cours-ouverts';
 const lireL = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -638,7 +639,8 @@ export async function pageCours(zone, arg, ctx) {
               } catch (e) { erreur(e); }
             };
             inp.click();
-          } }, '📄 Lire les titres d’un fichier Word') : null),
+          } }, '📄 Lire les titres d’un fichier Word') : null,
+          modif ? boutonIA(() => configIA(r), 'btn petit') : null),
         modif ? h('p', { class: 'aide' }, 'Une ligne par titre. Décalez les sous-titres avec la touche Tab (Maj+Tab pour revenir), ou commencez la ligne par « - » / « -- ». Enregistrement automatique.') : null,
         h('div', { class: modif ? 'sommaire-double' : 'sommaire-seul' }, modif ? h('div', { class: 'col-saisie' }, h('small', { class: 'lib-col' }, 'Saisie'), saisie) : null,
           h('div', { class: 'col-apercu' }, modif ? h('small', { class: 'lib-col' }, 'Aperçu') : null, apercu))),
@@ -646,6 +648,47 @@ export async function pageCours(zone, arg, ctx) {
       h('p', { class: 'dates-cours' }, `Créé le ${dateHeure(r.cree_le)} · modifié le ${dateHeure(r.maj_le)}`));
     if (saisie) requestAnimationFrame(() => ajuster(saisie));
   }
+  // remplir le sommaire et les savoirs d'un cours avec une IA (seulement le titre et le sommaire sont envoyés, par copier-coller)
+  function configIA(r) {
+    const voisins = enfants(r.parent_id, moi).filter((x) => x.type === 'cours' && x.id !== r.id).map((x) => titreDe(x));
+    return {
+      titre: `Cours · ${titreDe(r)}`,
+      demande: async () => `DOCUMENT À REMPLIR : le sommaire détaillé d’un cours ressource de l’enseignant et les savoirs associés du référentiel.
+Titre du cours : ${titreDe(r)}
+${chemin(r).length ? `Dossier : ${chemin(r).map(titreDe).join(' › ')}\n` : ''}${voisins.length ? `Autres cours du même dossier (pour éviter les doublons) : ${voisins.join(' ; ')}\n` : ''}Sommaire actuel : ${r.sommaire.trim() ? '\n' + r.sommaire : '(vide)'}
+Savoirs associés actuels : ${(r.savoirs || []).join(', ') || '(aucun)'}
+
+TÂCHE : propose un sommaire détaillé et progressif pour ce cours (2 ou 3 niveaux de titres, 4 à 8 parties), puis les codes des savoirs associés du référentiel qu’il traite (les plus pertinents seulement).
+
+SAVOIRS ASSOCIÉS DU RÉFÉRENTIEL :
+${listeSavoirs(ref)}`,
+      format: `=== COURS ===\nSommaire :\n1. …\n- …\n- …\n-- …\n2. …\n- …\n(titres principaux numérotés « 1. », « 2. » ; sous-titres précédés de « - » ; 3e niveau précédé de « -- »)\nSavoirs : …\n=== FIN ===`,
+      lire: (B) => {
+        const b = B.find((x) => x.nom === 'COURS'); if (!b) return null;
+        const c = champs(b.corps, { sommaire: ['Sommaire', 'Sommaire détaillé'], savoirs: ['Savoirs', 'Savoirs associés'] });
+        const lignes = String(c.sommaire || '').split('\n').filter((l) => l.trim() && !/^\(.*\)$/.test(l.trim()))
+          .map((l) => { const m = l.match(/^\s*(-*)\s*/); return '  '.repeat(Math.min(3, m[1].length)) + l.slice(m[0].length).trim(); });
+        const sav = codesDans(c.savoirs, ref.savoirs.map((x) => x.code));
+        const items = [];
+        if (lignes.length) items.push({ cle: 'sommaire', titre: `Sommaire : ${lignes.length} titre(s)`, detail: resume(lignes.map((l) => l.trim()).join(' · '), 220) + (r.sommaire.trim() ? ' (le cours a déjà un sommaire)' : '') });
+        if (sav.length) items.push({ cle: 'savoirs', titre: `Savoirs associés : ${sav.join(', ')}`, detail: resume(sav.map(libSavoir).join(' · '), 220) });
+        return { items, data: { sommaire: lignes.join('\n'), savoirs: sav } };
+      },
+      appliquer: async (d, coches, remplacer) => {
+        const patch = {};
+        if (coches.has('sommaire') && aEcrire(r.sommaire, d.sommaire, remplacer)) patch.sommaire = d.sommaire.slice(0, 20000);
+        if (coches.has('savoirs') && d.savoirs.length) {
+          const ordre = ref.savoirs.map((x) => x.code);
+          patch.savoirs = [...new Set(remplacer ? d.savoirs : [...(r.savoirs || []), ...d.savoirs])].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
+        }
+        if (!Object.keys(patch).length) return 'Rien à remplir : le sommaire existe déjà (cochez « Remplacer »)';
+        await db.modifier('cours', r.id, patch); Object.assign(r, patch);
+        majChoixSavoir(); dessinerArbre(); dessinerDetail();
+        return patch.sommaire ? 'Sommaire et savoirs remplis' : 'Savoirs ajoutés (sommaire existant gardé)';
+      },
+    };
+  }
+
   function accueilDetail() {
     const l = [...R.values()].filter((r) => (vue === 'mes') === aMoi(r));
     const nc = l.filter((r) => r.type === 'cours').length, nd = l.length - nc;

@@ -1,6 +1,7 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
+import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 export async function pageSequencage(zone, id, ctx) {
@@ -64,6 +65,7 @@ export async function pageSequencage(zone, id, ctx) {
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),
         h('div', { class: 'resume' }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
         h('a', { class: 'btn petit fiches', href: `#/fiches/${s.id}` }, '▶ Fiches'),
+        modif ? boutonIA(iaSequence(s, seances), 'btn petit') : null,
         mesMatieres.length ? h('button', { class: 'btn petit', title: 'Dupliquer la séquence (séances, fiches et contrats) vers une de vos matières, dans cette promotion ou une autre', onclick: () => dupliquerSequence(s) }, '⧉ Dupliquer') : null,
         modif ? h('button', { class: 'icone', title: 'Supprimer la séquence', onclick: () => supprimerSequence(s, seances) }, '✖') : null),
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
@@ -364,6 +366,94 @@ export async function pageSequencage(zone, id, ctx) {
     if (!(await confirmer('Supprimer la séquence', `Supprimer définitivement la séquence ${s.numero}${s.intitule ? ' « ' + s.intitule + ' »' : ''} et ses ${seances.length} séance(s) ? Les séquences suivantes seront renumérotées.`, 'Supprimer'))) return;
     try { await db.rpc('supprimer_sequence', { s: s.id }); toast('Séquence supprimée'); await dessiner(); } catch (e) { erreur(e); }
   }
+  // ------------------------------------------------------------------------------------- remplir avec une IA
+  function iaSequence(s, seances) {
+    const promo = ctx.promo.libelle;
+    return {
+      titre: `Séquençage · séquence ${s.numero} · ${m.nom}`,
+      demande: async () => `DOCUMENT À REMPLIR : le séquençage de la séquence ${s.numero} de la matière « ${m.nom} » (promotion ${promo}).
+Intitulé actuel : ${s.intitule || '(vide)'}
+Objectif principal actuel : ${s.objectif || '(vide)'}
+Séances existantes : ${seances.length ? '\n' + seances.map((x) => `- Séance ${s.numero}.${x.numero} (numéro ${x.numero}) · ${x.titre || 'sans titre'} · ${x.duree ? x.duree + ' h' : 'durée ?'} · objectif : ${x.objectif_inter || '—'}`).join('\n') : 'aucune'}
+Durées possibles d’une séance (en heures) : ${ref.durees.map((d) => Number(d.heures)).join(', ')}.
+
+TÂCHE : propose l’intitulé et l’objectif principal de la séquence, puis pour chaque séance : son numéro, un titre, une durée, un objectif intermédiaire, des objectifs opérationnels (verbes d’action observables, un par ligne, en citant si utile le code d’une tâche professionnelle entre crochets, ex. [A1-T2]), les compétences et les savoirs associés (codes du référentiel ci-dessous). Si des séances existent déjà, garde leur numéro et complète-les, sauf si les précisions de l’enseignant demandent autre chose.
+
+COMPÉTENCES DU RÉFÉRENTIEL :
+${listeCompetences(ref)}
+
+SAVOIRS ASSOCIÉS DU RÉFÉRENTIEL :
+${listeSavoirs(ref)}
+
+TÂCHES PROFESSIONNELLES DU RÉFÉRENTIEL :
+${ref.taches.map((t) => `${t.code} : ${t.libelle}`).join('\n')}`,
+      format: `=== SEQUENCE ===
+Intitulé : …
+Objectif principal : …
+=== SEANCE ===
+Numéro : 1
+Titre : …
+Durée : 4
+Objectif intermédiaire : …
+Objectifs opérationnels :
+- …
+- …
+Compétences : C1-1, C2-3
+Savoirs : S11-1, S21-2
+(un bloc === SEANCE === par séance)
+=== FIN ===`,
+      lire: (B) => {
+        const items = [], data = { seq: {}, seances: [] };
+        const codesC = ref.competences.map((c) => c.code), codesS = ref.savoirs.map((c) => c.code);
+        for (const b of B) {
+          if (b.nom === 'SEQUENCE') {
+            const c = champs(b.corps, { intitule: ['Intitulé', 'Intitule de la séquence'], objectif: ['Objectif principal', 'Objectif'] });
+            if (c.intitule) { data.seq.intitule = c.intitule; items.push({ cle: 'seq-intitule', titre: 'Intitulé de la séquence', detail: c.intitule }); }
+            if (c.objectif) { data.seq.objectif = c.objectif; items.push({ cle: 'seq-objectif', titre: 'Objectif principal', detail: resume(c.objectif) }); }
+          } else if (b.nom === 'SEANCE') {
+            const c = champs(b.corps, { numero: ['Numéro', 'N°', 'Numero de séance'], titre: ['Titre'], duree: ['Durée', 'Duree (h)'], inter: ['Objectif intermédiaire'],
+              ops: ['Objectifs opérationnels'], comps: ['Compétences', 'Compétences développées'], savs: ['Savoirs', 'Savoirs associés'] });
+            const x = { numero: nombreDe(c.numero), titre: c.titre || '', duree: nombreDe(c.duree), inter: c.inter || '', ops: c.ops ? enListe(c.ops) : '',
+              comps: codesDans(c.comps, codesC), savs: codesDans(c.savs, codesS), i: data.seances.length };
+            if (!x.titre && !x.inter && !x.ops) continue;
+            data.seances.push(x);
+            items.push({ cle: 'seance-' + x.i, titre: `Séance ${s.numero}.${x.numero || x.i + 1} · ${x.titre || 'sans titre'}`,
+              detail: [x.duree ? x.duree + ' h' : '', x.inter, x.comps.join(' '), x.savs.join(' ')].filter(Boolean).join(' · ') });
+          }
+        }
+        return { items, data };
+      },
+      appliquer: async (data, coches, remplacer) => {
+        const patchSeq = {};
+        if (coches.has('seq-intitule') && aEcrire(s.intitule, data.seq.intitule, remplacer)) patchSeq.intitule = data.seq.intitule;
+        if (coches.has('seq-objectif') && aEcrire(s.objectif, data.seq.objectif, remplacer)) patchSeq.objectif = data.seq.objectif;
+        if (Object.keys(patchSeq).length) await db.modifier('sequences', s.id, patchSeq);
+        let liste = [...seances].sort((a, b) => a.numero - b.numero), n = 0, crees = 0;
+        const rang = (l, codes) => [...new Set(l)].sort((a, b) => codes.indexOf(a) - codes.indexOf(b));
+        for (const x of data.seances) {
+          if (!coches.has('seance-' + x.i)) continue;
+          let cible = x.numero ? liste.find((y) => y.numero === x.numero) : liste[x.i];
+          if (!cible) {
+            const apres = liste.length ? liste[liste.length - 1].numero : 0;
+            const id = await db.rpc('inserer_seance', { s: s.id, apres });
+            cible = (await db.lire('seances', `id=eq.${id}`))[0]; liste.push(cible); crees++;
+          }
+          const p = {};
+          if (aEcrire(cible.titre, x.titre, remplacer)) p.titre = x.titre;
+          if (x.duree && (remplacer || cible.duree == null)) p.duree = x.duree;
+          if (aEcrire(cible.objectif_inter, x.inter, remplacer)) p.objectif_inter = x.inter;
+          if (aEcrire(cible.objectifs_ops, x.ops, remplacer)) p.objectifs_ops = x.ops;
+          const cc = ref.competences.map((c) => c.code), cs = ref.savoirs.map((c) => c.code);
+          if (x.comps.length) p.competences = rang(remplacer ? x.comps : [...(cible.competences || []), ...x.comps], cc);
+          if (x.savs.length) p.savoirs = rang(remplacer ? x.savs : [...(cible.savoirs || []), ...x.savs], cs);
+          if (Object.keys(p).length) { await db.modifier('seances', cible.id, p); n++; }
+        }
+        await dessiner();
+        return `Séquence remplie : ${n} séance(s) complétée(s)${crees ? `, dont ${crees} créée(s)` : ''}`;
+      },
+    };
+  }
+
   async function insererSeance(s, x) {
     try { await db.rpc('inserer_seance', { s: s.id, apres: x.numero }); toast(`Séance ${s.numero}.${x.numero + 1} insérée`); await dessiner(); } catch (e) { erreur(e); }
   }

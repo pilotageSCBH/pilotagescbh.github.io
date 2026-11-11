@@ -1711,3 +1711,31 @@ th.eleve.hors span { opacity: .55; }
 .partage-lot .option.tous { display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--clair); border-radius: 8px; margin: 4px 0 6px; cursor: pointer; }
 .partage-lot .option.tous small { color: var(--gris); }
 .partage-lot .option.tous b { white-space: nowrap; }
+
+/* ===================================================================== Remplir avec une IA (copier-coller) */
+.btn.bouton-ia { background: #F1ECFA; border-color: #C9B6EA; color: #5B3A99; }
+.btn.bouton-ia:hover { background: #E6DCF7; border-color: #9F82D6; }
+.barre-ia { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 auto 10px; max-width: 1100px; }
+.barre-ia .aide { margin: 0; }
+.assistant-ia { display: flex; flex-direction: column; gap: 14px; }
+.etape-ia { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+.etape-ia h3 { margin: 4px 0 8px; font-size: 15px; color: var(--fonce); }
+.num-etape { width: 30px; height: 30px; border-radius: 50%; background: #7A5BC4; color: #fff; font-weight: 800; display: grid; place-items: center; }
+.champ.zone-ia { border-color: var(--ligne); background: #fff; resize: vertical; font-size: 13px; }
+.champ.demande-ia { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; background: #F8F9F9; margin-top: 6px; }
+.liens-ia { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; }
+.lien-ia { padding: 3px 9px; border: 1px solid var(--ligne); border-radius: 14px; text-decoration: none; color: var(--texte); background: #fff; }
+.lien-ia:hover { border-color: #9F82D6; color: #5B3A99; }
+.lien-ia.prefere { border-color: #9F82D6; background: #F1ECFA; color: #5B3A99; font-weight: 700; }
+.voir-demande { margin-top: 8px; font-size: 12.5px; }
+.voir-demande summary { cursor: pointer; color: var(--gris); }
+.apercu-ia { border: 1px solid #E4ECEA; border-radius: 8px; padding: 8px 10px; background: #FCFDFD; max-height: 34vh; overflow-y: auto; }
+.erreur-ia { color: var(--rouge); margin: 4px 0; font-size: 13px; }
+.compte-ia { margin: 0 0 6px; font-size: 12.5px; color: var(--teal); font-weight: 700; }
+.items-ia { display: flex; flex-direction: column; gap: 2px; }
+.item-ia { display: flex; gap: 8px; align-items: flex-start; padding: 5px 4px; border-bottom: 1px solid #EEF2F1; cursor: pointer; font-size: 13px; }
+.item-ia input { margin-top: 3px; }
+.item-ia span { display: flex; flex-direction: column; }
+.item-ia small { color: var(--gris); font-size: 12px; }
+.remplacer-ia { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; font-size: 13px; }
+@media print { .barre-ia, .bouton-ia { display: none !important; } }
