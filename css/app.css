@@ -1739,3 +1739,12 @@ th.eleve.hors span { opacity: .55; }
 .item-ia small { color: var(--gris); font-size: 12px; }
 .remplacer-ia { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; font-size: 13px; }
 @media print { .barre-ia, .bouton-ia { display: none !important; } }
+/* cours ressources : lien internet d'un dossier ou d'un cours */
+.lien-externe { flex: none; text-decoration: none; font-size: 13px; padding: 0 2px; border-radius: 4px; }
+.lien-externe:hover { background: #DCEDEA; }
+.carte-lien .ligne-lien { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.carte-lien .champ-lien { flex: 1 1 320px; width: auto; border-color: var(--ligne); background: #fff; }
+.carte-lien .adresse-lien { overflow-wrap: anywhere; }
+.carte-lien h3 small { font-weight: 400; font-size: 12px; }
+.ligne-cours-lie { display: flex; align-items: center; gap: 3px; }
+.ligne-cours-lie .cours-lie { flex: 1; }

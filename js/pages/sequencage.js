@@ -148,8 +148,9 @@ export async function pageSequencage(zone, id, ctx) {
   function celluleCours(x, maj, apres) {
     const td = h('td', { class: 'cell-cours' });
     const dessinerC = () => vider(td,
-      (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('a', { class: 'cours-lie', href: '#/cours/' + c.id,
-        title: 'Cours ressource' + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, '📘 ', c.titre || 'Cours sans titre'))) : null,
+      (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('div', { class: 'ligne-cours-lie' },
+        h('a', { class: 'cours-lie', href: '#/cours/' + c.id, title: 'Cours ressource' + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, '📘 ', c.titre || 'Cours sans titre'),
+        /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
       champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
       modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
     dessinerC();
@@ -206,7 +207,7 @@ export async function pageSequencage(zone, id, ctx) {
       const savoirs = r ? (r.savoirs || []) : (a?.savoirs || []);
       const ajoutes = savoirs.filter((c) => auto.has(c) && sav.includes(c));
       for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
-      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes };
+      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || '') };
     });
     const rang = ref.savoirs.map((y) => y.code);
     sav.sort((a, b) => rang.indexOf(a) - rang.indexOf(b));

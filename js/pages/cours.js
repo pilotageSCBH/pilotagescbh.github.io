@@ -142,6 +142,32 @@ export async function pageCours(zone, arg, ctx) {
   const partageHerite = (r) => chemin(r).reverse().find((d) => estPartage(d));
   const nbCours = (id) => descendants(id).filter((x) => x.type === 'cours').length;
   const libSavoir = (c) => ref.sav[c]?.libelle || 'code absent du référentiel';
+  const lienOk = (u) => /^https?:\/\/\S+$/i.test(String(u || '').trim());
+  // petit lien 🔗 (s'ouvre dans un nouvel onglet sans sélectionner l'élément)
+  const pucheLien = (r) => (lienOk(r.lien) ? h('a', { class: 'lien-externe', href: r.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir : ' + r.lien, onclick: (e) => e.stopPropagation() }, '🔗') : null);
+  // carte « Lien internet » d'un dossier ou d'un cours (facultatif)
+  function carteLien(r, modif) {
+    const z = h('div', { class: 'carte-detail carte-lien' });
+    const dessinerL = () => vider(z, h('h3', {}, r.type === 'dossier' ? '🔗 Lien internet du dossier' : '🔗 Lien internet du cours', h('small', { class: 'gris' }, '  (facultatif)')),
+      modif ? h('p', { class: 'aide' }, r.type === 'dossier'
+        ? 'Adresse du dossier en ligne où sont rangés ces cours (Nuage, Drive, OneDrive, ENT, site…). Le site garde seulement l’adresse.'
+        : 'Adresse du cours en ligne (Nuage, Drive, OneDrive, ENT, site…). Le site garde seulement l’adresse, pas le fichier.') : null,
+      h('div', { class: 'ligne-lien' },
+        modif ? champ(r.lien || '', async (v) => {
+          let u = v.trim();
+          if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u.replace(/^\/+/, '');
+          if (u && !lienOk(u)) throw new Error('Adresse invalide : collez l’adresse complète (https://…).');
+          if (u.length > 1000) throw new Error('Adresse trop longue.');
+          await db.modifier('cours', r.id, { lien: u }); r.lien = u; dessinerArbre(); dessinerL();
+        }, { type: 'url', placeholder: 'https://… (coller l’adresse)', classe: 'champ-lien' })
+          : lienOk(r.lien) ? h('a', { href: r.lien, target: '_blank', rel: 'noopener', class: 'adresse-lien' }, r.lien) : h('span', { class: 'gris' }, 'Aucun lien.'),
+        lienOk(r.lien) ? h('a', { class: 'btn petit principal', href: r.lien, target: '_blank', rel: 'noopener' }, '↗ Ouvrir') : null,
+        modif && r.lien ? h('button', { class: 'btn petit', type: 'button', title: 'Retirer le lien', onclick: async () => {
+          try { await db.modifier('cours', r.id, { lien: '' }); r.lien = ''; dessinerArbre(); dessinerL(); toast('Lien retiré'); } catch (e) { erreur(e); }
+        } }, '✖ Retirer') : null));
+    dessinerL();
+    return z;
+  }
 
   // recherche : tous les mots doivent apparaître (titre, sommaire, savoirs et leurs libellés, dossiers)
   const correspond = (r) => {
@@ -232,6 +258,7 @@ export async function pageCours(zone, arg, ctx) {
       h('span', { class: 'nom' }, surligner(titreDe(r), T),
         extraits.length ? h('span', { class: 'extraits' }, extraits.map((l) => h('small', {}, '↳ ', surligner(l.t, T)))) : null),
       !dossier && (r.savoirs || []).length ? h('span', { class: 'codes-mini' }, r.savoirs.slice(0, 2).map((c) => h('i', { title: libSavoir(c) }, c)), r.savoirs.length > 2 ? h('i', { title: r.savoirs.slice(2).join(', ') }, '+' + (r.savoirs.length - 2)) : null) : null,
+      pucheLien(r),
       dossier ? h('span', { class: 'nb-cours', title: 'Nombre de cours dans ce dossier' }, nbCours(r.id)) : null,
       aMoi(r) && estPartage(r) ? h('span', { class: 'marque-partage', title: 'Partagé' }, '👥') : null);
       if (vue === 'mes' && !filtre) glissement(ligne, r);
@@ -341,7 +368,7 @@ export async function pageCours(zone, arg, ctx) {
   async function copier(r, parent, suffixe = '') {
     try {
       const ordre = Math.max(0, ...enfants(parent, moi).map((x) => x.ordre)) + 1;
-      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [] });
+      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [], lien: x.lien || '' });
       const racine = await db.ajouter('cours', { ...champs(r), titre: titreDe(r) + suffixe, parent_id: parent, ordre });
       R.set(racine.id, racine);
       const file = [[r.id, racine.id]];
@@ -588,9 +615,10 @@ export async function pageCours(zone, arg, ctx) {
                 dessinerArbre(); dessinerDetail();
               } }, 'A→Z Classer') : null) : null),
           fils.length ? h('ul', { class: 'liste-contenu' }, fils.map((f) => h('li', {}, h('button', { class: 'lien', type: 'button', onclick: () => choisir(f.id) },
-            h('span', {}, f.type === 'dossier' ? '📁 ' : '📘 '), h('b', {}, titreDe(f)),
+            h('span', {}, f.type === 'dossier' ? '📁 ' : '📘 '), h('b', {}, titreDe(f)), lienOk(f.lien) ? ' 🔗' : '',
             f.type === 'dossier' ? h('small', {}, ` · ${nbCours(f.id)} cours`) : h('small', {}, ` · ${lignesSommaire(f.sommaire).length} titre(s)${(f.savoirs || []).length ? ' · ' + f.savoirs.join(' ') : ''}`)))))
-            : h('p', { class: 'vide' }, 'Dossier vide.')));
+            : h('p', { class: 'vide' }, 'Dossier vide.')),
+        modif || lienOk(r.lien) ? carteLien(r, modif) : null);
       return;
     }
 
@@ -645,6 +673,7 @@ export async function pageCours(zone, arg, ctx) {
         h('div', { class: modif ? 'sommaire-double' : 'sommaire-seul' }, modif ? h('div', { class: 'col-saisie' }, h('small', { class: 'lib-col' }, 'Saisie'), saisie) : null,
           h('div', { class: 'col-apercu' }, modif ? h('small', { class: 'lib-col' }, 'Aperçu') : null, apercu))),
       h('div', { class: 'carte-detail' }, h('h3', {}, 'Savoirs associés'), zoneSavoirs),
+      modif || lienOk(r.lien) ? carteLien(r, modif) : null,
       h('p', { class: 'dates-cours' }, `Créé le ${dateHeure(r.cree_le)} · modifié le ${dateHeure(r.maj_le)}`));
     if (saisie) requestAnimationFrame(() => ajuster(saisie));
   }
@@ -729,14 +758,14 @@ ${listeSavoirs(ref)}`,
       vider(boite, base.flatMap((r) => ligne(r, 0)));
     };
     dessiner();
-    const optSommaire = h('input', { type: 'checkbox', checked: true }), optSavoirs = h('input', { type: 'checkbox', checked: true });
+    const optSommaire = h('input', { type: 'checkbox', checked: true }), optSavoirs = h('input', { type: 'checkbox', checked: true }), optLiens = h('input', { type: 'checkbox', checked: true });
     const mode = await fenetre('PDF / impression de mes cours', h('div', { class: 'dialogue-pdf-cours' },
       h('div', { class: 'boutons-detail' },
         h('button', { class: 'btn petit', type: 'button', onclick: () => { base.forEach((r) => tousDe(r).forEach((x) => coches.add(x.id))); dessiner(); } }, 'Tout cocher'),
         h('button', { class: 'btn petit', type: 'button', onclick: () => { coches.clear(); dessiner(); } }, 'Tout décocher')),
       boite,
       h('div', { class: 'options-pdf' }, h('b', {}, 'Contenu : '),
-        h('label', { class: 'case' }, optSommaire, ' sommaires détaillés'), h('label', { class: 'case' }, optSavoirs, ' savoirs associés')),
+        h('label', { class: 'case' }, optSommaire, ' sommaires détaillés'), h('label', { class: 'case' }, optSavoirs, ' savoirs associés'), h('label', { class: 'case' }, optLiens, ' liens internet')),
       h('p', { class: 'aide' }, 'Sans les sommaires détaillés, le PDF est une liste des cours sous forme de tableau.')),
     [{ texte: 'Annuler', valeur: null }, { texte: '🖶  Imprimer', valeur: 'imprimer' }, { texte: '⬇  Télécharger le PDF', classe: 'principal', valeur: 'pdf' }], { large: true });
     if (!mode) return;
@@ -745,7 +774,7 @@ ${listeSavoirs(ref)}`,
     parcourir(base);
     const lesCours = choisis.filter((r) => r.type === 'cours');
     if (!lesCours.length) { toast('Aucun cours coché', 'erreur'); return; }
-    envoyerPDF(documentPDF(lesCours, { sommaire: optSommaire.checked, savoirs: optSavoirs.checked }, depuis ? R.get(depuis) : null), mode);
+    envoyerPDF(documentPDF(lesCours, { sommaire: optSommaire.checked, savoirs: optSavoirs.checked, liens: optLiens.checked }, depuis ? R.get(depuis) : null), mode);
   }
   function documentPDF(lesCours, opt, depuis) {
     const proprios = [...new Set(lesCours.map((r) => r.proprietaire))];
@@ -765,20 +794,22 @@ ${listeSavoirs(ref)}`,
       if (g !== grp) { grp = g; lignes.push({ groupe: g }); }
       const cell = [titreDe(r)];
       if (opt.savoirs) cell.push((r.savoirs || []).join(', '));
+      if (opt.liens) cell.push(lienOk(r.lien) ? r.lien : '');
       if (!opt.sommaire) cell.splice(1, 0, String(lignesSommaire(r.sommaire).length || '—'));
       lignes.push(cell);
     }
     const colonnes = [{ titre: 'Cours', part: 55, gras: true }];
     if (!opt.sommaire) colonnes.push({ titre: 'Titres', part: 9, centre: true });
     if (opt.savoirs) colonnes.push({ titre: 'Savoirs associés', part: 36 });
+    if (opt.liens) colonnes.push({ titre: 'Lien internet', part: 34 });
     blocs.push({ t: 'table', titre: opt.sommaire ? 'Liste des cours' : 'Cours', colonnes, lignes, taille: 8 });
     if (opt.sommaire) {
       let dossier = null;
       for (const r of lesCours) {
         const g = cheminTexte(r);
-        if (g !== dossier) { dossier = g; if (g) blocs.push({ t: 'dossier', texte: g }); }
+        if (g !== dossier) { dossier = g; if (g) { const d = R.get(r.parent_id); blocs.push({ t: 'dossier', texte: g + (opt.liens && d && lienOk(d.lien) ? '\n' + d.lien : '') }); } }
         blocs.push({ t: 'cours', titre: titreDe(r), lignes: lignesSommaire(r.sommaire),
-          savoirs: opt.savoirs ? savTexte(r) : [] });
+          savoirs: opt.savoirs ? savTexte(r) : [], lien: opt.liens && lienOk(r.lien) ? r.lien : '' });
       }
     }
     return { fichier: nomFichier(`Cours_${depuis ? titre : 'ressources'}_${auteur}.pdf`), titre, pied: `Cours ressources · ${auteur} · ${new Date().toLocaleDateString('fr-FR')}`, blocs };
