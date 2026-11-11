@@ -3,7 +3,7 @@ import { db } from '../api.js';
 import { h, vider, fenetre } from '../ui.js';
 
 const CHAMPS = {
-  titre: 'titre', duree: 'durée', objectif_inter: 'objectif intermédiaire', objectifs_ops: 'objectifs opérationnels', cours: 'cours mobilisés',
+  titre: 'titre', duree: 'durée', objectif_inter: 'objectif intermédiaire', objectifs_ops: 'objectifs opérationnels', cours: 'cours mobilisés', cours_lies: 'cours mobilisés (liste)',
   competences: 'compétences', savoirs: 'savoirs', intitule: 'intitulé', objectif: 'objectif principal', numero: 'numéro',
   seance_id: 'séance', texte: 'texte libre', note: 'note', vacances: 'vacances / autres', apprentis: 'apprentis', evenement: 'évènement',
   valeur: 'note', coefficient: 'coefficient', actif: 'critère retiré / remis', phases: 'déroulement', activites: 'activités et tâches',

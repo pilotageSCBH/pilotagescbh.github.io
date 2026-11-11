@@ -79,6 +79,7 @@ export async function pageSequencage(zone, id, ctx) {
   // ------------------------------------------------------------------------------------- séance
   function ligneSeance(s, x, nb) {
     const maj = (col, conv = (v) => v) => (v) => db.modifier('seances', x.id, { [col]: conv(v) });
+    const zSav = codes(x, 'savoirs', ref.savoirs, ref.sav);
     const durees = [{ valeur: '', texte: '—' }, ...ref.durees.map((d) => ({ valeur: d.heures, texte: heures(Number(d.heures)) }))];
     if (x.duree != null && !ref.durees.some((d) => Number(d.heures) === Number(x.duree))) durees.push({ valeur: x.duree, texte: heures(Number(x.duree)) });
     const tr = h('tr', { 'data-id': x.id },
@@ -95,9 +96,9 @@ export async function pageSequencage(zone, id, ctx) {
       h('td', {}, champ(x.objectif_inter, maj('objectif_inter'), { multi: true, lecture: !modif })),
       h('td', {}, champ(x.objectifs_ops, maj('objectifs_ops'), { multi: true, lecture: !modif, placeholder: '- un objectif par ligne' }),
         modif ? h('button', { class: 'lien petit', onclick: (e) => choisirTaches(x, e.target.closest('td').querySelector('textarea')) }, '＋ depuis les tâches') : null),
-      h('td', {}, champ(x.cours, maj('cours'), { multi: true, lecture: !modif })),
+      celluleCours(x, maj, () => zSav.maj()),
       h('td', {}, codes(x, 'competences', ref.competences, ref.comp)),
-      h('td', {}, codes(x, 'savoirs', ref.savoirs, ref.sav)));
+      h('td', {}, zSav));
     if (modif) glisser(tr, s, x);
     return tr;
   }
@@ -105,9 +106,11 @@ export async function pageSequencage(zone, id, ctx) {
   // codes compétences / savoirs : pastilles avec leur libellé, choix dans le référentiel
   function codes(x, col, liste, index) {
     const zoneC = h('div', { class: 'codes' });
+    // savoirs repris d'un cours relié (« Cours mobilisés ») : marqués 📘
+    const viaCours = (c) => (col === 'savoirs' ? (x.cours_lies || []).filter((k) => (k.savoirs || []).includes(c)).map((k) => k.titre) : []);
     const afficher = () => vider(zoneC,
-      (x[col] || []).map((c) => h('div', { class: 'code', title: index[c]?.libelle || 'Code absent du référentiel' },
-        h('b', { class: index[c] ? '' : 'inconnu' }, c), h('span', {}, index[c]?.libelle_court || index[c]?.libelle || ''))),
+      (x[col] || []).map((c) => { const v = viaCours(c); return h('div', { class: 'code' + (v.length ? ' via-cours' : ''), title: (index[c]?.libelle || 'Code absent du référentiel') + (v.length ? `\nRepris du cours : ${v.join(', ')}` : '') },
+        h('b', { class: index[c] ? '' : 'inconnu' }, c), h('span', {}, index[c]?.libelle_court || index[c]?.libelle || ''), v.length ? h('i', { class: 'marque-cours' }, ' 📘') : null); }),
       modif ? h('button', { class: 'lien petit', onclick: choisir }, (x[col] || []).length ? '✎ modifier' : '＋ choisir') : null);
     async function choisir() {
       const choix = new Set(x[col] || []);
@@ -135,7 +138,82 @@ export async function pageSequencage(zone, id, ctx) {
       try { await db.modifier('seances', x.id, { [col]: val }); x[col] = val; afficher(); toast('Enregistré'); } catch (e) { erreur(e); }
     }
     afficher();
+    zoneC.maj = afficher;
     return zoneC;
+  }
+
+  // cours mobilisés : cours cochés dans « Mes cours ressources » (titre + savoirs repris) et saisie libre
+  function celluleCours(x, maj, apres) {
+    const td = h('td', { class: 'cell-cours' });
+    const dessinerC = () => vider(td,
+      (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('a', { class: 'cours-lie', href: '#/cours/' + c.id,
+        title: 'Cours ressource' + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, '📘 ', c.titre || 'Cours sans titre'))) : null,
+      champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
+      modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
+    dessinerC();
+    return td;
+  }
+  async function choisirCours(x, apres) {
+    let rows, collegues = [];
+    try { [rows, collegues] = await Promise.all([db.lire('cours', 'order=ordre,id'), db.rpc('collegues').catch(() => [])]); }
+    catch { erreur(new Error('« Mes cours ressources » n’est pas encore installé : l’administrateur doit exécuter le script SQL 23.')); return; }
+    const R = new Map(rows.map((r) => [r.id, r]));
+    const anciens = x.cours_lies || [];
+    const choix = new Set(anciens.map((c) => c.id));
+    const moi = ctx.profil.id;
+    const nomDe = (u) => collegues.find((c) => c.id === u)?.nom || 'Un collègue';
+    const chemin = (r) => { const l = []; let p = R.get(r.parent_id); let n = 0; while (p && n++ < 50) { l.unshift(p.titre || 'Dossier'); p = R.get(p.parent_id); } return l.join(' › '); };
+    // ordre de l'arborescence (dossiers dans l'ordre, puis leur contenu)
+    const ordre = [];
+    const parcourir = (parent, proprio) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio)
+      .forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, proprio); });
+    const proprios = [moi, ...new Set(rows.filter((r) => r.proprietaire !== moi).map((r) => r.proprietaire))];
+    for (const u of proprios) { parcourir(null, u); rows.filter((r) => r.proprietaire === u && r.parent_id && !R.has(r.parent_id)).forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, u); }); }
+    const disparus = anciens.filter((c) => !R.has(c.id));
+    const rech = h('input', { class: 'champ', placeholder: 'Rechercher un cours (titre, savoir)…' });
+    const corps = h('div', { class: 'liste-choix' });
+    const sans = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const remplir = () => {
+      const q = sans(rech.value).split(/\s+/).filter(Boolean);
+      let grp = null;
+      const ok = (r) => !q.length || q.every((m) => sans(r.titre + ' ' + (r.savoirs || []).join(' ') + ' ' + chemin(r)).includes(m));
+      vider(corps, ordre.filter(ok).flatMap((r) => {
+        const out = [];
+        const g = (r.proprietaire === moi ? 'Mes cours' : 'Partagés par ' + nomDe(r.proprietaire)) + (chemin(r) ? ' · ' + chemin(r) : '');
+        if (g !== grp) { grp = g; out.push(h('div', { class: 'groupe' }, g)); }
+        out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.id), onchange: (e) => (e.target.checked ? choix.add(r.id) : choix.delete(r.id)) }),
+          '📘 ', h('b', {}, r.titre || 'Cours sans titre'), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
+        return out;
+      }), disparus.length ? [h('div', { class: 'groupe' }, 'Cours plus disponibles (supprimés ou plus partagés)'),
+        disparus.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(c.id), onchange: (e) => (e.target.checked ? choix.add(c.id) : choix.delete(c.id)) }), '📘 ', h('b', {}, c.titre)))] : null,
+      !ordre.length ? h('p', { class: 'vide' }, 'Aucun cours renseigné : ajoutez vos cours dans « Documents professeurs → Mes cours ressources ».') : null);
+    };
+    rech.addEventListener('input', remplir); remplir();
+    const ok = await fenetre(`Cours mobilisés · séance ${x.titre || ''}`, h('div', {},
+      h('p', { class: 'aide' }, 'Cochez les cours de « Mes cours ressources » (les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
+      rech, corps), [{ texte: 'Annuler', valeur: false }, { texte: 'Valider', classe: 'principal', valeur: true }], { large: true });
+    if (!ok) return;
+    const savDe = (id) => R.get(id)?.savoirs || anciens.find((c) => c.id === id)?.savoirs || [];
+    let sav = [...(x.savoirs || [])];
+    // cours décochés : on retire les savoirs qu'ils avaient ajoutés (sauf s'ils viennent aussi d'un cours encore coché)
+    for (const a of anciens) if (!choix.has(a.id)) for (const c of a.ajoutes || []) if (![...choix].some((id) => savDe(id).includes(c))) sav = sav.filter((y) => y !== c);
+    const auto = new Set(anciens.flatMap((c) => c.ajoutes || []));      // savoirs déjà apportés par des cours
+    const ids = [...ordre.map((r) => r.id), ...disparus.map((c) => c.id)].filter((id) => choix.has(id));
+    const lies = ids.map((id) => {
+      const r = R.get(id), a = anciens.find((c) => c.id === id);
+      const savoirs = r ? (r.savoirs || []) : (a?.savoirs || []);
+      const ajoutes = savoirs.filter((c) => auto.has(c) && sav.includes(c));
+      for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
+      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes };
+    });
+    const rang = ref.savoirs.map((y) => y.code);
+    sav.sort((a, b) => rang.indexOf(a) - rang.indexOf(b));
+    try {
+      await db.modifier('seances', x.id, { cours_lies: lies, savoirs: sav });
+      x.cours_lies = lies; x.savoirs = sav;
+      toast(lies.length ? `${lies.length} cours relié(s) · savoirs mis à jour` : 'Cours retirés');
+      apres();
+    } catch (e) { erreur(e); }
   }
 
   // prérequis : séances de la promotion (toutes matières) à faire avant celle-ci

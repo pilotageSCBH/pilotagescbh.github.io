@@ -1692,3 +1692,12 @@ th.eleve.hors span { opacity: .55; }
 .table-import td.erreur { color: var(--rouge); }
 .options-pdf { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 10px; font-size: 13px; }
 .options-pdf label.case { display: flex; }
+
+/* séquençage : cours mobilisés reliés aux cours ressources */
+.cell-cours .cours-lies { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.cours-lie { display: block; font-size: 12px; font-weight: 600; color: var(--fonce); background: var(--clair); border-left: 3px solid var(--teal); border-radius: 4px; padding: 2px 6px; text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
+.cours-lie:hover { background: #D3EBE7; }
+.cell-cours .lien.petit { margin-top: 2px; }
+.code.via-cours b { background: #DCEFD6; color: #2E6B1F; }
+.code .marque-cours { font-style: normal; font-size: 10px; }
+@media print { .cours-lie { background: none; border: 0; padding: 0; } }

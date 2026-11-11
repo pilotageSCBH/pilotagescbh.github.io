@@ -119,6 +119,8 @@ export const nombre = (v) => {
   const n = parseFloat(String(v ?? '').replace(',', '.'));
   return Number.isFinite(n) ? n : null;
 };
+// cours mobilisés d'une séance : cours reliés (« Mes cours ressources ») puis saisie libre
+export const coursMobilises = (x) => [...(x?.cours_lies || []).map((c) => c.titre), x?.cours].filter((t) => t && String(t).trim()).join('\n');
 export const heures = (n) => (n == null ? '' : (Number.isInteger(n) ? n : String(n).replace('.', ',')) + ' h');
 export const dateFr = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('fr-FR') : '');
 

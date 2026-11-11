@@ -1,5 +1,5 @@
 // Mes cours ressources : espace personnel de chaque enseignant.
-// Arborescence de dossiers et de cours ; pour chaque cours : sommaire détaillé, savoirs associés, mots-clés, lien.
+// Arborescence de dossiers et de cours ; pour chaque cours : titre, sommaire détaillé, savoirs associés (aucun fichier n'est stocké).
 // Privé par défaut ; un dossier ou un cours se partage (en consultation) avec des collègues ou toute l'équipe.
 // #/cours : mes cours · #/cours/partages : cours partagés avec moi · #/cours/ID : un élément ouvert
 import { db } from '../api.js';
@@ -142,11 +142,11 @@ export async function pageCours(zone, arg, ctx) {
   const nbCours = (id) => descendants(id).filter((x) => x.type === 'cours').length;
   const libSavoir = (c) => ref.sav[c]?.libelle || 'code absent du référentiel';
 
-  // recherche : tous les mots doivent apparaître (titre, sommaire, mots-clés, savoirs et leurs libellés, dossiers)
+  // recherche : tous les mots doivent apparaître (titre, sommaire, savoirs et leurs libellés, dossiers)
   const correspond = (r) => {
     if (savoirFiltre && !(r.savoirs || []).includes(savoirFiltre)) return false;
     const T = termesDe(q); if (!T.length) return true;
-    const texte = sansAccent([r.titre, r.sommaire, r.mots_cles, ...(r.savoirs || []).map((c) => c + ' ' + libSavoir(c)), ...chemin(r).map((d) => d.titre)].join(' '));
+    const texte = sansAccent([r.titre, r.sommaire, ...(r.savoirs || []).map((c) => c + ' ' + libSavoir(c)), ...chemin(r).map((d) => d.titre)].join(' '));
     return T.every((t) => texte.includes(t));
   };
   const filtreActif = () => !!(termesDe(q).length || savoirFiltre);
@@ -155,7 +155,7 @@ export async function pageCours(zone, arg, ctx) {
   const zoneArbre = h('div', { class: 'arbre-cours' });
   const zoneDetail = h('section', { class: 'detail-cours' });
   const compteur = h('span', { class: 'compte-recherche' });
-  const recherche = h('input', { class: 'champ recherche-cours', type: 'search', placeholder: 'Rechercher un cours : titre, mot du sommaire, mot-clé, savoir (S11-1…)…', 'aria-label': 'Rechercher un cours',
+  const recherche = h('input', { class: 'champ recherche-cours', type: 'search', placeholder: 'Rechercher un cours : titre, mot du sommaire, savoir (S11-1…)…', 'aria-label': 'Rechercher un cours',
     oninput: () => { q = recherche.value; dessinerArbre(); } });
   const choixSavoir = h('select', { class: 'champ filtre-savoir', 'aria-label': 'Filtrer par savoir associé', onchange: () => { savoirFiltre = choixSavoir.value; dessinerArbre(); } });
   const onglets = h('div', { class: 'onglets onglets-cours' });
@@ -187,7 +187,7 @@ export async function pageCours(zone, arg, ctx) {
       h('div', { class: 'actions-page' },
         h('button', { class: 'btn', onclick: () => nouveau('dossier') }, '📁  Nouveau dossier'),
         h('button', { class: 'btn principal', onclick: () => nouveau('cours') }, '＋  Nouveau cours'),
-        h('button', { class: 'btn', title: 'Créer des cours à partir de fichiers Word : le sommaire est repris des titres du document', onclick: () => importerWord() }, '📄  Importer des cours Word'),
+        h('button', { class: 'btn', title: 'Créer des cours en reprenant le titre et les titres (sommaire) de fichiers Word : le fichier lui-même n’est pas copié', onclick: () => importerWord() }, '📄  Sommaires depuis Word'),
         h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'))),
     onglets,
     h('div', { class: 'barre-cours' }, recherche, choixSavoir, compteur,
@@ -339,7 +339,7 @@ export async function pageCours(zone, arg, ctx) {
   async function copier(r, parent, suffixe = '') {
     try {
       const ordre = Math.max(0, ...enfants(parent, moi).map((x) => x.ordre)) + 1;
-      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [], mots_cles: x.mots_cles, lien: x.lien });
+      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [] });
       const racine = await db.ajouter('cours', { ...champs(r), titre: titreDe(r) + suffixe, parent_id: parent, ordre });
       R.set(racine.id, racine);
       const file = [[r.id, racine.id]];
@@ -443,12 +443,12 @@ export async function pageCours(zone, arg, ctx) {
           h('td', {}, x.savoirs.join(', ') || '—')]))) : h('p', { class: 'aide' }, 'Aucun fichier choisi.'));
     };
     fichiers.addEventListener('change', lire); niveaux.addEventListener('change', lire); numeroter.addEventListener('change', lire);
-    const ok = await fenetre('Importer des cours Word', h('div', { class: 'import-word' },
-      h('p', { class: 'aide' }, 'Chaque fichier Word (.docx) devient un cours : son titre est repris du document (ou du nom du fichier), son sommaire détaillé des titres (styles « Titre 1 », « Titre 2 »…), et les codes des savoirs du référentiel cités dans le texte (S11-1…) sont cochés automatiquement. Le fichier est lu sur votre ordinateur : il n’est pas envoyé sur le site.'),
+    const ok = await fenetre('Créer des cours à partir de fichiers Word', h('div', { class: 'import-word' },
+      h('p', { class: 'aide' }, 'Pour chaque fichier Word (.docx), seuls trois éléments sont repris : le titre du cours (ou le nom du fichier), son sommaire (les titres « Titre 1 », « Titre 2 »… du document) et les codes des savoirs du référentiel cités dans le texte (S11-1…). Le contenu du cours et le fichier lui-même ne sont ni copiés ni envoyés sur le site : le fichier est seulement lu sur votre ordinateur.'),
       h('div', { class: 'formulaire' }, h('label', { class: 'large' }, 'Fichiers Word', fichiers), h('label', {}, 'Sommaire', niveaux),
         h('label', { class: 'case' }, numeroter, ' Numéroter les titres (1., 1.1, 1.1.1)')),
       apercu, h('p', { class: 'sous-titre-choix' }, 'Ranger les cours dans :'), dest.el),
-    [{ texte: 'Annuler', valeur: false }, { texte: '＋  Créer les cours', classe: 'principal', action: () => {
+    [{ texte: 'Annuler', valeur: false }, { texte: '＋  Créer les cours (titre, sommaire, savoirs)', classe: 'principal', action: () => {
       if (!lus.some((x) => !x.erreur)) throw new Error('Choisissez au moins un fichier Word lisible.');
       return true;
     } }], { large: true });
@@ -479,7 +479,7 @@ export async function pageCours(zone, arg, ctx) {
     if (!r) return accueilDetail();
     const modif = aMoi(r);
     const T = termesDe(q);
-    const enr = (col) => async (v) => { await db.modifier('cours', r.id, { [col]: v }); r[col] = v; r.maj_le = new Date().toISOString(); if (col === 'titre' || col === 'sommaire' || col === 'mots_cles') dessinerArbre(); };
+    const enr = (col) => async (v) => { await db.modifier('cours', r.id, { [col]: v }); r[col] = v; r.maj_le = new Date().toISOString(); if (col === 'titre' || col === 'sommaire') dessinerArbre(); };
     const partage = modif ? (r.partage_tous ? 'toute l’équipe' : partagesDe(r.id).map((p) => nomDe(p.destinataire)).join(', ')) : '';
     const herite = modif ? partageHerite(r) : null;
     const boutons = modif ? [
@@ -494,7 +494,7 @@ export async function pageCours(zone, arg, ctx) {
         h('button', { class: 'btn petit', onclick: () => dialoguePDF(r.id) }, '⬇ PDF')];
     const tete = h('div', { class: 'tete-detail' }, filAriane(r),
       h('div', { class: 'ligne-titre' }, h('span', { class: 'ic-grand' }, r.type === 'dossier' ? '📁' : '📘'),
-        modif ? champ(r.titre, enr('titre'), { classe: 'titre-cours', placeholder: r.type === 'dossier' ? 'Nom du dossier' : 'Titre du cours' }) : h('h2', { class: 'titre-cours' }, surligner(titreDe(r), T))),
+        modif ? Object.assign(champ(r.titre, enr('titre'), { classe: 'titre-cours', placeholder: r.type === 'dossier' ? 'Nom du dossier' : 'Titre du cours' }), { maxLength: 300 }) : h('h2', { class: 'titre-cours' }, surligner(titreDe(r), T))),
       h('div', { class: 'boutons-detail' }, boutons),
       modif && (partage || herite) ? h('p', { class: 'info-partage' }, '👥 ', partage ? `Partagé avec ${partage}` : '', partage && herite ? ' · ' : '', herite ? `partagé avec le dossier « ${titreDe(herite)} »` : '')
         : !modif ? h('p', { class: 'info-partage' }, `👤 Partagé par ${nomDe(r.proprietaire)} · consultation seule`) : null);
@@ -507,7 +507,7 @@ export async function pageCours(zone, arg, ctx) {
             modif ? h('div', { class: 'boutons-detail' },
               h('button', { class: 'btn petit principal', onclick: () => nouveau('cours', r.id) }, '＋ Cours'),
               h('button', { class: 'btn petit', onclick: () => nouveau('dossier', r.id) }, '📁 Sous-dossier'),
-              h('button', { class: 'btn petit', onclick: () => importerWord(r.id) }, '📄 Importer des Word ici'),
+              h('button', { class: 'btn petit', onclick: () => importerWord(r.id) }, '📄 Sommaires depuis Word'),
               fils.length > 1 ? h('button', { class: 'btn petit', title: 'Classer le contenu par ordre alphabétique (K2 avant K10)', onclick: async () => {
                 try { await renumeroter([...fils].sort((a, b) => compareTitres(titreDe(a), titreDe(b)))); toast('Classé de A à Z'); } catch (e) { erreur(e); }
                 dessinerArbre(); dessinerDetail();
@@ -524,6 +524,7 @@ export async function pageCours(zone, arg, ctx) {
     let saisie = null;
     if (modif) {
       saisie = champ(r.sommaire, async (v) => { await enr('sommaire')(v); }, { multi: true, classe: 'saisie-sommaire', placeholder: '1. Premier titre\n  1.1 Sous-titre\n  1.2 Sous-titre\n2. Deuxième titre\n…' });
+      saisie.maxLength = 20000;
       saisie.addEventListener('input', () => vider(apercu, apercuSommaire(saisie.value, T)));
       // Tab / Maj+Tab : décaler les lignes sélectionnées d'un niveau
       saisie.addEventListener('keydown', (e) => {
@@ -544,7 +545,6 @@ export async function pageCours(zone, arg, ctx) {
         : h('p', { class: 'vide-sommaire' }, 'Aucun savoir associé.'),
       modif ? h('button', { class: 'lien petit', type: 'button', onclick: () => choisirSavoirs(r, dessinerSavoirs) }, (r.savoirs || []).length ? '✎ modifier' : '＋ choisir dans le référentiel') : null);
     dessinerSavoirs();
-    const lienOk = /^https?:\/\//i.test(r.lien || '');
     vider(zoneDetail, tete,
       h('div', { class: 'carte-detail' },
         h('div', { class: 'entete-bloc' }, h('h3', {}, 'Sommaire détaillé'),
@@ -569,11 +569,6 @@ export async function pageCours(zone, arg, ctx) {
         h('div', { class: modif ? 'sommaire-double' : 'sommaire-seul' }, modif ? h('div', { class: 'col-saisie' }, h('small', { class: 'lib-col' }, 'Saisie'), saisie) : null,
           h('div', { class: 'col-apercu' }, modif ? h('small', { class: 'lib-col' }, 'Aperçu') : null, apercu))),
       h('div', { class: 'carte-detail' }, h('h3', {}, 'Savoirs associés'), zoneSavoirs),
-      h('div', { class: 'carte-detail grille-champs' },
-        h('label', {}, h('span', { class: 'lib' }, 'Mots-clés'), modif ? champ(r.mots_cles, enr('mots_cles'), { placeholder: 'ex. prévention, machines, EPI, consignation' }) : h('span', {}, surligner(r.mots_cles || '—', T))),
-        h('label', {}, h('span', { class: 'lib' }, 'Lien vers le cours'),
-          h('span', { class: 'ligne-lien' }, modif ? champ(r.lien, async (v) => { await enr('lien')(v.trim()); dessinerDetail(); }, { placeholder: 'https://… (Nuage, ENT, site…)' }) : h('span', {}, r.lien || '—'),
-            lienOk ? h('a', { class: 'btn petit', href: r.lien, target: '_blank', rel: 'noopener' }, '↗ Ouvrir') : null))),
       h('p', { class: 'dates-cours' }, `Créé le ${dateHeure(r.cree_le)} · modifié le ${dateHeure(r.maj_le)}`));
     if (saisie) requestAnimationFrame(() => ajuster(saisie));
   }
@@ -588,9 +583,10 @@ export async function pageCours(zone, arg, ctx) {
         h('div', { title: 'Savoirs du référentiel associés à au moins un cours' }, h('b', {}, `${sav.size} / ${ref.savoirs.length}`), h('span', {}, 'savoirs associés'))),
       vue === 'mes' ? h('ul', { class: 'conseils-cours' },
         h('li', {}, h('b', {}, 'Ranger : '), 'créez des dossiers et sous-dossiers, puis glissez-déposez les cours (ou bouton « ⇄ Déplacer »).'),
-        h('li', {}, h('b', {}, 'Remplir vite : '), '« 📄 Importer des cours Word » crée un cours par fichier avec son sommaire et les savoirs cités.'),
-        h('li', {}, h('b', {}, 'Retrouver : '), 'la recherche porte sur les titres, les sommaires, les mots-clés et les savoirs ; la liste « savoirs associés » montre tous les cours d’un savoir.'),
+        h('li', {}, h('b', {}, 'Remplir vite : '), '« 📄 Sommaires depuis Word » crée un cours par fichier en reprenant seulement son titre, son sommaire et les savoirs cités (le fichier n’est pas copié).'),
+        h('li', {}, h('b', {}, 'Retrouver : '), 'la recherche porte sur les titres, les sommaires et les savoirs ; la liste « savoirs associés » montre tous les cours d’un savoir.'),
         h('li', {}, h('b', {}, 'Partager : '), 'ouvrez un dossier ou un cours puis « 👥 Partager » : vos collègues le consultent, l’impriment ou le copient, sans pouvoir le modifier.'),
+        h('li', {}, h('b', {}, 'Séquençage : '), 'dans « Cours mobilisés », « ＋ depuis mes cours » coche vos cours : leurs savoirs associés s’ajoutent à la séance.'),
         h('li', {}, h('b', {}, 'Imprimer : '), '« ⬇ PDF / Imprimer » : cochez tout ou partie de vos cours, avec ou sans les sommaires.'))
         : h('p', { class: 'aide' }, 'Cours et dossiers que vos collègues ont partagés avec vous, en consultation. « ⧉ Copier dans mes cours » en fait une copie modifiable dans votre espace.')));
   }
@@ -616,14 +612,14 @@ export async function pageCours(zone, arg, ctx) {
       vider(boite, base.flatMap((r) => ligne(r, 0)));
     };
     dessiner();
-    const optSommaire = h('input', { type: 'checkbox', checked: true }), optSavoirs = h('input', { type: 'checkbox', checked: true }), optInfos = h('input', { type: 'checkbox', checked: true });
+    const optSommaire = h('input', { type: 'checkbox', checked: true }), optSavoirs = h('input', { type: 'checkbox', checked: true });
     const mode = await fenetre('PDF / impression de mes cours', h('div', { class: 'dialogue-pdf-cours' },
       h('div', { class: 'boutons-detail' },
         h('button', { class: 'btn petit', type: 'button', onclick: () => { base.forEach((r) => tousDe(r).forEach((x) => coches.add(x.id))); dessiner(); } }, 'Tout cocher'),
         h('button', { class: 'btn petit', type: 'button', onclick: () => { coches.clear(); dessiner(); } }, 'Tout décocher')),
       boite,
       h('div', { class: 'options-pdf' }, h('b', {}, 'Contenu : '),
-        h('label', { class: 'case' }, optSommaire, ' sommaires détaillés'), h('label', { class: 'case' }, optSavoirs, ' savoirs associés'), h('label', { class: 'case' }, optInfos, ' mots-clés et liens')),
+        h('label', { class: 'case' }, optSommaire, ' sommaires détaillés'), h('label', { class: 'case' }, optSavoirs, ' savoirs associés')),
       h('p', { class: 'aide' }, 'Sans les sommaires détaillés, le PDF est une liste des cours sous forme de tableau.')),
     [{ texte: 'Annuler', valeur: null }, { texte: '🖶  Imprimer', valeur: 'imprimer' }, { texte: '⬇  Télécharger le PDF', classe: 'principal', valeur: 'pdf' }], { large: true });
     if (!mode) return;
@@ -632,7 +628,7 @@ export async function pageCours(zone, arg, ctx) {
     parcourir(base);
     const lesCours = choisis.filter((r) => r.type === 'cours');
     if (!lesCours.length) { toast('Aucun cours coché', 'erreur'); return; }
-    envoyerPDF(documentPDF(lesCours, { sommaire: optSommaire.checked, savoirs: optSavoirs.checked, infos: optInfos.checked }, depuis ? R.get(depuis) : null), mode);
+    envoyerPDF(documentPDF(lesCours, { sommaire: optSommaire.checked, savoirs: optSavoirs.checked }, depuis ? R.get(depuis) : null), mode);
   }
   function documentPDF(lesCours, opt, depuis) {
     const proprios = [...new Set(lesCours.map((r) => r.proprietaire))];
@@ -652,14 +648,12 @@ export async function pageCours(zone, arg, ctx) {
       if (g !== grp) { grp = g; lignes.push({ groupe: g }); }
       const cell = [titreDe(r)];
       if (opt.savoirs) cell.push((r.savoirs || []).join(', '));
-      if (opt.infos) cell.push([r.mots_cles, r.lien].filter(Boolean).join('\n'));
       if (!opt.sommaire) cell.splice(1, 0, String(lignesSommaire(r.sommaire).length || '—'));
       lignes.push(cell);
     }
-    const colonnes = [{ titre: 'Cours', part: 40, gras: true }];
+    const colonnes = [{ titre: 'Cours', part: 55, gras: true }];
     if (!opt.sommaire) colonnes.push({ titre: 'Titres', part: 9, centre: true });
-    if (opt.savoirs) colonnes.push({ titre: 'Savoirs associés', part: 25 });
-    if (opt.infos) colonnes.push({ titre: 'Mots-clés · lien', part: 30 });
+    if (opt.savoirs) colonnes.push({ titre: 'Savoirs associés', part: 36 });
     blocs.push({ t: 'table', titre: opt.sommaire ? 'Liste des cours' : 'Cours', colonnes, lignes, taille: 8 });
     if (opt.sommaire) {
       let dossier = null;
@@ -667,7 +661,7 @@ export async function pageCours(zone, arg, ctx) {
         const g = cheminTexte(r);
         if (g !== dossier) { dossier = g; if (g) blocs.push({ t: 'dossier', texte: g }); }
         blocs.push({ t: 'cours', titre: titreDe(r), lignes: lignesSommaire(r.sommaire),
-          savoirs: opt.savoirs ? savTexte(r) : [], motsCles: opt.infos ? r.mots_cles : '', lien: opt.infos ? r.lien : '' });
+          savoirs: opt.savoirs ? savTexte(r) : [] });
       }
     }
     return { fichier: nomFichier(`Cours_${depuis ? titre : 'ressources'}_${auteur}.pdf`), titre, pied: `Cours ressources · ${auteur} · ${new Date().toLocaleDateString('fr-FR')}`, blocs };
