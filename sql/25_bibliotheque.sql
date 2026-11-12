@@ -1,5 +1,5 @@
 -- =====================================================================================================
--- PILOTAGE BTS SCBH  ·  mise à jour 25 : MES RESSOURCES (« Ma bibliothèque » = La bibliothèque du bois, et « Mes cours »)
+-- PILOTAGE BTS SCBH  ·  mise à jour 25 : MES RESSOURCES (« Ma bibliothèque » et « Mes cours »)
 -- Chaque enseignant a sa bibliothèque personnelle : thèmes et sous-thèmes, ouvrages (titre, auteur, éditeur, année,
 -- ISBN, pages, sommaire avec les numéros de page, couverture), fichiers rangés sur son Nuage.
 -- Le site ne stocke aucun fichier : seulement les fiches, le chemin du fichier sur Nuage et de petites images
@@ -77,12 +77,16 @@ alter table public.ressources_reglages add column if not exists format_liens tex
 alter table public.cours add column if not exists genre text not null default 'cours';
 alter table public.cours add column if not exists etiquettes text[] not null default '{}';
 alter table public.cours add column if not exists chemin text not null default '';
+alter table public.cours add column if not exists image text not null default '';   -- image de la tuile d'un dossier (réduite)
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'cours_genre') then
     alter table public.cours add constraint cours_genre check (genre in ('cours', 'exercice', 'tdtp', 'evaluation', 'corrige', 'ressource', 'autre')) not valid;
   end if;
   if not exists (select 1 from pg_constraint where conname = 'cours_taille2') then
     alter table public.cours add constraint cours_taille2 check (length(chemin) <= 1000 and cardinality(etiquettes) <= 50) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'cours_image') then
+    alter table public.cours add constraint cours_image check (length(image) <= 400000) not valid;
   end if;
 end $$;
 

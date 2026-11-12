@@ -1848,3 +1848,11 @@ th.eleve.hors span { opacity: .55; }
 .partage-collegue + .partage-collegue { margin-top: 14px; }
 
 .livre-biblio a.btn, .boutons-fiche a.btn, .tete-theme a.btn { text-decoration: none; }
+
+/* ---- Mes cours, présenté comme Ma bibliothèque */
+.filtres-biblio { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.filtre-biblio { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.92); color: var(--fonce); max-width: 100%; }
+.tranche-doc { font-family: inherit; font-size: 28px; }
+.tranche-doc.couv-grande { font-size: 84px; }
+.etiquette-doc.mini { font-size: 11px; padding: 1px 6px; margin-left: 6px; }
+.arbre-pdf { max-height: 46vh; overflow: auto; }

@@ -54,7 +54,7 @@ export async function dialogueReglages(ctx, apres) {
   const ok = await fenetre('⚙  Mes réglages Nuage', h('div', { class: 'reglages-nuage' },
     h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule) sur le dossier de votre bibliothèque, et un autre sur votre dossier « Mes cours », puis collez-les ici : le site fabrique ensuite l’adresse de chaque fichier à partir de son chemin.'),
     h('label', {}, h('b', {}, '📖 Lien de partage de ma bibliothèque'), lb, etat(lb),
-      h('small', { class: 'gris' }, 'Le dossier qui contient « Livres » et « _systeme » pour La bibliothèque du bois, ou directement vos dossiers de thèmes.')),
+      h('small', { class: 'gris' }, 'Le dossier qui contient vos dossiers de thèmes.')),
     h('label', {}, h('b', {}, '🎓 Lien de partage de « Mes cours »'), lc, etat(lc)),
     h('label', {}, h('b', {}, 'Ouverture des fichiers'), fmt,
       h('small', { class: 'gris' }, 'Si un fichier ne s’ouvre pas, essayez l’autre réglage (bouton « Tester » dans la bibliothèque).')),

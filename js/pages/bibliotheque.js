@@ -1,4 +1,4 @@
-// Ma bibliothèque : « La bibliothèque du bois » dans le site. Bibliothèque personnelle de chaque enseignant :
+// Ma bibliothèque : bibliothèque personnelle de chaque enseignant :
 // thèmes et sous-thèmes (tuiles), ouvrages (fiche, couverture, sommaire avec les pages), recherche dans les sommaires.
 // Les fichiers restent sur le Nuage de l'enseignant ; un ouvrage ou un thème peut être partagé avec des collègues.
 // #/biblio : accueil · #/biblio/t-ID : un thème · #/biblio/l-ID : un ouvrage · #/biblio/partages : partagés avec moi
@@ -124,11 +124,9 @@ export async function pageBibliotheque(zone, arg, ctx) {
     if (!racines.length && !nonClasses.length) return h('div', { class: 'carte-detail accueil-cours' },
       h('h2', {}, '📖 Votre bibliothèque est vide'),
       h('ul', { class: 'conseils-cours' },
-        h('li', {}, h('b', {}, 'Vous avez La bibliothèque du bois : '), h('button', { class: 'btn principal petit', onclick: importer }, '📥 Importer La bibliothèque du bois'), ' (thèmes, ouvrages, sommaires et couvertures repris tels quels).'),
-        h('li', {}, h('b', {}, 'Sinon : '), 'rangez vos fichiers sur Nuage dans un dossier « Bibliothèque » avec un sous-dossier par thème, puis « ↻ Mettre à jour depuis mon dossier » (le dossier synchronisé sur votre ordinateur) : le site crée les thèmes et les fiches.'),
+        h('li', {}, h('b', {}, 'Depuis Nuage : '), 'rangez vos fichiers sur Nuage dans un dossier « Bibliothèque » avec un sous-dossier par thème, puis « ↻ Mettre à jour depuis mon dossier » (le dossier synchronisé sur votre ordinateur) : le site crée les thèmes et les fiches.'),
         h('li', {}, h('b', {}, 'Ou à la main : '), '« ✎ Gérer » → « ＋ Nouveau thème », puis « ＋ Ajouter des livres ».')));
-    return h('div', {}, modif ? h('p', { class: 'aide' }, 'Mode gestion : glissez une tuile pour changer sa place ; ✎ modifie un thème (nom, dossier Nuage, image).',
-      ' ', h('button', { class: 'lien petit', type: 'button', onclick: importer }, '📥 Importer La bibliothèque du bois')) : null,
+    return h('div', {}, modif ? h('p', { class: 'aide' }, 'Mode gestion : glissez une tuile pour changer sa place ; ✎ modifie un thème (nom, dossier Nuage, image).') : null,
     tuiles(racines, null),
     nonClasses.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Non classés'), listeLivres(nonClasses)) : null);
   }
@@ -426,7 +424,7 @@ export async function pageBibliotheque(zone, arg, ctx) {
     const racineChoisie = String(tous[0].webkitRelativePath || '').split('/')[0];
     const prefixe = racineChoisie === 'Livres' && mesLivres.some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
     let fichiers = tous.map((f) => ({ f, c: prefixe + cheminRelatif(f) })).filter((x) => x.c && !ignore(x.c));
-    // La bibliothèque du bois : les livres sont dans « Livres » ; les images de tuiles « illustration.* » ne sont pas des livres
+    // les images de tuiles « illustration.* » ne sont pas des livres
     const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [x.c.split('/').slice(0, -1).join('/'), x.f]));
     fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini)$/i.test(x.c));
     const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.map((t) => [t.dossier.normalize('NFC'), t]));
@@ -461,57 +459,6 @@ export async function pageBibliotheque(zone, arg, ctx) {
       if (retirer.checked) for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); }
     } catch (e) { erreur(e); }
     await creerFiches(nouveaux.map((x) => ({ f: x.f, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);
-  }
-
-  // ------------------------------------------------------------------ import de « La bibliothèque du bois » (_systeme/donnees.js)
-  async function importer() {
-    const fDonnees = h('input', { type: 'file', accept: '.js,.json' });
-    let dossier = [];
-    const etatDossier = h('small', { class: 'gris' }, 'aucun dossier choisi');
-    const ok = await fenetre('📥 Importer La bibliothèque du bois', h('div', { class: 'formulaire' },
-      h('p', { class: 'aide' }, 'Thèmes, sous-thèmes, ouvrages, sommaires (avec les pages) et réglages de votre bibliothèque actuelle sont repris tels quels. Rien n’est envoyé : les fichiers sont seulement lus sur votre ordinateur.'),
-      h('label', { class: 'large' }, '1. Le fichier « donnees.js » (dans le dossier « _systeme » de la bibliothèque)', fDonnees),
-      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, '2. Facultatif, pour les images : le dossier de la bibliothèque (celui qui contient « Livres » et « _systeme »)'),
-        h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: async () => { dossier = await choisirDossier(); etatDossier.textContent = dossier.length ? `${dossier.length} fichiers` : 'aucun dossier choisi'; } }, 'Choisir le dossier'), etatDossier),
-        h('small', { class: 'gris' }, 'Sans le dossier, les couvertures et les images des tuiles ne sont pas reprises (veinage bois et tranches de couleur à la place).'))),
-    [{ texte: 'Annuler', valeur: false }, { texte: '📥 Importer', classe: 'principal', action: () => { if (!fDonnees.files.length) throw new Error('Choisissez le fichier donnees.js.'); return true; } }], { large: true });
-    if (!ok) return;
-    let B;
-    try { const s = await fDonnees.files[0].text(); B = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1)); if (!B.arbre) throw new Error(); }
-    catch { erreur(new Error('Ce fichier n’est pas le catalogue de La bibliothèque du bois (donnees.js).')); return; }
-    const parChemin = new Map(dossier.map((f) => [cheminRelatif(f), f]));
-    const image = async (adr, larg) => { if (!adr) return ''; const c = decodeURIComponent(String(adr).split('?')[0]).normalize('NFC'); const f = parChemin.get(c); if (!f) return ''; try { return await reduireImage(f, larg, 0.72); } catch { return ''; } };
-    const nb = { t: 0, l: 0 }; let compte = 0;
-    const totalLivres = (n) => n.livres.length + n.themes.reduce((s, t) => s + totalLivres(t), 0);
-    const tot = totalLivres(B.arbre) + 1;
-    const pr = progression('Import de La bibliothèque du bois');
-    const dejaChemins = new Set(mesLivres.map((l) => l.chemin));
-    const ajouterLivresDe = async (n, themeId) => {
-      for (const [i, l] of n.livres.entries()) {
-        pr.maj(++compte, tot, l.titre);
-        const chemin = ('Livres/' + l.rel).normalize('NFC');
-        if (dejaChemins.has(chemin)) continue;
-        const v = { theme_id: themeId, titre: l.titre || l.nomFichier || 'Sans titre', auteur: l.auteur || '', editeur: l.editeur || '', annee: String(l.annee || ''), isbn: l.isbn || '',
-          chemin, pages: l.pages || null, sommaire: (l.sommaire || []).map((e) => ({ t: e.t, p: e.p ?? null, n: e.n || 0 })), source: l.source || '', vignette: await image(l.vignette, 260), ordre: i + 1 };
-        const r = await db.ajouter('biblio_livres', v); L.set(r.id, r); nb.l++;
-      }
-    };
-    try {
-      await ajouterLivresDe(B.arbre, null);
-      const parcourir = async (n, parentId) => {
-        for (const [i, t] of n.themes.entries()) {
-          const dossierT = ('Livres/' + t.dossier).normalize('NFC');
-          let th = [...T.values()].find((x) => aMoi(x) && x.dossier === dossierT);
-          if (!th) { th = await db.ajouter('biblio_themes', { parent_id: parentId, nom: t.nom, dossier: dossierT, ordre: i + 1, image: await image(t.image, 520) }); T.set(th.id, th); nb.t++; }
-          await ajouterLivresDe(t, th.id);
-          await parcourir(t, th.id);
-        }
-      };
-      await parcourir(B.arbre, null);
-    } catch (e) { erreur(e); }
-    pr.fin();
-    toast(`Import terminé : ${pluriel(nb.t, 'thème', 'thèmes')}, ${pluriel(nb.l, 'ouvrage', 'ouvrages')}`);
-    if (!reglage.lien_bibliotheque) setTimeout(() => dialogueReglages(ctx, recharger), 600); else recharger();
   }
 
   // ------------------------------------------------------------------ partage
