@@ -159,8 +159,13 @@ export async function pageSequencage(zone, id, ctx) {
   }
   async function choisirCours(x, apres) {
     let rows, collegues = [];
-    try { [rows, collegues] = await Promise.all([db.lire('cours', 'order=ordre,id'), db.rpc('collegues').catch(() => [])]); }
-    catch { erreur(new Error('« Mes cours » n’est pas encore installé : l’administrateur doit exécuter le script SQL 23.')); return; }
+    try {
+      let themes, livres;
+      [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', 'espace=eq.cours&order=ordre,id'), db.lire('biblio_livres', 'espace=eq.cours&order=ordre,id'), db.rpc('collegues').catch(() => [])]);
+      // dossiers et documents de « Mes cours » sous une forme commune (les dossiers ont un identifiant « d… »)
+      rows = [...themes.map((t) => ({ id: 'd' + t.id, type: 'dossier', parent_id: t.parent_id ? 'd' + t.parent_id : null, titre: t.nom, proprietaire: t.proprietaire, ordre: t.ordre })),
+        ...livres.map((l) => ({ id: l.id, type: 'cours', parent_id: l.theme_id ? 'd' + l.theme_id : null, titre: l.titre, proprietaire: l.proprietaire, ordre: 1e6 + l.ordre, savoirs: l.savoirs || [], lien: l.lien || '', genre: l.genre || 'cours' }))];
+    } catch { erreur(new Error('« Mes cours » n’est pas encore installé : l’administrateur doit exécuter le script SQL 26.')); return; }
     const R = new Map(rows.map((r) => [r.id, r]));
     const anciens = x.cours_lies || [];
     const choix = new Set(anciens.map((c) => c.id));
