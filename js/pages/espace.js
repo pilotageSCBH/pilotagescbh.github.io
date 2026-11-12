@@ -250,7 +250,26 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const couverture = (l, classe = 'couv-mini') => (l.vignette ? h('img', { class: classe, src: l.vignette, alt: '', loading: 'lazy' })
     : h('div', { class: 'tranche ' + classe, style: { '--couleur': couleurTranche(l.titre) } }, (l.titre || '?').charAt(0).toUpperCase()));
   const details = (l, sur = (x) => x) => [E.genres ? genreDe(l).join(' ') : null, l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => sur(x));
-  const boutonOuvrir = (l, classe = 'btn petit principal') => { const u = urlLivre(l); return u ? h('a', { class: classe, href: u, target: '_blank', rel: 'noopener' }, 'Ouvrir') : h('span', { class: classe + ' desactive', title: `Renseignez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans ⚙ Réglages Nuage` }, 'Ouvrir'); };
+  // ouvrir sans télécharger : le fichier passe par le relais et s'affiche dans un nouvel onglet (PDF à la bonne page, images, vidéos, textes)
+  const AFFICHABLES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', txt: 'text/plain;charset=utf-8' };
+  const typeAffichable = (l) => !l.lien && l.chemin && AFFICHABLES[(l.chemin.split('.').pop() || '').toLowerCase()];
+  async function ouvrirFichier(ev, l, page, adresse) {
+    const type = typeAffichable(l), lienN = reglagesDe(l.proprietaire)[E.lien];
+    if (!type || !analyserLien(lienN) || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) return;   // sinon : lien habituel
+    ev.preventDefault();
+    const w = window.open('', '_blank');
+    if (w) { try { w.document.title = l.titre || 'Ouverture…'; w.document.body.innerHTML = '<p style="font:16px system-ui;margin:40px;color:#555">Ouverture de « ' + String(l.titre || '').replace(/[<&]/g, '') + ' »…</p>'; } catch { /* onglet protégé */ } }
+    try {
+      const f = await nuageFichier(lienN, l.chemin);
+      const url = URL.createObjectURL(new Blob([f], { type }));
+      setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
+      if (w) w.location.href = url + (page && type === 'application/pdf' ? '#page=' + page : ''); else location.href = url;
+    } catch (e) {
+      if (w) w.location.href = adresse; else erreur(e);    // relais indisponible : téléchargement habituel
+    }
+  }
+  const boutonOuvrir = (l, classe = 'btn petit principal') => { const u = urlLivre(l); return u ? h('a', { class: classe, href: u, target: '_blank', rel: 'noopener', onclick: (ev) => ouvrirFichier(ev, l, null, u) }, 'Ouvrir') : h('span', { class: classe + ' desactive', title: `Renseignez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans ⚙ Réglages Nuage` }, 'Ouvrir'); };
   function carteLivre(l, { lignes = null, termes = [] } = {}) {
     const sur = (x) => surligner(String(x), termes);
     const t = l.theme_id ? T.get(l.theme_id) : null;
@@ -283,7 +302,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   function ligneSommaire(l, e, termes = []) {
     const u = urlLivre(l, e.p);
     const corps = [h('span', {}, surligner(e.t, termes)), e.p ? h('span', { class: 'pg' }, 'p. ' + e.p) : null];
-    return h('li', { class: 'niv-som' + (e.n || 0) }, u ? h('a', { href: u, target: '_blank', rel: 'noopener', title: e.p ? `Ouvrir le PDF à la page ${e.p}` : 'Ouvrir le fichier' }, corps) : h('span', { class: 'sans-lien' }, corps));
+    return h('li', { class: 'niv-som' + (e.n || 0) }, u ? h('a', { href: u, target: '_blank', rel: 'noopener', title: e.p ? `Ouvrir le PDF à la page ${e.p}` : 'Ouvrir le fichier', onclick: (ev) => ouvrirFichier(ev, l, e.p, u) }, corps) : h('span', { class: 'sans-lien' }, corps));
   }
   function ficheLivre(l) {
     const t = l.theme_id ? T.get(l.theme_id) : null;
