@@ -76,7 +76,7 @@ export async function pageAccueil(zone, _arg, ctx) {
           h('a', { class: 'hero-btn principal', href: '#/semaine' }, '🗓  Ma semaine'),
           monSeq ? h('a', { class: 'hero-btn', href: '#/sequencage/' + monSeq.id }, `📘  Mon séquençage · ${monSeq.nom}`) : null,
           h('a', { class: 'hero-btn', href: '#/progression' }, '▦  Progression'),
-          ctx.peutEcrire() ? h('a', { class: 'hero-btn', href: '#/cours' }, '📚  Mes cours ressources') : null)),
+          ctx.peutEcrire() ? h('a', { class: 'hero-btn', href: '#/biblio' }, '📚  Mes ressources') : null)),
       h('div', { class: 'hero-carte' },
         h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat' }),
         h('label', { class: 'hero-promo' }, h('span', {}, 'Promotion affichée'), choixPromotion('grand')))),

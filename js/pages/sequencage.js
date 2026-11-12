@@ -1,6 +1,7 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
+import { iconeDoc, GENRES } from './cours.js';
 import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
@@ -144,12 +145,12 @@ export async function pageSequencage(zone, id, ctx) {
     return zoneC;
   }
 
-  // cours mobilisés : cours cochés dans « Mes cours ressources » (titre + savoirs repris) et saisie libre
+  // cours mobilisés : documents cochés dans « Mes cours » (titre + savoirs repris) et saisie libre
   function celluleCours(x, maj, apres) {
     const td = h('td', { class: 'cell-cours' });
     const dessinerC = () => vider(td,
       (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('div', { class: 'ligne-cours-lie' },
-        h('a', { class: 'cours-lie', href: '#/cours/' + c.id, title: 'Cours ressource' + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, '📘 ', c.titre || 'Cours sans titre'),
+        h('a', { class: 'cours-lie', href: '#/cours/' + c.id, title: (GENRES[c.genre] || GENRES.cours)[1] + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
         /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
       champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
       modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
@@ -159,7 +160,7 @@ export async function pageSequencage(zone, id, ctx) {
   async function choisirCours(x, apres) {
     let rows, collegues = [];
     try { [rows, collegues] = await Promise.all([db.lire('cours', 'order=ordre,id'), db.rpc('collegues').catch(() => [])]); }
-    catch { erreur(new Error('« Mes cours ressources » n’est pas encore installé : l’administrateur doit exécuter le script SQL 23.')); return; }
+    catch { erreur(new Error('« Mes cours » n’est pas encore installé : l’administrateur doit exécuter le script SQL 23.')); return; }
     const R = new Map(rows.map((r) => [r.id, r]));
     const anciens = x.cours_lies || [];
     const choix = new Set(anciens.map((c) => c.id));
@@ -185,15 +186,15 @@ export async function pageSequencage(zone, id, ctx) {
         const g = (r.proprietaire === moi ? 'Mes cours' : 'Partagés par ' + nomDe(r.proprietaire)) + (chemin(r) ? ' · ' + chemin(r) : '');
         if (g !== grp) { grp = g; out.push(h('div', { class: 'groupe' }, g)); }
         out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.id), onchange: (e) => (e.target.checked ? choix.add(r.id) : choix.delete(r.id)) }),
-          '📘 ', h('b', {}, r.titre || 'Cours sans titre'), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
+          iconeDoc(r) + ' ', h('b', {}, r.titre || 'Document sans titre'), h('small', { class: 'gris' }, ' · ' + (GENRES[r.genre] || GENRES.cours)[1]), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
         return out;
       }), disparus.length ? [h('div', { class: 'groupe' }, 'Cours plus disponibles (supprimés ou plus partagés)'),
         disparus.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(c.id), onchange: (e) => (e.target.checked ? choix.add(c.id) : choix.delete(c.id)) }), '📘 ', h('b', {}, c.titre)))] : null,
-      !ordre.length ? h('p', { class: 'vide' }, 'Aucun cours renseigné : ajoutez vos cours dans « Documents professeurs → Mes cours ressources ».') : null);
+      !ordre.length ? h('p', { class: 'vide' }, 'Aucun document renseigné : ajoutez vos cours, exercices, évaluations… dans « Mes ressources → Mes cours ».') : null);
     };
     rech.addEventListener('input', remplir); remplir();
     const ok = await fenetre(`Cours mobilisés · séance ${x.titre || ''}`, h('div', {},
-      h('p', { class: 'aide' }, 'Cochez les cours de « Mes cours ressources » (les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
+      h('p', { class: 'aide' }, 'Cochez les documents de « Mes cours » (cours, exercices, TD/TP, évaluations… : les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
       rech, corps), [{ texte: 'Annuler', valeur: false }, { texte: 'Valider', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
     const savDe = (id) => R.get(id)?.savoirs || anciens.find((c) => c.id === id)?.savoirs || [];
@@ -207,7 +208,7 @@ export async function pageSequencage(zone, id, ctx) {
       const savoirs = r ? (r.savoirs || []) : (a?.savoirs || []);
       const ajoutes = savoirs.filter((c) => auto.has(c) && sav.includes(c));
       for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
-      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || '') };
+      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || ''), genre: r ? (r.genre || 'cours') : (a?.genre || 'cours') };
     });
     const rang = ref.savoirs.map((y) => y.code);
     sav.sort((a, b) => rang.indexOf(a) - rang.indexOf(b));

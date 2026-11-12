@@ -1,4 +1,4 @@
-// Mes cours ressources : espace personnel de chaque enseignant.
+// Mes ressources · Mes cours : espace personnel de chaque enseignant (cours, exercices, TD/TP, évaluations, corrigés, ressources).
 // Arborescence de dossiers et de cours ; pour chaque cours : titre, sommaire détaillé, savoirs associés (aucun fichier n'est stocké).
 // Privé par défaut ; un dossier ou un cours se partage (en consultation) avec des collègues ou toute l'équipe.
 // #/cours : mes cours · #/cours/partages : cours partagés avec moi · #/cours/ID : un élément ouvert
@@ -7,6 +7,23 @@ import { h, vider, champ, toast, erreur, confirmer, fenetre, ajuster } from '../
 import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
 import { boutonIA, champs, codesDans, listeSavoirs, aEcrire, resume } from '../ia.js';
+import { chargerReglages, reglagesDe, adresseFichier, adresseDossier, dialogueReglages, choisirDossier, cheminRelatif, ignore, progression } from '../ressources.js';
+
+// types de documents de « Mes cours »
+export const GENRES = { cours: ['📘', 'Cours'], exercice: ['✏️', 'Exercice'], tdtp: ['🛠', 'TD / TP'], evaluation: ['📝', 'Évaluation'],
+  corrige: ['✅', 'Corrigé'], ressource: ['🎬', 'Ressource'], autre: ['📄', 'Autre'] };
+export const iconeDoc = (r) => (r.type === 'dossier' ? '📁' : (GENRES[r.genre] || GENRES.cours)[0]);
+// type d'après un nom de dossier ou de fichier (Cours, Exercices, TD-TP, Évaluations, Corrigés, Ressources)
+export function genreDepuisNom(nom) {
+  const n = String(nom || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/corrig/.test(n)) return 'corrige';
+  if (/^(td|tp|td[\s_-]*tp|travaux)/.test(n) || /\b(td|tp)\b/.test(n)) return 'tdtp';
+  if (/evaluation|^eval|controle|\bds\b|examen|sujet/.test(n)) return 'evaluation';
+  if (/exercice|^exo/.test(n)) return 'exercice';
+  if (/ressource|video|documentation|annexe/.test(n)) return 'ressource';
+  if (/^cours\b|^cours$/.test(n)) return 'cours';
+  return null;
+}
 
 const CLE_OUVERTS = 'pilotage-scbh-cours-ouverts';
 const lireL = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -98,7 +115,7 @@ async function lireWord(fichier, ref, { niveaux = 3, numeroter = true } = {}) {
 // ------------------------------------------------------------------------------------------- page
 export async function pageCours(zone, arg, ctx) {
   if (!ctx.peutEcrire()) {
-    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '📚  Mes cours ressources'))),
+    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '🎓  Mes cours'))),
       h('p', { class: 'vide' }, 'Cet espace personnel est réservé aux enseignants.'));
     return;
   }
@@ -106,9 +123,9 @@ export async function pageCours(zone, arg, ctx) {
   let rows, partages, collegues, ref;
   try {
     [rows, partages, collegues, ref] = await Promise.all([
-      db.lire('cours', 'order=ordre,id'), db.lire('cours_partages'), db.rpc('collegues').catch(() => []), ctx.referentiel()]);
+      db.lire('cours', 'order=ordre,id'), db.lire('cours_partages'), db.rpc('collegues').catch(() => []), ctx.referentiel(), chargerReglages(true)]);
   } catch (e) {
-    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '📚  Mes cours ressources'))),
+    vider(zone, h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '🎓  Mes cours'))),
       h('div', { class: 'erreur-page' }, h('h2', {}, 'Espace pas encore installé'),
         h('p', {}, ctx.estAdmin() ? 'Exécutez le script « 23_cours_ressources.sql » dans Supabase (SQL Editor → New query → Run), puis rechargez la page.'
           : 'L’administrateur doit d’abord terminer l’installation de cet espace. Réessayez plus tard.'),
@@ -125,7 +142,7 @@ export async function pageCours(zone, arg, ctx) {
   let sel = /^\d+$/.test(String(arg || '')) ? Number(arg) : null;
   if (sel && !R.has(sel)) sel = null;
   let vue = sel ? (R.get(sel).proprietaire === moi ? 'mes' : 'partages') : vueInit;
-  let q = '', savoirFiltre = '';
+  let q = '', savoirFiltre = '', genreFiltre = '', etiquetteFiltre = '';
 
   // ------------------------------------------------------------------ outils de l'arbre
   const aMoi = (r) => r.proprietaire === moi;
@@ -136,19 +153,34 @@ export async function pageCours(zone, arg, ctx) {
     : [...R.values()].filter((r) => !aMoi(r) && (!r.parent_id || !R.has(r.parent_id))).sort((a, b) => compareTitres(nomDe(a.proprietaire), nomDe(b.proprietaire)) || a.ordre - b.ordre || a.id - b.id));
   const descendants = (id) => { const out = []; const pile = [id]; while (pile.length) { const x = pile.pop(); for (const e of enfants(x)) { out.push(e); pile.push(e.id); } } return out; };
   const chemin = (r) => { const l = []; let p = r.parent_id ? R.get(r.parent_id) : null; let n = 0; while (p && n++ < 50) { l.unshift(p); p = p.parent_id ? R.get(p.parent_id) : null; } return l; };
-  const titreDe = (r) => r.titre || (r.type === 'dossier' ? 'Dossier sans titre' : 'Cours sans titre');
+  const titreDe = (r) => r.titre || (r.type === 'dossier' ? 'Dossier sans titre' : 'Document sans titre');
   const partagesDe = (id) => P.filter((p) => p.cours_id === id);
   const estPartage = (r) => r.partage_tous || partagesDe(r.id).length > 0;
   const partageHerite = (r) => chemin(r).reverse().find((d) => estPartage(d));
   const nbCours = (id) => descendants(id).filter((x) => x.type === 'cours').length;
   const libSavoir = (c) => ref.sav[c]?.libelle || 'code absent du référentiel';
   const lienOk = (u) => /^https?:\/\/\S+$/i.test(String(u || '').trim());
+  // adresse du fichier (ou du dossier) : lien direct, sinon lien de partage « Mes cours » (réglages Nuage) + chemin
+  const urlDoc = (r) => {
+    if (lienOk(r.lien)) return r.lien;
+    if (!r.chemin) return '';
+    const g = reglagesDe(r.proprietaire);
+    return r.type === 'dossier' ? adresseDossier(g.lien_cours, r.chemin) : adresseFichier(g.lien_cours, r.chemin, g.format_liens);
+  };
   // petit lien 🔗 (s'ouvre dans un nouvel onglet sans sélectionner l'élément)
-  const pucheLien = (r) => (lienOk(r.lien) ? h('a', { class: 'lien-externe', href: r.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir : ' + r.lien, onclick: (e) => e.stopPropagation() }, '🔗') : null);
+  const pucheLien = (r) => { const u = urlDoc(r); return u ? h('a', { class: 'lien-externe', href: u, target: '_blank', rel: 'noopener', title: 'Ouvrir : ' + (r.chemin || u), onclick: (e) => e.stopPropagation() }, '🔗') : null; };
   // carte « Lien internet » d'un dossier ou d'un cours (facultatif)
   function carteLien(r, modif) {
     const z = h('div', { class: 'carte-detail carte-lien' });
-    const dessinerL = () => vider(z, h('h3', {}, r.type === 'dossier' ? '🔗 Lien internet du dossier' : '🔗 Lien internet du cours', h('small', { class: 'gris' }, '  (facultatif)')),
+    const u = urlDoc(r), g = reglagesDe(r.proprietaire);
+    const dessinerL = () => vider(z, h('h3', {}, r.type === 'dossier' ? '☁ Dossier sur Nuage' : '☁ Fichier sur Nuage', h('small', { class: 'gris' }, '  (facultatif)')),
+      h('div', { class: 'ligne-lien' }, h('span', { class: 'lib-form' }, 'Chemin dans « Mes cours » :'),
+        modif ? champ(r.chemin || '', async (v) => { await db.modifier('cours', r.id, { chemin: v.trim() }); r.chemin = v.trim(); dessinerArbre(); dessinerDetail(); },
+          { placeholder: r.type === 'dossier' ? 'ex. Organisation/S1 - Déroulement d’une affaire' : 'ex. Organisation/S1/Cours/A01 - L’entreprise.pdf', classe: 'champ-lien' })
+          : h('span', {}, r.chemin || '—'),
+        u ? h('a', { class: 'btn petit principal', href: u, target: '_blank', rel: 'noopener' }, '↗ Ouvrir') : null),
+      r.chemin && !g.lien_cours ? h('p', { class: 'aide' }, 'Pour ouvrir ce fichier, collez le lien de partage de votre dossier « Mes cours » dans ', h('button', { class: 'lien', type: 'button', onclick: () => dialogueReglages(ctx, () => dessinerDetail()) }, '⚙ Réglages Nuage'), '.') : null,
+      h('h3', { class: 'sous-titre-lien' }, '🔗 Ou lien internet direct', h('small', { class: 'gris' }, '  (Drive, OneDrive, site… prioritaire sur le chemin)')),
       modif ? h('p', { class: 'aide' }, r.type === 'dossier'
         ? 'Adresse du dossier en ligne où sont rangés ces cours (Nuage, Drive, OneDrive, ENT, site…). Le site garde seulement l’adresse.'
         : 'Adresse du cours en ligne (Nuage, Drive, OneDrive, ENT, site…). Le site garde seulement l’adresse, pas le fichier.') : null,
@@ -161,7 +193,7 @@ export async function pageCours(zone, arg, ctx) {
           await db.modifier('cours', r.id, { lien: u }); r.lien = u; dessinerArbre(); dessinerL();
         }, { type: 'url', placeholder: 'https://… (coller l’adresse)', classe: 'champ-lien' })
           : lienOk(r.lien) ? h('a', { href: r.lien, target: '_blank', rel: 'noopener', class: 'adresse-lien' }, r.lien) : h('span', { class: 'gris' }, 'Aucun lien.'),
-        lienOk(r.lien) ? h('a', { class: 'btn petit principal', href: r.lien, target: '_blank', rel: 'noopener' }, '↗ Ouvrir') : null,
+        lienOk(r.lien) ? h('a', { class: 'btn petit', href: r.lien, target: '_blank', rel: 'noopener' }, '↗ Ouvrir') : null,
         modif && r.lien ? h('button', { class: 'btn petit', type: 'button', title: 'Retirer le lien', onclick: async () => {
           try { await db.modifier('cours', r.id, { lien: '' }); r.lien = ''; dessinerArbre(); dessinerL(); toast('Lien retiré'); } catch (e) { erreur(e); }
         } }, '✖ Retirer') : null));
@@ -172,24 +204,35 @@ export async function pageCours(zone, arg, ctx) {
   // recherche : tous les mots doivent apparaître (titre, sommaire, savoirs et leurs libellés, dossiers)
   const correspond = (r) => {
     if (savoirFiltre && !(r.savoirs || []).includes(savoirFiltre)) return false;
+    if (genreFiltre && (r.genre || 'cours') !== genreFiltre) return false;
+    if (etiquetteFiltre && !(r.etiquettes || []).includes(etiquetteFiltre)) return false;
     const T = termesDe(q); if (!T.length) return true;
-    const texte = sansAccent([r.titre, r.sommaire, ...(r.savoirs || []).map((c) => c + ' ' + libSavoir(c)), ...chemin(r).map((d) => d.titre)].join(' '));
+    const texte = sansAccent([r.titre, r.sommaire, (GENRES[r.genre] || GENRES.cours)[1], ...(r.etiquettes || []), r.chemin, ...(r.savoirs || []).map((c) => c + ' ' + libSavoir(c)), ...chemin(r).map((d) => d.titre)].join(' '));
     return T.every((t) => texte.includes(t));
   };
-  const filtreActif = () => !!(termesDe(q).length || savoirFiltre);
+  const filtreActif = () => !!(termesDe(q).length || savoirFiltre || genreFiltre || etiquetteFiltre);
 
   // ------------------------------------------------------------------ squelette
   const zoneArbre = h('div', { class: 'arbre-cours' });
   const zoneDetail = h('section', { class: 'detail-cours' });
   const compteur = h('span', { class: 'compte-recherche' });
-  const recherche = h('input', { class: 'champ recherche-cours', type: 'search', placeholder: 'Rechercher un cours : titre, mot du sommaire, savoir (S11-1…)…', 'aria-label': 'Rechercher un cours',
+  const recherche = h('input', { class: 'champ recherche-cours', type: 'search', placeholder: 'Rechercher : titre, mot du sommaire, étiquette, savoir (S11-1…)…', 'aria-label': 'Rechercher un document',
     oninput: () => { q = recherche.value; dessinerArbre(); } });
   const choixSavoir = h('select', { class: 'champ filtre-savoir', 'aria-label': 'Filtrer par savoir associé', onchange: () => { savoirFiltre = choixSavoir.value; dessinerArbre(); } });
+  const choixGenre = h('select', { class: 'champ filtre-savoir', 'aria-label': 'Filtrer par type de document', onchange: () => { genreFiltre = choixGenre.value; dessinerArbre(); } },
+    h('option', { value: '' }, 'Tous les types'), Object.entries(GENRES).map(([k, [ic, n]]) => h('option', { value: k }, `${ic} ${n}`)));
+  const choixEtiquette = h('select', { class: 'champ filtre-savoir', 'aria-label': 'Filtrer par étiquette', onchange: () => { etiquetteFiltre = choixEtiquette.value; dessinerArbre(); } });
+  const majEtiquettes = () => {
+    const toutes = [...new Set([...R.values()].filter((r) => (vue === 'mes') === aMoi(r)).flatMap((r) => r.etiquettes || []))].sort(compareTitres);
+    if (etiquetteFiltre && !toutes.includes(etiquetteFiltre)) etiquetteFiltre = '';
+    vider(choixEtiquette, h('option', { value: '' }, 'Toutes les étiquettes'), toutes.map((e) => h('option', { value: e, selected: e === etiquetteFiltre }, '🏷 ' + e)));
+    choixEtiquette.hidden = !toutes.length;
+  };
   const onglets = h('div', { class: 'onglets onglets-cours' });
   const majOnglets = () => {
     const nMes = [...R.values()].filter((r) => aMoi(r) && r.type === 'cours').length, nPart = [...R.values()].filter((r) => !aMoi(r) && r.type === 'cours').length;
     vider(onglets,
-      h('button', { class: vue === 'mes' ? 'actif' : '', type: 'button', onclick: () => changerVue('mes') }, `📚 Mes cours (${nMes})`),
+      h('button', { class: vue === 'mes' ? 'actif' : '', type: 'button', onclick: () => changerVue('mes') }, `🎓 Mes cours (${nMes})`),
       h('button', { class: vue === 'partages' ? 'actif' : '', type: 'button', onclick: () => changerVue('partages') }, `👥 Partagés avec moi (${nPart})`));
   };
   const majChoixSavoir = () => {
@@ -198,7 +241,7 @@ export async function pageCours(zone, arg, ctx) {
       ref.savoirs.filter((s) => utilises.has(s.code)).map((s) => h('option', { value: s.code, selected: s.code === savoirFiltre }, `${s.code} · ${s.libelle_court || s.libelle}`)));
     if (savoirFiltre && !utilises.has(savoirFiltre)) savoirFiltre = '';
   };
-  function changerVue(v) { vue = v; sel = null; history.replaceState(null, '', v === 'partages' ? '#/cours/partages' : '#/cours'); majOnglets(); majChoixSavoir(); dessinerArbre(); dessinerDetail(); }
+  function changerVue(v) { vue = v; sel = null; history.replaceState(null, '', v === 'partages' ? '#/cours/partages' : '#/cours'); majOnglets(); majChoixSavoir(); majEtiquettes(); dessinerArbre(); dessinerDetail(); }
   function choisir(id) {
     sel = id;
     history.replaceState(null, '', id ? '#/cours/' + id : (vue === 'partages' ? '#/cours/partages' : '#/cours'));
@@ -209,16 +252,18 @@ export async function pageCours(zone, arg, ctx) {
 
   vider(zone,
     h('header', { class: 'entete-page' },
-      h('div', {}, h('h1', {}, '📚  Mes cours ressources'),
-        h('p', { class: 'sous-titre' }, 'Espace personnel · vos cours rangés en dossiers, leur sommaire détaillé et les savoirs associés · privé tant que vous ne le partagez pas')),
+      h('div', {}, h('h1', {}, '🎓  Mes cours'),
+        h('p', { class: 'sous-titre' }, 'Mes ressources · cours, exercices, TD/TP, évaluations, corrigés… rangés en dossiers, fichiers sur votre Nuage · privé tant que vous ne le partagez pas')),
       h('div', { class: 'actions-page' },
         h('button', { class: 'btn', onclick: () => nouveau('dossier') }, '📁  Nouveau dossier'),
-        h('button', { class: 'btn principal', onclick: () => nouveau('cours') }, '＋  Nouveau cours'),
+        h('button', { class: 'btn principal', onclick: () => nouveau('cours') }, '＋  Nouveau document'),
+        h('button', { class: 'btn', title: 'Relire votre dossier « Mes cours » (synchronisé avec Nuage) : crée les dossiers et les documents, retrouve leur type', onclick: () => mettreAJour() }, '↻  Mettre à jour depuis mon dossier'),
         h('button', { class: 'btn', title: 'Créer des cours en reprenant le titre et les titres (sommaire) de fichiers Word : le fichier lui-même n’est pas copié', onclick: () => importerWord() }, '📄  Sommaires depuis Word'),
         h('button', { class: 'btn', title: 'Partager un, plusieurs ou tous vos cours avec les collègues de votre choix', onclick: () => partagerPlusieurs() }, '👥  Partager des cours'),
-        h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'))),
+        h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'),
+        h('button', { class: 'btn', onclick: () => dialogueReglages(ctx, () => { dessinerArbre(); dessinerDetail(); }) }, '⚙  Réglages Nuage'))),
     onglets,
-    h('div', { class: 'barre-cours' }, recherche, choixSavoir, compteur,
+    h('div', { class: 'barre-cours' }, recherche, choixGenre, choixEtiquette, choixSavoir, compteur,
       h('button', { class: 'btn petit', type: 'button', title: 'Ouvrir tous les dossiers', onclick: () => { [...R.values()].filter((r) => r.type === 'dossier').forEach((d) => ouverts.add(d.id)); memoOuverts(); dessinerArbre(); } }, '▾ Tout déplier'),
       h('button', { class: 'btn petit', type: 'button', title: 'Fermer tous les dossiers', onclick: () => { ouverts.clear(); memoOuverts(); dessinerArbre(); } }, '▸ Tout replier')),
     h('div', { class: 'grille-cours' }, h('aside', { class: 'panneau-arbre' }, zoneArbre), zoneDetail));
@@ -233,13 +278,13 @@ export async function pageCours(zone, arg, ctx) {
       garder = new Set();
       for (const r of R.values()) {
         if ((vue === 'mes') !== aMoi(r)) continue;
-        const ok = r.type === 'cours' ? correspond(r) : (!savoirFiltre && T.length && T.every((t) => sansAccent(r.titre).includes(t)));
+        const ok = r.type === 'cours' ? correspond(r) : (!savoirFiltre && !genreFiltre && !etiquetteFiltre && T.length && T.every((t) => sansAccent(r.titre).includes(t)));
         if (!ok) continue;
         if (r.type === 'cours') trouves++;
         garder.add(r.id); chemin(r).forEach((d) => garder.add(d.id));
         if (r.type === 'dossier') descendants(r.id).forEach((d) => garder.add(d.id));
       }
-      compteur.textContent = `${trouves} cours trouvé${trouves > 1 ? 's' : ''}`;
+      compteur.textContent = `${trouves} document${trouves > 1 ? 's' : ''} trouvé${trouves > 1 ? 's' : ''}`;
     } else compteur.textContent = '';
 
     const noeud = (r, prof) => {
@@ -254,7 +299,7 @@ export async function pageCours(zone, arg, ctx) {
       dossier ? h('button', { class: 'pli', type: 'button', title: ouvert ? 'Fermer' : 'Ouvrir', onclick: (e) => {
         e.stopPropagation(); if (ouverts.has(r.id)) ouverts.delete(r.id); else ouverts.add(r.id); memoOuverts(); dessinerArbre();
       } }, ouvert ? '▾' : '▸') : h('span', { class: 'pli vide' }),
-      h('span', { class: 'ic' }, dossier ? (ouvert ? '📂' : '📁') : '📘'),
+      h('span', { class: 'ic', title: dossier ? '' : (GENRES[r.genre] || GENRES.cours)[1] }, dossier ? (ouvert ? '📂' : '📁') : iconeDoc(r)),
       h('span', { class: 'nom' }, surligner(titreDe(r), T),
         extraits.length ? h('span', { class: 'extraits' }, extraits.map((l) => h('small', {}, '↳ ', surligner(l.t, T)))) : null),
       !dossier && (r.savoirs || []).length ? h('span', { class: 'codes-mini' }, r.savoirs.slice(0, 2).map((c) => h('i', { title: libSavoir(c) }, c)), r.savoirs.length > 2 ? h('i', { title: r.savoirs.slice(2).join(', ') }, '+' + (r.savoirs.length - 2)) : null) : null,
@@ -339,6 +384,73 @@ export async function pageCours(zone, arg, ctx) {
     if (!s || !aMoi(s) || vue !== 'mes') return null;
     return s.type === 'dossier' ? s.id : s.parent_id;
   }
+  // ------------------------------------------------------------------ mise à jour depuis le dossier « Mes cours » synchronisé avec Nuage
+  // un dossier → un dossier du site ; les sous-dossiers Cours, Exercices, TD-TP, Évaluations, Corrigés, Ressources donnent le type
+  // des fichiers (ils ne deviennent pas des dossiers) ; un même nom en Word et en PDF = un seul document (le PDF s'ouvre, le Word donne le sommaire)
+  const DOSSIER_TYPE = /^(cours|exercices?|exos?|td|tp|td[\s_-]*tp|travaux pratiques|[eé]valuations?|[eé]vals?|contr[oô]les?|corrig[eé]s?|ressources?)$/i;
+  async function mettreAJour() {
+    toast('Choisissez votre dossier « Mes cours » (synchronisé avec Nuage)');
+    const tous = await choisirDossier();
+    if (!tous.length) return;
+    const fichiers = tous.map((f) => ({ f, c: cheminRelatif(f) })).filter((x) => x.c && !ignore(x.c) && !/\.(ini|db|tmp|lnk)$/i.test(x.c));
+    const groupes = new Map();       // dossier logique + nom sans extension + type → fichiers
+    for (const x of fichiers) {
+      const parts = x.c.split('/'), nom = parts.pop(), base = nom.replace(/\.[a-z0-9]{1,5}$/i, '');
+      let genreDossier = null; const dossiers = []; const reels = [];
+      for (const p of parts) { reels.push(p); if (DOSSIER_TYPE.test(p.trim())) genreDossier = genreDepuisNom(p) || genreDossier; else dossiers.push(reels.join('/')); }
+      const genre = /corrig/i.test(base) ? 'corrige' : genreDossier || genreDepuisNom(base) || 'cours';
+      const cle = (dossiers[dossiers.length - 1] || '') + '|' + base.toLowerCase() + '|' + genre;
+      if (!groupes.has(cle)) groupes.set(cle, { base, genre, dossier: dossiers[dossiers.length - 1] || '', dossiers, fichiers: [] });
+      groupes.get(cle).fichiers.push(x);
+    }
+    const mes = [...R.values()].filter(aMoi);
+    const dossiersConnus = new Map(mes.filter((r) => r.type === 'dossier' && r.chemin).map((r) => [r.chemin.normalize('NFC'), r]));
+    const docsConnus = new Set(mes.filter((r) => r.type === 'cours' && r.chemin).map((r) => r.chemin.normalize('NFC')));
+    const presents = new Set(fichiers.map((x) => x.c));
+    const rangGenre = Object.keys(GENRES);
+    const nouveaux = [...groupes.values()].filter((g) => !g.fichiers.some((x) => docsConnus.has(x.c)))
+      .sort((a, b) => compareTitres(a.dossier, b.dossier) || rangGenre.indexOf(a.genre) - rangGenre.indexOf(b.genre) || compareTitres(a.base, b.base));
+    const aCreer = [...new Set(nouveaux.flatMap((g) => g.dossiers))].filter((d) => !dossiersConnus.has(d)).sort();
+    const disparus = mes.filter((r) => r.type === 'cours' && r.chemin && !presents.has(r.chemin.normalize('NFC')));
+    const lireW = h('input', { type: 'checkbox', checked: true }), retirer = h('input', { type: 'checkbox' });
+    const parGenre = Object.entries(GENRES).map(([k, [ic, n]]) => [ic, n, nouveaux.filter((g) => g.genre === k).length]).filter((x) => x[2]);
+    const ok = await fenetre('Mettre à jour depuis mon dossier « Mes cours »', h('div', {},
+      h('p', {}, `Dossier lu : ${fichiers.length} fichier(s).`),
+      h('ul', { class: 'conseils-cours' },
+        h('li', {}, h('b', {}, `${nouveaux.length} nouveau(x) document(s)`), parGenre.length ? ' : ' + parGenre.map(([ic, n, c]) => `${ic} ${c} ${n.toLowerCase()}`).join(', ') : ''),
+        h('li', {}, h('b', {}, `${aCreer.length} nouveau(x) dossier(s)`), aCreer.length ? ' : ' + aCreer.slice(0, 8).map((d) => d.split('/').pop()).join(', ') + (aCreer.length > 8 ? '…' : '') : ''),
+        h('li', {}, h('b', {}, `${disparus.length} document(s) dont le fichier est introuvable`), disparus.length ? ' : ' + disparus.slice(0, 6).map((r) => r.titre).join(', ') : '')),
+      nouveaux.some((g) => g.fichiers.some((x) => /\.docx$/i.test(x.c))) ? h('label', { class: 'case' }, lireW, ' Lire le sommaire et les savoirs des fichiers Word (titres seulement)') : null,
+      disparus.length ? h('label', { class: 'case' }, retirer, ' Supprimer les documents dont le fichier est introuvable') : null,
+      h('p', { class: 'aide' }, 'Seuls les noms des fichiers et dossiers sont lus (et les titres des fichiers Word, si coché) : rien n’est envoyé. Le type de chaque document vient de son sous-dossier (Cours, Exercices, TD-TP, Évaluations, Corrigés, Ressources) ou de son nom ; il reste modifiable.')),
+    [{ texte: 'Annuler', valeur: false }, { texte: 'Mettre à jour', classe: 'principal', valeur: true }]);
+    if (!ok) return;
+    const pr = progression('Mise à jour de « Mes cours »'); let n = 0;
+    try {
+      for (const d of aCreer) {
+        const parentD = d.split('/').slice(0, -1).join('/'), parent = dossiersConnus.get(parentD) || null;
+        const ordre = Math.max(0, ...enfants(parent?.id ?? null, moi).map((x) => x.ordre)) + 1;
+        const r = await db.ajouter('cours', { type: 'dossier', parent_id: parent?.id ?? null, titre: d.split('/').pop(), chemin: d, ordre });
+        R.set(r.id, r); dossiersConnus.set(d, r);
+      }
+      for (const [i, g] of nouveaux.entries()) {
+        pr.maj(i, nouveaux.length, g.base);
+        const pdf = g.fichiers.find((x) => /\.pdf$/i.test(x.c)), word = g.fichiers.find((x) => /\.docx$/i.test(x.c));
+        const principal = pdf || g.fichiers[0];
+        let v = { sommaire: '', savoirs: [] };
+        if (word && lireW.checked) { try { const w = await lireWord(word.f, ref); v = { sommaire: w.sommaire, savoirs: w.savoirs }; } catch { /* Word illisible */ } }
+        const parent = dossiersConnus.get(g.dossier) || null;
+        const r = await db.ajouter('cours', { type: 'cours', genre: g.genre, parent_id: parent?.id ?? null, titre: g.base, chemin: principal.c, ordre: 1000 + i, ...v });
+        R.set(r.id, r); n++;
+      }
+      if (retirer.checked) for (const r of disparus) { await db.supprimer('cours', r.id); R.delete(r.id); }
+    } catch (e) { erreur(e); }
+    pr.fin();
+    toast(`${n} document(s) ajouté(s)${aCreer.length ? `, ${aCreer.length} dossier(s)` : ''}`);
+    if (!reglagesDe(moi).lien_cours && n) setTimeout(() => dialogueReglages(ctx, () => dessinerDetail()), 600);
+    vue = 'mes'; majOnglets(); majChoixSavoir(); majEtiquettes(); dessinerArbre(); dessinerDetail();
+  }
+
   async function nouveau(type, parent = parentCourant(), valeurs = {}) {
     if (vue !== 'mes') { vue = 'mes'; majOnglets(); }
     try {
@@ -368,7 +480,7 @@ export async function pageCours(zone, arg, ctx) {
   async function copier(r, parent, suffixe = '') {
     try {
       const ordre = Math.max(0, ...enfants(parent, moi).map((x) => x.ordre)) + 1;
-      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [], lien: x.lien || '' });
+      const champs = (x) => ({ type: x.type, titre: x.titre, sommaire: x.sommaire, savoirs: x.savoirs || [], lien: x.lien || '', genre: x.genre || 'cours', etiquettes: x.etiquettes || [], chemin: x.chemin || '' });
       const racine = await db.ajouter('cours', { ...champs(r), titre: titreDe(r) + suffixe, parent_id: parent, ordre });
       R.set(racine.id, racine);
       const file = [[r.id, racine.id]];
@@ -446,7 +558,7 @@ export async function pageCours(zone, arg, ctx) {
     const dessiner = () => {
       const ligne = (r, prof) => [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } },
         h('input', { type: 'checkbox', checked: coches.has(r.id), onchange: (e) => { [r, ...descendants(r.id)].forEach((x) => (e.target.checked ? coches.add(x.id) : coches.delete(x.id))); dessiner(); } }),
-        r.type === 'dossier' ? '📁 ' : '📘 ', titreDe(r),
+        iconeDoc(r) + ' ', titreDe(r),
         avec(r).length ? h('small', { class: 'deja-partage' }, ' 👥 ' + avec(r).join(', ')) : null),
       ...(r.type === 'dossier' ? enfants(r.id, moi).flatMap((f) => ligne(f, prof + 1)) : [])];
       vider(boite, enfants(null, moi).flatMap((r) => ligne(r, 0)));
@@ -595,8 +707,8 @@ export async function pageCours(zone, arg, ctx) {
       : [h('button', { class: 'btn petit principal', onclick: () => copier(r, null) }, '⧉ Copier dans mes cours'),
         h('button', { class: 'btn petit', onclick: () => dialoguePDF(r.id) }, '⬇ PDF')];
     const tete = h('div', { class: 'tete-detail' }, filAriane(r),
-      h('div', { class: 'ligne-titre' }, h('span', { class: 'ic-grand' }, r.type === 'dossier' ? '📁' : '📘'),
-        modif ? Object.assign(champ(r.titre, enr('titre'), { classe: 'titre-cours', placeholder: r.type === 'dossier' ? 'Nom du dossier' : 'Titre du cours' }), { maxLength: 300 }) : h('h2', { class: 'titre-cours' }, surligner(titreDe(r), T))),
+      h('div', { class: 'ligne-titre' }, h('span', { class: 'ic-grand' }, iconeDoc(r)),
+        modif ? Object.assign(champ(r.titre, enr('titre'), { classe: 'titre-cours', placeholder: r.type === 'dossier' ? 'Nom du dossier' : 'Titre du document' }), { maxLength: 300 }) : h('h2', { class: 'titre-cours' }, surligner(titreDe(r), T))),
       h('div', { class: 'boutons-detail' }, boutons),
       modif && (partage || herite) ? h('p', { class: 'info-partage' }, '👥 ', partage ? `Partagé avec ${partage}` : '', partage && herite ? ' · ' : '', herite ? `partagé avec le dossier « ${titreDe(herite)} »` : '')
         : !modif ? h('p', { class: 'info-partage' }, `👤 Partagé par ${nomDe(r.proprietaire)} · consultation seule`) : null);
@@ -615,7 +727,7 @@ export async function pageCours(zone, arg, ctx) {
                 dessinerArbre(); dessinerDetail();
               } }, 'A→Z Classer') : null) : null),
           fils.length ? h('ul', { class: 'liste-contenu' }, fils.map((f) => h('li', {}, h('button', { class: 'lien', type: 'button', onclick: () => choisir(f.id) },
-            h('span', {}, f.type === 'dossier' ? '📁 ' : '📘 '), h('b', {}, titreDe(f)), lienOk(f.lien) ? ' 🔗' : '',
+            h('span', {}, iconeDoc(f) + ' '), h('b', {}, titreDe(f)), urlDoc(f) ? ' 🔗' : '',
             f.type === 'dossier' ? h('small', {}, ` · ${nbCours(f.id)} cours`) : h('small', {}, ` · ${lignesSommaire(f.sommaire).length} titre(s)${(f.savoirs || []).length ? ' · ' + f.savoirs.join(' ') : ''}`)))))
             : h('p', { class: 'vide' }, 'Dossier vide.')),
         modif || lienOk(r.lien) ? carteLien(r, modif) : null);
@@ -648,7 +760,23 @@ export async function pageCours(zone, arg, ctx) {
         : h('p', { class: 'vide-sommaire' }, 'Aucun savoir associé.'),
       modif ? h('button', { class: 'lien petit', type: 'button', onclick: () => choisirSavoirs(r, dessinerSavoirs) }, (r.savoirs || []).length ? '✎ modifier' : '＋ choisir dans le référentiel') : null);
     dessinerSavoirs();
+    const zoneEtiq = h('div', { class: 'etiquettes-doc' });
+    const dessinerEtiq = () => vider(zoneEtiq, (r.etiquettes || []).map((e) => h('span', { class: 'etiquette-doc' }, '🏷 ', surligner(e, T),
+      modif ? h('button', { type: 'button', title: 'Retirer', onclick: async () => { const v = r.etiquettes.filter((x) => x !== e); try { await db.modifier('cours', r.id, { etiquettes: v }); r.etiquettes = v; dessinerEtiq(); majEtiquettes(); } catch (x) { erreur(x); } } }, '×') : null)),
+      modif ? h('input', { class: 'champ ajout-etiquette', placeholder: '＋ étiquette (Entrée)', list: 'liste-etiquettes', onkeydown: async (ev) => {
+        if (ev.key !== 'Enter') return; ev.preventDefault();
+        const t = ev.target.value.trim().slice(0, 60); if (!t || (r.etiquettes || []).includes(t)) { ev.target.value = ''; return; }
+        const v = [...(r.etiquettes || []), t];
+        try { await db.modifier('cours', r.id, { etiquettes: v }); r.etiquettes = v; dessinerEtiq(); majEtiquettes(); zoneEtiq.querySelector('input')?.focus(); } catch (x) { erreur(x); }
+      } }) : null,
+      h('datalist', { id: 'liste-etiquettes' }, [...new Set([...R.values()].filter(aMoi).flatMap((x) => x.etiquettes || []))].map((e) => h('option', { value: e }))));
+    dessinerEtiq();
     vider(zoneDetail, tete,
+      h('div', { class: 'carte-detail grille-champs' },
+        h('label', {}, h('span', { class: 'lib' }, 'Type de document'), modif
+          ? champ(r.genre || 'cours', async (v) => { await db.modifier('cours', r.id, { genre: v }); r.genre = v; dessinerArbre(); dessinerDetail(); }, { options: Object.entries(GENRES).map(([k, [ic, n]]) => ({ valeur: k, texte: `${ic} ${n}` })) })
+          : h('span', {}, iconeDoc(r) + ' ' + (GENRES[r.genre] || GENRES.cours)[1])),
+        h('div', {}, h('span', { class: 'lib' }, 'Étiquettes'), zoneEtiq)),
       h('div', { class: 'carte-detail' },
         h('div', { class: 'entete-bloc' }, h('h3', {}, 'Sommaire détaillé'),
           modif ? h('button', { class: 'btn petit', type: 'button', title: 'Remplacer le sommaire par les titres d’un fichier Word', onclick: async () => {
@@ -751,7 +879,7 @@ ${listeSavoirs(ref)}`,
           if (e.target.checked) chemin(r).forEach((d) => coches.add(d.id));
           dessiner();
         } });
-        return [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, cb, r.type === 'dossier' ? '📁 ' : '📘 ', titreDe(r),
+        return [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, cb, iconeDoc(r) + ' ', titreDe(r),
           !aMoi(r) && prof === 0 ? h('small', {}, ' · ' + nomDe(r.proprietaire)) : null),
         ...(r.type === 'dossier' ? enfants(r.id).flatMap((f) => ligne(f, prof + 1)) : [])];
       };
@@ -782,7 +910,7 @@ ${listeSavoirs(ref)}`,
     const cheminTexte = (r) => chemin(r).map(titreDe).join(' › ');
     const savTexte = (r) => (r.savoirs || []).map((c) => `${c} ${libSavoir(c)}`);
     const nbSav = new Set(lesCours.flatMap((r) => r.savoirs || [])).size;
-    const titre = depuis ? titreDe(depuis) : 'Mes cours ressources';
+    const titre = depuis ? titreDe(depuis) : 'Mes cours';
     const blocs = [
       { t: 'titre', texte: depuis ? titre : 'COURS RESSOURCES', sous: `${auteur}${depuis ? '' : ' · ' + (vue === 'mes' ? 'mes cours' : 'cours partagés')}`, couleur: '#1E8F86' },
       { t: 'infos', paires: [['Enseignant', auteur], ['Édité le', new Date().toLocaleDateString('fr-FR')], ['Cours', String(lesCours.length)], ['Savoirs associés', `${nbSav} savoir(s) différent(s)`]] },
@@ -815,5 +943,5 @@ ${listeSavoirs(ref)}`,
     return { fichier: nomFichier(`Cours_${depuis ? titre : 'ressources'}_${auteur}.pdf`), titre, pied: `Cours ressources · ${auteur} · ${new Date().toLocaleDateString('fr-FR')}`, blocs };
   }
 
-  majOnglets(); majChoixSavoir(); dessinerArbre(); dessinerDetail();
+  majOnglets(); majChoixSavoir(); majEtiquettes(); dessinerArbre(); dessinerDetail();
 }

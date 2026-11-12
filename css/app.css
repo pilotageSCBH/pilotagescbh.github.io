@@ -1748,3 +1748,103 @@ th.eleve.hors span { opacity: .55; }
 .carte-lien h3 small { font-weight: 400; font-size: 12px; }
 .ligne-cours-lie { display: flex; align-items: center; gap: 3px; }
 .ligne-cours-lie .cours-lie { flex: 1; }
+
+/* ===================================================================== Mes ressources · Ma bibliothèque */
+.entete-biblio { margin: -6px -6px 14px; padding: 22px 24px 20px; border-radius: 16px; color: #F3F8F1;
+  background: linear-gradient(180deg, rgba(20,60,50,.55), rgba(15,50,42,.88)), var(--fond-biblio, #1f5a4c); background-size: cover; box-shadow: var(--ombre); }
+.entete-biblio h1 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 32px; color: #fff; }
+.entete-biblio .sous-titre { color: #D7E9E2; }
+.tete-biblio { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.entete-biblio .btn { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); color: #fff; }
+.entete-biblio .btn:hover { background: rgba(255,255,255,.22); }
+.entete-biblio .btn.principal { background: #F3F8F1; color: var(--fonce); border-color: #F3F8F1; }
+.entete-biblio .btn.actif-gestion { background: #E8B04A; border-color: #E8B04A; color: #2B2118; }
+.zone-recherche-biblio { position: relative; margin-top: 16px; max-width: 760px; }
+.recherche-biblio { width: 100%; font: inherit; font-size: 17px; padding: 13px 44px 13px 16px; border-radius: 12px; border: 0; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.recherche-biblio:focus { outline: 3px solid rgba(232,176,74,.7); }
+.effacer-recherche { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: none; font-size: 24px; color: #6f6153; cursor: pointer; }
+.tuiles-biblio { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin: 6px 0 22px; }
+.tuile-biblio { position: relative; display: flex; align-items: flex-end; min-height: 150px; border-radius: 14px; overflow: hidden; text-decoration: none; color: #fff;
+  background-size: cover; background-position: center; box-shadow: var(--ombre); border: 0; cursor: pointer; transition: transform .15s, box-shadow .15s; font: inherit; }
+.tuile-biblio:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(20,50,46,.22); }
+.tuile-biblio .etiquette-tuile { width: 100%; padding: 26px 14px 12px; background: linear-gradient(180deg, transparent, rgba(25,15,8,.78)); }
+.tuile-biblio .nom { font-family: Georgia, 'Times New Roman', serif; font-size: 19px; line-height: 1.2; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.tuile-biblio .compte { font-size: 12.5px; opacity: .92; margin-top: 2px; }
+.tuile-biblio.nouvelle { background: #fff; color: var(--teal); border: 2px dashed var(--teal); flex-direction: column; justify-content: center; align-items: center; gap: 4px; box-shadow: none; }
+.tuile-biblio.nouvelle .plus { font-size: 32px; }
+.tuile-biblio.glisse { opacity: .4; }
+.tuile-biblio.cible { outline: 3px dashed #E8B04A; outline-offset: 2px; }
+.outils-tuile { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.outils-tuile button { border: 0; border-radius: 8px; background: rgba(255,255,255,.92); color: var(--texte); width: 30px; height: 30px; cursor: pointer; font-size: 14px; }
+.outils-tuile button:hover { background: #fff; }
+.titre-section { font-size: 17px; color: var(--fonce); margin: 18px 0 10px; }
+.ariane-biblio { font-size: 14px; color: var(--gris); margin: 4px 0 10px; }
+.ariane-biblio a { color: var(--teal); text-decoration: none; }
+.ariane-biblio a:hover { text-decoration: underline; }
+.tete-theme { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.livres-biblio { display: flex; flex-direction: column; gap: 10px; }
+.livre-biblio { background: #fff; border-radius: 12px; box-shadow: var(--ombre); padding: 12px 14px; }
+.livre-tete { display: flex; gap: 14px; align-items: center; }
+.couv-mini { width: 54px; height: 74px; object-fit: cover; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.25); flex: none; }
+.couv-moyenne { width: 110px; height: 150px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.couv-grande { width: 100%; max-width: 230px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.25); display: block; }
+.tranche { display: grid; place-items: center; color: #fff; font-family: Georgia, serif; font-size: 26px; background: var(--couleur); background-image: linear-gradient(90deg, rgba(0,0,0,.18), transparent 18%, transparent 82%, rgba(0,0,0,.12)); }
+.tranche.couv-grande { height: 300px; font-size: 64px; }
+.livre-infos { flex: 1; min-width: 0; }
+.livre-titre { font-family: Georgia, 'Times New Roman', serif; font-size: 17px; }
+.livre-titre a { color: var(--texte); text-decoration: none; }
+.livre-titre a:hover { color: var(--teal); }
+.livre-details { color: var(--gris); font-size: 13.5px; }
+.livre-meta { color: var(--gris); font-size: 12.5px; margin-top: 2px; }
+.livre-meta .chemin a { color: var(--teal); text-decoration: none; }
+.pastille-a-completer { background: #FFF1D6; color: #8A5A00; border-radius: 10px; padding: 0 8px; font-size: 11.5px; }
+.actions-livre { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.btn.desactive { opacity: .45; cursor: not-allowed; }
+.extraits-biblio { margin: 10px 0 0 68px; }
+.sommaire-biblio { list-style: none; margin: 0; padding: 0; }
+.sommaire-biblio li a, .sommaire-biblio li .sans-lien { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; border-radius: 6px; color: var(--texte); text-decoration: none; font-size: 14px; }
+.sommaire-biblio li a:hover { background: #F0F6F4; }
+.sommaire-biblio li.niv-som0 > * { font-weight: 600; }
+.sommaire-biblio li.niv-som1 > * { padding-left: 26px; }
+.sommaire-biblio li.niv-som2 > * { padding-left: 44px; font-size: 13.5px; }
+.sommaire-biblio li.niv-som3 > *, .sommaire-biblio li.niv-som4 > * { padding-left: 62px; font-size: 13px; color: var(--gris); }
+.sommaire-biblio .pg { color: var(--gris); font-size: 12.5px; white-space: nowrap; font-weight: 400; }
+.sommaire-biblio mark, .livre-biblio mark { background: #FFE58A; border-radius: 2px; padding: 0 1px; }
+.sommaire-biblio.complet { background: #fff; border-radius: 10px; padding: 6px; box-shadow: var(--ombre); }
+.fiche-livre .grille-fiche-livre { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 800px) { .fiche-livre .grille-fiche-livre { grid-template-columns: 1fr; } }
+.boutons-fiche { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; max-width: 230px; }
+.boutons-fiche .btn { text-align: center; justify-content: center; }
+.titre-livre { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 26px; margin: 0 0 8px; color: var(--fonce); }
+.infos-livre { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; background: #fff; border-radius: 10px; padding: 10px 14px; box-shadow: var(--ombre); font-size: 14px; }
+.infos-livre dt { color: var(--gris); font-weight: 600; }
+.infos-livre dd { margin: 0; overflow-wrap: anywhere; }
+.col-infos h3 { color: var(--fonce); font-size: 15px; margin: 16px 0 6px; }
+.note { color: var(--gris); font-size: 13px; font-style: italic; }
+.groupe-proprio-biblio + .groupe-proprio-biblio { margin-top: 18px; }
+.apercu-tuile { height: 120px; border-radius: 10px; background-size: cover; background-position: center; margin: 6px 0; }
+.lib-form { display: block; font-weight: 600; font-size: 12.5px; color: var(--gris); margin-bottom: 4px; }
+.modif-livre .groupe-docs { margin: 12px 0; }
+.champ.court { width: 70px; border-color: var(--ligne); background: #fff; }
+.propositions-isbn { display: flex; flex-direction: column; gap: 6px; }
+.proposition { display: flex; gap: 10px; align-items: center; background: #F6FAF9; border-radius: 8px; padding: 6px 8px; }
+.proposition img { width: 40px; height: 56px; object-fit: cover; border-radius: 3px; }
+.proposition div { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.proposition small { color: var(--gris); }
+.reglages-nuage { display: flex; flex-direction: column; gap: 12px; }
+.reglages-nuage label { display: flex; flex-direction: column; gap: 4px; }
+.reglages-nuage .champ { border-color: var(--ligne); background: #fff; }
+.etat-lien.ok { color: #2E7D4F; } .etat-lien.ko { color: var(--rouge); }
+.barre-progres { height: 10px; border-radius: 6px; background: #E4ECEA; overflow: hidden; }
+.barre-progres span { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
+/* Mes cours : type, étiquettes, chemin Nuage */
+.etiquettes-doc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.etiquette-doc { background: #EEF4F2; border-radius: 12px; padding: 2px 4px 2px 9px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 2px; }
+.etiquette-doc button { border: 0; background: none; cursor: pointer; color: var(--gris); font-size: 14px; }
+.champ.ajout-etiquette { width: 170px; border-color: var(--ligne); background: #fff; padding: 3px 8px; }
+.carte-lien .sous-titre-lien { font-size: 13.5px; margin: 12px 0 4px; }
+.partage-collegue h2 { font-size: 17px; color: var(--fonce); margin: 0 0 6px; }
+.partage-collegue h3 { font-size: 14px; margin: 10px 0 2px; }
+.partage-collegue + .partage-collegue { margin-top: 14px; }
+
+.livre-biblio a.btn, .boutons-fiche a.btn, .tete-theme a.btn { text-decoration: none; }
