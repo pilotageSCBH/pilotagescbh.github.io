@@ -10,7 +10,7 @@ import { boutonIA, champs, codesDans, listeSavoirs, aEcrire, resume } from '../i
 import {
   sansAccent, compareTitres, pluriel, chargerReglages, reglagesDe, adresseFichier, adresseDossier, accueilNuage, dialogueReglages,
   chargerCollegues, nomCollegue, lirePdf, ouvrirPdf, signetsPdf, textePages, sommaireDepuisTexte, imagePage, reduireImage,
-  choisirDossier, cheminRelatif, ignore, grainDeBois, couleurTranche, dialoguePartage, progression,
+  choisirDossier, cheminRelatif, ignore, grainDeBois, couleurTranche, dialoguePartage, progression, nuageListe, nuageFichier, analyserLien,
 } from '../ressources.js';
 
 // ------------------------------------------------------------------------------------------- types de documents (Mes cours)
@@ -429,19 +429,20 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const propositions = h('div', { class: 'propositions-isbn' });
     // fichier choisi sur l'ordinateur (PDF : couverture et sommaire ; Word : sommaire)
     let pdfLocal = null;
-    const choixPdf = h('input', { type: 'file', accept: 'application/pdf,.pdf,.docx', onchange: async () => {
-      const f = choixPdf.files[0]; if (!f) return;
-      try {
+    const choixPdf = h('input', { type: 'file', accept: 'application/pdf,.pdf,.docx', onchange: async () => { if (choixPdf.files[0]) await lireFichier(choixPdf.files[0]).catch(erreur); } });
+    async function lireFichier(f) {
+      {
         if (/\.docx$/i.test(f.name)) {
           const w = await lireWord(f, ref); if (!w.nb) throw new Error('Aucun titre trouvé dans ce document Word (styles « Titre 1 », « Titre 2 »…).');
           som.value = versTexte(w.sommaire); source = 'word'; savoirsWord = w.savoirs; toast(`${w.nb} titres repris du fichier Word`);
-        } else { pdfLocal = await ouvrirPdf(f); pages = pdfLocal.numPages; toast(`PDF lu : ${pdfLocal.numPages} pages`); }
-      } catch (e) { erreur(e); }
-    } });
+        } else if (/\.pdf$/i.test(f.name)) { pdfLocal?.destroy?.(); pdfLocal = await ouvrirPdf(f); pages = pdfLocal.numPages; toast(`PDF lu : ${pdfLocal.numPages} pages`); }
+        else throw new Error('Seuls les PDF et les fichiers Word (.docx) peuvent être lus.');
+      }
+    }
     const pageCouv = h('input', { class: 'champ court', type: 'number', min: 1, value: 1 });
     const debut = h('input', { class: 'champ court', type: 'number', min: 1, placeholder: 'de' }), fin = h('input', { class: 'champ court', type: 'number', min: 1, placeholder: 'à' });
     const decalage = h('input', { class: 'champ court', type: 'number', value: 0, title: 'Page du PDF − page imprimée (ex. 2 si la page imprimée 1 est la 3e page du PDF)' });
-    const exigerPdf = () => { if (!pdfLocal) throw new Error('Choisissez d’abord le fichier PDF (sur votre ordinateur).'); };
+    const exigerPdf = () => { if (!pdfLocal) throw new Error('Lisez d’abord le fichier PDF (sur Nuage ou sur votre ordinateur).'); };
     const attente = fenetre(`Modifier « ${l.titre || E.fiche} »`, h('div', { class: 'modif-livre' },
       h('div', { class: 'formulaire' },
         h('label', { class: 'large' }, 'Titre', titre), E.genres ? h('label', {}, 'Type de document', genre) : null,
@@ -450,8 +451,15 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('div', { class: 'large' }, propositions),
         h('label', {}, 'Ranger dans', theme), h('label', {}, 'Fichier sur Nuage (chemin)', cheminF), h('label', { class: 'large' }, 'Lien direct', lien),
         h('label', { class: 'large' }, 'Notes', notes)),
-      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, 'Le fichier sur cet ordinateur (couverture et sommaire)'),
-        h('p', { class: 'aide' }, 'Facultatif : choisissez le fichier (par exemple dans votre dossier synchronisé avec Nuage) : un PDF pour refaire la couverture ou lire le sommaire, un Word (.docx) pour reprendre ses titres. Le fichier est lu ici, il n’est pas envoyé.'), choixPdf),
+      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, 'Lire le fichier (couverture et sommaire)'),
+        h('p', { class: 'aide' }, 'Facultatif : un PDF pour refaire la couverture ou lire le sommaire, un Word (.docx) pour reprendre ses titres. Le fichier est seulement lu, rien n’est modifié.'),
+        h('div', { class: 'boutons-detail' },
+          l.chemin && analyserLien(reglagesDe(l.proprietaire)[E.lien]) ? h('button', { class: 'btn petit principal', type: 'button', onclick: async (ev) => {
+            const b = ev.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = 'Lecture sur Nuage…';
+            try { await lireFichier(await nuageFichier(reglagesDe(l.proprietaire)[E.lien], cheminF.value.trim() || l.chemin)); } catch (e) { erreur(e); }
+            b.disabled = false; b.textContent = avant;
+          } }, '☁ Lire le fichier sur Nuage') : null,
+          h('span', {}, 'ou sur cet ordinateur :'), choixPdf)),
       h('div', { class: 'deux-colonnes-partage' },
         h('div', {}, h('p', { class: 'sous-titre-choix' }, 'Couverture'), couv,
           h('div', { class: 'boutons-detail' }, h('span', {}, 'Page du PDF'), pageCouv, h('button', { class: 'btn petit', type: 'button', onclick: async () => { try { exigerPdf(); vignette = await imagePage(pdfLocal, Number(pageCouv.value) || 1); majCouv(); } catch (e) { erreur(e); } } }, 'Utiliser cette page')),
@@ -504,32 +512,63 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   }
   // ajouter des fiches : fichiers choisis sur l'ordinateur → fiches (PDF : pages, signets, couverture ; Word : titres, savoirs)
   async function ajouterLivres(themeId) {
+    const lienN = reglage[E.lien], avecNuage = !!analyserLien(lienN);
     const fichiers = h('input', { type: 'file', multiple: true });
     const theme = selectTheme(themeId);
     const lire = h('input', { type: 'checkbox', checked: true });
+    // choix dans Nuage : fichiers du dossier du thème (et de ses sous-dossiers) qui n'ont pas encore de fiche
+    const choisisN = new Set();
+    const zoneN = h('div', { class: 'choix-dossier arbre-pdf choix-nuage' });
+    let listeN = null, visiblesN = [];
+    const connus = new Set(mesLivres.map((l) => l.chemin.normalize('NFC')));
+    const dessinerN = () => {
+      if (!listeN) return;
+      const t = theme.value ? T.get(Number(theme.value)) : null, pfx = t?.dossier ? t.dossier.normalize('NFC') + '/' : '';
+      const l = visiblesN = listeN.filter((x) => !x.dossier && x.c.startsWith(pfx) && !connus.has(x.c) && !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c));
+      vider(zoneN, l.length ? l.map((x) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choisisN.has(x.c), onchange: (e) => (e.target.checked ? choisisN.add(x.c) : choisisN.delete(x.c)) }),
+        x.c.slice(pfx.length))) : h('p', { class: 'aide' }, pfx ? `Aucun nouveau fichier dans le dossier « ${t.dossier} » sur Nuage.` : 'Aucun fichier sans fiche sur Nuage.'));
+    };
+    const chargerN = async () => {
+      vider(zoneN, h('p', { class: 'aide' }, 'Lecture de votre Nuage…'));
+      try { listeN = await nuageListe(lienN); dessinerN(); } catch (e) { vider(zoneN, h('p', { class: 'erreur-ia' }, e.message)); }
+    };
+    theme.addEventListener('change', dessinerN);
+    if (avecNuage) setTimeout(chargerN, 50);
     const ok = await fenetre(E.ajouter, h('div', { class: 'formulaire' },
-      h('p', { class: 'aide' }, `1. Déposez les fichiers dans le dossier du ${E.theme} sur votre Nuage (ou dans votre dossier synchronisé). 2. Choisissez-les ici : le site crée une fiche par fichier et lit les PDF (nombre de pages, sommaire, couverture) et les Word (titres) sur votre ordinateur, sans rien envoyer.`),
-      h('label', { class: 'large' }, 'Fichiers (tous types)', fichiers), h('label', {}, `Ranger dans le ${E.theme}`, theme),
+      h('label', {}, `Ranger dans le ${E.theme}`, theme),
       h('label', { class: 'case' }, lire, ' Lire les PDF et les Word (sommaire, couverture)'),
-      h('p', { class: 'aide' }, h('a', { href: accueilNuage(reglage[E.lien]), target: '_blank', rel: 'noopener' }, '📂 Ouvrir mon Nuage'), ' pour y déposer les fichiers.')),
-    [{ texte: 'Annuler', valeur: false }, { texte: '＋ Créer les fiches', classe: 'principal', action: () => { if (!fichiers.files.length) throw new Error('Choisissez au moins un fichier.'); return true; } }]);
+      avecNuage ? h('div', { class: 'large' }, h('p', { class: 'sous-titre-choix' }, `☁ Dans mon Nuage (fichiers du ${E.theme} choisi qui n’ont pas encore de fiche)`), zoneN,
+        h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: () => { visiblesN.forEach((x) => choisisN.add(x.c)); dessinerN(); } }, 'Tout cocher'),
+          h('a', { class: 'btn petit', href: accueilNuage(lienN), target: '_blank', rel: 'noopener' }, '📂 Ouvrir mon Nuage'))) :
+        h('p', { class: 'aide large' }, `Pour choisir les fichiers directement dans votre Nuage, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans « ⚙ Réglages Nuage ».`),
+      h('label', { class: 'large' }, avecNuage ? '💻 Ou sur cet ordinateur' : 'Fichiers (tous types)', fichiers),
+      h('p', { class: 'aide large' }, 'Le site crée une fiche par fichier et lit les PDF (pages, sommaire, couverture) et les Word (titres) ; rien n’est modifié sur votre Nuage.')),
+    [{ texte: 'Annuler', valeur: false }, { texte: '＋ Créer les fiches', classe: 'principal', action: () => { if (!fichiers.files.length && !choisisN.size) throw new Error('Choisissez au moins un fichier.'); return true; } }], { large: true });
     if (!ok) return;
     const t = theme.value ? T.get(Number(theme.value)) : null;
-    await creerFiches([...fichiers.files].map((f) => ({ f, chemin: ((t?.dossier ? t.dossier + '/' : '') + f.name).normalize('NFC'), themeId: t?.id ?? null })), lire.checked);
+    const tailles = new Map((listeN || []).map((x) => [x.c, x.taille]));
+    const parDossier = new Map([...T.values()].filter(aMoi).map((x) => [x.dossier.normalize('NFC'), x]));
+    await creerFiches([
+      ...[...choisisN].map((c) => ({ chemin: c, taille: tailles.get(c), charger: () => nuageFichier(lienN, c), themeId: parDossier.get(c.split('/').slice(0, -1).join('/'))?.id ?? t?.id ?? null })),
+      ...[...fichiers.files].map((f) => ({ f, chemin: ((t?.dossier ? t.dossier + '/' : '') + f.name).normalize('NFC'), themeId: t?.id ?? null })),
+    ], lire.checked);
   }
   async function creerFiches(liste, lireFichiers) {
     const pr = progression('Création des fiches'); let n = 0;
     try {
       for (const [i, x] of liste.entries()) {
-        pr.maj(i, liste.length, x.f ? x.f.name : x.chemin);
+        pr.maj(i, liste.length, x.chemin.split('/').pop());
         const nom = x.chemin.split('/').pop(), titre = nom.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_]+/g, ' ').trim();
         let info = { pages: null, sommaire: [], source: '', vignette: '', savoirs: [] };
-        if (lireFichiers && x.f && /\.pdf$/i.test(nom)) { try { info = { ...info, ...(await lirePdf(x.f)) }; } catch { info = { ...info, source: 'erreur' }; } }
-        if (lireFichiers && x.f && /\.docx$/i.test(nom)) { try { const w = await lireWord(x.f, ref); info = { ...info, sommaire: w.sommaire, savoirs: w.savoirs, source: 'word' }; } catch { /* Word illisible */ } }
+        const aLire = lireFichiers && /\.(pdf|docx)$/i.test(nom) && (x.f || x.charger) && !(x.taille > 80 * 1024 * 1024);
+        let f = null;
+        if (aLire) { try { f = x.f || await x.charger(); } catch { info = { ...info, source: /\.pdf$/i.test(nom) ? 'erreur' : '' }; } }
+        if (f && /\.pdf$/i.test(nom)) { try { info = { ...info, ...(await lirePdf(f)) }; } catch { info = { ...info, source: 'erreur' }; } }
+        if (f && /\.docx$/i.test(nom)) { try { const w = await lireWord(f, ref); info = { ...info, sommaire: w.sommaire, savoirs: w.savoirs, source: 'word' }; } catch { /* Word illisible */ } }
         const dossierParent = x.chemin.split('/').slice(-2, -1)[0] || '';
         const v = { espace: E.cle, theme_id: x.themeId, titre: info.titreMeta && info.titreMeta.length > 3 && !/^microsoft|untitled|sans titre/i.test(info.titreMeta) ? info.titreMeta : titre,
           chemin: x.chemin, pages: info.pages, sommaire: info.sommaire, source: info.source, vignette: info.vignette, savoirs: info.savoirs || [], ordre: 1000 + i };
-        if (E.genres) v.genre = genreDepuisNom(dossierParent) || genreDepuisNom(titre) || 'cours';
+        if (E.genres) v.genre = (/corrig/i.test(titre) && 'corrige') || genreDepuisNom(dossierParent) || genreDepuisNom(titre) || 'cours';
         const l = await db.ajouter('biblio_livres', v);
         L.set(l.id, l); n++;
       }
@@ -538,16 +577,44 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   }
 
   // ------------------------------------------------------------------ mise à jour depuis le dossier synchronisé
-  async function mettreAJour() {
-    toast(`Choisissez votre dossier « ${E.nomDossierNuage} » (synchronisé avec Nuage)`);
+  // le contenu du dossier « Mes cours » / « Bibliothèque » : directement sur Nuage (relais), sinon un dossier de l'ordinateur
+  async function lireDossierNuage() {
+    const lienN = reglage[E.lien];
+    if (!analyserLien(lienN)) {
+      const choix = await fenetre('Mettre à jour depuis mon dossier', h('div', {},
+        h('p', {}, `Pour que le site lise directement votre dossier « ${E.nomDossierNuage} » sur Nuage, collez d’abord son lien de partage dans « ⚙ Réglages Nuage ».`)),
+      [{ texte: 'Annuler', valeur: null }, { texte: '💻 Choisir un dossier sur cet ordinateur', valeur: 'local' }, { texte: '⚙ Réglages Nuage', classe: 'principal', valeur: 'reglages' }]);
+      if (choix === 'reglages') dialogueReglages(ctx, recharger);
+      return choix === 'local' ? lireDossierLocal() : null;
+    }
+    const pr = progression(`Lecture de votre dossier « ${E.nomDossierNuage} » sur Nuage…`);
+    try {
+      const l = await nuageListe(lienN, { force: true });
+      pr.fin();
+      return l.filter((x) => !x.dossier).map((x) => ({ c: x.c, taille: x.taille, charger: () => nuageFichier(lienN, x.c) }));
+    } catch (e) {
+      pr.fin();
+      const choix = await fenetre('Lecture de Nuage impossible', h('div', {}, h('p', { class: 'erreur-ia' }, e.message),
+        h('p', { class: 'aide' }, 'Le relais « nuage » doit être installé une fois dans Supabase par l’administrateur (voir l’aide, « Mes ressources »). En attendant, vous pouvez choisir un dossier sur cet ordinateur.')),
+      [{ texte: 'Annuler', valeur: null }, { texte: '💻 Choisir un dossier sur cet ordinateur', classe: 'principal', valeur: 'local' }]);
+      return choix === 'local' ? lireDossierLocal() : null;
+    }
+  }
+  async function lireDossierLocal() {
+    toast(`Choisissez votre dossier « ${E.nomDossierNuage} »`);
     const tous = await choisirDossier();
-    if (!tous.length) return;
+    if (!tous.length) return null;
     // dossier « Livres » choisi directement : les chemins enregistrés commencent par « Livres/ »
     const racineChoisie = String(tous[0].webkitRelativePath || '').split('/')[0];
     const prefixe = racineChoisie === 'Livres' && mesLivres.some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
-    let fichiers = tous.map((f) => ({ f, c: prefixe + cheminRelatif(f) })).filter((x) => x.c && !ignore(x.c));
+    return tous.map((f) => ({ c: prefixe + cheminRelatif(f), f, taille: f.size, charger: async () => f }));
+  }
+  async function mettreAJour() {
+    const lus = await lireDossierNuage();
+    if (!lus) return;
+    let fichiers = lus.filter((x) => x.c && !ignore(x.c));
     // les images de tuiles « illustration.* » ne sont pas des fiches
-    const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [x.c.split('/').slice(0, -1).join('/'), x.f]));
+    const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [x.c.split('/').slice(0, -1).join('/'), x]));
     fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));
     const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.map((t) => [t.dossier.normalize('NFC'), t]));
     const connus = new Set(mesLivres.map((l) => l.chemin.normalize('NFC')));
@@ -565,7 +632,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('li', {}, h('b', {}, pluriel(disparus.length, 'fiche dont le fichier est introuvable', 'fiches dont le fichier est introuvable')), disparus.length ? ' : ' + disparus.slice(0, 6).map((l) => l.titre).join(', ') : '')),
       nouveaux.length ? h('label', { class: 'case' }, lire, ' Lire les nouveaux PDF et Word (sommaire, couverture) — plus long') : null,
       disparus.length ? h('label', { class: 'case' }, retirer, ' Supprimer les fiches dont le fichier est introuvable') : null,
-      h('p', { class: 'aide' }, 'Seuls les noms des fichiers et dossiers sont lus (et les nouveaux PDF et Word, si coché) : rien n’est envoyé.')),
+      h('p', { class: 'aide' }, 'Seuls les noms des fichiers et dossiers sont lus (et les nouveaux PDF et Word, si coché), en lecture seule : rien n’est modifié sur votre Nuage.')),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Mettre à jour', classe: 'principal', valeur: true }]);
     if (!ok) return;
     try {
@@ -574,13 +641,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         const parent = parDossier.get(parentD) || null;
         const ordre = Math.max(0, ...sousThemes(parent?.id ?? null, moi).map((x) => x.ordre)) + 1;
         let image = '';
-        if (images.has(d)) { try { image = await reduireImage(images.get(d), 520, 0.72); } catch { /* image illisible */ } }
+        if (images.has(d)) { try { image = await reduireImage(await images.get(d).charger(), 520, 0.72); } catch { /* image illisible */ } }
         const t = await db.ajouter('biblio_themes', { espace: E.cle, parent_id: parent?.id ?? null, nom, dossier: d, ordre, image });
         T.set(t.id, t); parDossier.set(d, t);
       }
       if (retirer.checked) for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); }
     } catch (e) { erreur(e); }
-    await creerFiches(nouveaux.map((x) => ({ f: x.f, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);
+    await creerFiches(nouveaux.map((x) => ({ f: x.f, charger: x.charger, taille: x.taille, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);
   }
 
   // ------------------------------------------------------------------ partage

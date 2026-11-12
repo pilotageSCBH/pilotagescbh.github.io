@@ -2,7 +2,7 @@
 // Les fichiers restent sur le Nuage de chaque enseignant ; le site garde les fiches et le chemin de chaque fichier.
 // Adresse d'un fichier = lien de partage du dossier (réglages Nuage) + chemin du fichier dans ce dossier.
 // Les PDF et les dossiers choisis sur l'ordinateur sont lus dans le navigateur : rien n'est envoyé.
-import { db } from './api.js';
+import { db, fonctionServeur } from './api.js';
 import { h, vider, toast, erreur, fenetre } from './ui.js';
 
 export const sansAccent = (t) => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -52,13 +52,23 @@ export async function dialogueReglages(ctx, apres) {
     h('option', { value: 'telechargement', selected: r.format_liens === 'telechargement' }, 'Téléchargement du fichier'));
   const etat = (inp) => { const z = h('small', { class: 'etat-lien' }); const maj = () => { const v = inp.value.trim(); z.textContent = !v ? '' : analyserLien(v) ? '✔ lien de partage reconnu' : '✖ ce n’est pas un lien de partage Nuage (…/s/…)'; z.className = 'etat-lien ' + (!v ? '' : analyserLien(v) ? 'ok' : 'ko'); }; inp.addEventListener('input', maj); maj(); return z; };
   const ok = await fenetre('⚙  Mes réglages Nuage', h('div', { class: 'reglages-nuage' },
-    h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule) sur le dossier de votre bibliothèque, et un autre sur votre dossier « Mes cours », puis collez-les ici : le site fabrique ensuite l’adresse de chaque fichier à partir de son chemin.'),
+    h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule, sans mot de passe) sur le dossier de votre bibliothèque, et un autre sur votre dossier « Mes cours », puis collez-les ici : le site lit alors directement vos dossiers (« ↻ Mettre à jour ») et ouvre chaque fichier à partir de son chemin.'),
     h('label', {}, h('b', {}, '📖 Lien de partage de ma bibliothèque'), lb, etat(lb),
       h('small', { class: 'gris' }, 'Le dossier qui contient vos dossiers de thèmes.')),
     h('label', {}, h('b', {}, '🎓 Lien de partage de « Mes cours »'), lc, etat(lc)),
+    h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: async (ev) => {
+      const b = ev.currentTarget, z = b.nextSibling; b.disabled = true; z.textContent = 'Lecture…'; z.className = 'etat-lien';
+      const res = [];
+      for (const [nom, i] of [['Bibliothèque', lb], ['Mes cours', lc]]) {
+        if (!analyserLien(i.value)) continue;
+        try { const l = await nuageListe(i.value, { force: true }); res.push(`✔ ${nom} : ${l.filter((x) => !x.dossier).length} fichier(s), ${l.filter((x) => x.dossier).length} dossier(s)`); }
+        catch (e) { res.push(`✖ ${nom} : ${e.message}`); }
+      }
+      z.textContent = res.join('  ·  ') || 'Collez d’abord un lien de partage.'; z.className = 'etat-lien ' + (res.some((x) => x.startsWith('✖')) ? 'ko' : 'ok'); b.disabled = false;
+    } }, '☁ Tester la lecture de mes dossiers'), h('small', { class: 'etat-lien' })),
     h('label', {}, h('b', {}, 'Ouverture des fichiers'), fmt,
       h('small', { class: 'gris' }, 'Si un fichier ne s’ouvre pas, essayez l’autre réglage (bouton « Tester » dans la bibliothèque).')),
-    h('p', { class: 'aide' }, '🔒 Partage en lecture seule. Vos collègues ne verront que les documents que vous partagez avec eux dans le site ; pour ouvrir les fichiers, ils utilisent ces liens (donnez-leur le mot de passe si vous en avez mis un).')),
+    h('p', { class: 'aide' }, '🔒 Partage en lecture seule. Vos collègues ne verront que les documents que vous partagez avec eux dans le site ; pour ouvrir les fichiers, ils utilisent ces liens.')),
   [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', action: () => {
     for (const i of [lb, lc]) if (i.value.trim() && !analyserLien(i.value)) throw new Error('Lien non reconnu : copiez le lien de partage de Nuage (il contient « /s/ »).');
     return true;
@@ -186,6 +196,25 @@ export function choisirDossier() {
 // (forme Unicode unique : certains systèmes écrivent « é » en deux caractères)
 export const cheminRelatif = (f) => String(f.webkitRelativePath || f.name).normalize('NFC').split('/').slice(1).join('/');
 export const ignore = (chemin) => chemin.split('/').some((p) => p.startsWith('.') || p.startsWith('_') || p.startsWith('~$') || /^(desktop\.ini|thumbs\.db)$/i.test(p));
+
+// ------------------------------------------------------------------------------------------- lecture directe de Nuage (relais Supabase « nuage »)
+// liste de tout le dossier partagé : [{ c: chemin, dossier, taille, date }] (gardée 5 minutes)
+const listesNuage = new Map();
+export async function nuageListe(lien, { force = false } = {}) {
+  const k = String(lien || '').trim(), m = listesNuage.get(k);
+  if (m && !force && Date.now() - m.t < 300000) return m.l;
+  const d = await fonctionServeur('nuage', { action: 'liste', lien: k });
+  const l = (d.fichiers || []).map((x) => ({ ...x, c: String(x.c).normalize('NFC') })).filter((x) => x.c && !ignore(x.c));
+  listesNuage.set(k, { l, t: Date.now() });
+  return l;
+}
+// un fichier du dossier partagé → objet File (lu dans le navigateur, comme un fichier de l'ordinateur)
+export async function nuageFichier(lien, chemin) {
+  const b = await fonctionServeur('nuage', { action: 'fichier', lien: String(lien || '').trim(), chemin }, { binaire: true });
+  const nom = chemin.split('/').pop();
+  return new File([b], nom, { type: /\.pdf$/i.test(nom) ? 'application/pdf' : b.type || '' });
+}
+export const oublierListesNuage = () => listesNuage.clear();
 
 // ------------------------------------------------------------------------------------------- veinage bois (tuiles)
 function hachage(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; }

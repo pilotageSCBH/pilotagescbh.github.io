@@ -125,6 +125,25 @@ export const MODIFICATION = 'donnees-modifiees';
 const signaler = (r) => { window.dispatchEvent(new Event(MODIFICATION)); return r; };
 const LECTURES = new Set(['sauvegarde', 'mon_profil', 'notes_sommatives', 'presence', 'bilan_connexions', 'etat_site']);
 
+// fonctions serveur Supabase (Edge Functions), ex. le relais « nuage » ; réponse JSON ou fichier (binaire)
+export async function fonctionServeur(nom, corps, { binaire = false } = {}) {
+  try { await rafraichirSiBesoin(); } catch { window.dispatchEvent(new Event(SESSION_EXPIREE)); throw new Error('Session expirée : reconnectez-vous.'); }
+  if (!session) { window.dispatchEvent(new Event(SESSION_EXPIREE)); throw new Error('Session expirée : reconnectez-vous.'); }
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/functions/v1/${nom}`, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(corps) });
+  } catch {
+    const e = new Error(`Le relais « ${nom} » ne répond pas : il n’est peut-être pas encore installé dans Supabase (Edge Functions).`); e.statut = 0; throw e;
+  }
+  if (!r.ok) {
+    let m = ''; try { const d = await r.json(); m = d.erreur || d.message || d.msg || ''; } catch { /* pas de JSON */ }
+    if (r.status === 404 && !m) m = `Le relais « ${nom} » n’est pas encore installé dans Supabase (Edge Functions).`;
+    if (r.status === 401 && /jwt/i.test(m)) m = `Le relais « ${nom} » refuse la demande : dans Supabase, désactivez « Enforce JWT verification » dans les réglages de la fonction.`;
+    const e = new Error(m || `Erreur du relais « ${nom} » (${r.status}).`); e.statut = r.status; throw e;
+  }
+  return binaire ? r.blob() : r.json();
+}
+
 export const db = {
   // requete : filtres et tri à la façon de Supabase, ex. « matiere_id=eq.3&order=numero »
   // (le serveur renvoie au plus 1000 lignes par demande : les lignes suivantes sont lues par pages)
