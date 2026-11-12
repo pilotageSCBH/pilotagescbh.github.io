@@ -1,9 +1,9 @@
 // Page d'accueil (tableau de bord) présentée comme l'accueil d'un site : bandeau de bienvenue, accès rapides,
 // « cette semaine » (évaluations, notes à saisir, alertes), la promotion en chiffres, les matières et un pied de page.
 import { db, identifiantDe, emailConnecte } from '../api.js';
-import { h, vider, heures, dateFr } from '../ui.js';
+import { h, vider, heures } from '../ui.js';
 import { choixPromotion } from '../app.js';
-import { chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineIso, lundi, aujourdhui, semaineDe, SEM_AN, NB_SEM, TYPES_EVAL } from '../pilotage.js';
+import { chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineIso, lundi, aujourdhui, SEM_AN, NB_SEM, TYPES_EVAL } from '../pilotage.js';
 
 const majuscule = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 

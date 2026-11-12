@@ -3,7 +3,7 @@
 // dans les contrats sommatifs). Export PDF A4 portrait de l'élève, ou de toute la classe dans un .zip.
 import { db } from '../api.js';
 import { h, vider, toast, erreur, champ, dateFr } from '../ui.js';
-import { moyenne, niveau, arrondi } from './contrat.js';
+import { moyenne, niveau } from './contrat.js';
 import { barresH, courbe, anneau, carteGraph } from '../graphiques.js';
 import { telecharger, nomFichier } from '../echange.js';
 import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, libPromo, concerne } from '../redoublants.js';

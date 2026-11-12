@@ -2,12 +2,12 @@
 // et son contrat formatif. Sans séquence choisie : liste des séquences de chaque matière.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, dateFr, toast, fenetre, coursMobilises } from '../ui.js';
+import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, toast, fenetre, coursMobilises } from '../ui.js';
 import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
 import { bandeauCreation } from './contratsLibres.js';
-import { boutonIA, champs, codesDans, nombreDe, enListe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
+import { boutonIA, champs, aEcrire, resume } from '../ia.js';
 
 // anciens intitulés proposés par défaut : retirés (les phases se rédigent entièrement)
 const PHASES_ANCIENNES = ['Lancement (contexte, objectifs)', 'Découverte / recherche', 'Structuration (synthèse)', 'Application / entraînement', 'Évaluation et bilan'];

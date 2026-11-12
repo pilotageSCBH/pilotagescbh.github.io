@@ -74,7 +74,7 @@ export async function pageEquipe(zone, _arg, ctx) {
                   title: `${e.nom} · ${m.nom} : ${oui ? 'enseigne' : 'n’enseigne pas'}${admin ? ' (cliquer pour changer)' : ''}`,
                   onclick: async () => {
                     const s = new Set(mats); oui ? s.delete(m.id) : s.add(m.id);
-                    try { await db.modifier('enseignants', e.id, { matieres: [...s] }); toast(oui ? `${m.nom} retirée à ${e.nom}` : `${m.nom} attribuée à ${e.nom}`); await dessiner(); }
+                    try { await db.modifier('enseignants', e.id, { matieres: [...s] }); if (e.profil_id && e.profil_id === ctx.profil.id) { ctx.profil.matieres = [...s].map(Number); rafraichirMenu(); } toast(oui ? `${m.nom} retirée à ${e.nom}` : `${m.nom} attribuée à ${e.nom}`); await dessiner(); }
                     catch (err) { erreur(err); }
                   } }, oui ? '✓' : ''));
             }),
