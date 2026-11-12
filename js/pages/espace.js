@@ -2,7 +2,7 @@
 // Espace personnel de chaque enseignant : thèmes / dossiers et sous-dossiers (tuiles), fiches (couverture, sommaire avec les pages),
 // recherche dans les sommaires, mode gestion, partage avec des collègues, PDF. Les fichiers restent sur le Nuage de l'enseignant.
 // #/biblio (ou #/cours) : accueil · …/t-ID : un thème ou dossier · …/l-ID : une fiche · …/partages : partagés avec moi
-import { db } from '../api.js';
+import { db, fonctionServeur } from '../api.js';
 import { h, vider, toast, erreur, confirmer, fenetre } from '../ui.js';
 import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
@@ -254,9 +254,22 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const AFFICHABLES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
     mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', txt: 'text/plain;charset=utf-8' };
   const typeAffichable = (l) => !l.lien && l.chemin && AFFICHABLES[(l.chemin.split('.').pop() || '').toLowerCase()];
+  // Word, Excel, PowerPoint… : ouverts dans Nuage, avec son éditeur en ligne
+  const BUREAUTIQUE = /\.(docx?|dotx|odt|rtf|xlsx?|xlsm|ods|csv|pptx?|ppsx|odp|odg)$/i;
+  async function ouvrirDansNuage(l, lienN) {
+    const w = window.open('', '_blank');
+    if (w) { try { w.document.title = l.titre || 'Ouverture…'; w.document.body.innerHTML = '<p style="font:16px system-ui;margin:40px;color:#555">Ouverture de « ' + String(l.titre || '').replace(/[<&]/g, '') + ' » dans Nuage…</p>'; } catch { /* onglet protégé */ } }
+    const p = analyserLien(lienN), dossier = '/' + l.chemin.split('/').slice(0, -1).join('/');
+    let id = '';
+    try { id = (await fonctionServeur('nuage', { action: 'info', lien: lienN, chemin: l.chemin })).id || ''; } catch { /* relais ancien ou indisponible : le dossier s'ouvre */ }
+    const u = `${p.origine}/index.php/s/${p.jeton}?path=${encodeURIComponent(dossier)}&dir=${encodeURIComponent(dossier)}` + (id ? `&fileid=${id}&openfile=true` : '');
+    if (w) w.location.href = u; else location.href = u;
+  }
   async function ouvrirFichier(ev, l, page, adresse) {
     const type = typeAffichable(l), lienN = reglagesDe(l.proprietaire)[E.lien];
-    if (!type || !analyserLien(lienN) || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) return;   // sinon : lien habituel
+    if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1 || !analyserLien(lienN)) return;   // lien habituel
+    if (!l.lien && l.chemin && BUREAUTIQUE.test(l.chemin)) { ev.preventDefault(); return ouvrirDansNuage(l, lienN); }
+    if (!type) return;
     ev.preventDefault();
     const w = window.open('', '_blank');
     if (w) { try { w.document.title = l.titre || 'Ouverture…'; w.document.body.innerHTML = '<p style="font:16px system-ui;margin:40px;color:#555">Ouverture de « ' + String(l.titre || '').replace(/[<&]/g, '') + ' »…</p>'; } catch { /* onglet protégé */ } }

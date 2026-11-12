@@ -22,15 +22,15 @@ const CORS = {
 };
 const json = (d: unknown, statut = 200) => new Response(JSON.stringify(d), { status: statut, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const encoder = (chemin: string) => chemin.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-const PROPFIND = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>';
+const PROPFIND = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/><oc:fileid/></d:prop></d:propfind>';
 
 type Base = { url: string; auth: string | null };
-type Entree = { c: string; dossier: boolean; taille: number; date: string };
+type Entree = { c: string; dossier: boolean; taille: number; date: string; id: string };
 
-async function propfind(b: Base, chemin: string, profondeur: string) {
+async function propfind(b: Base, chemin: string, profondeur: string, fichier = false) {
   const h: Record<string, string> = { Depth: profondeur, 'Content-Type': 'application/xml' };
   if (b.auth) h.Authorization = b.auth;
-  return await fetch(b.url + '/' + encoder(chemin) + (chemin ? '/' : ''), { method: 'PROPFIND', headers: h, body: PROPFIND });
+  return await fetch(b.url + '/' + encoder(chemin) + (chemin && !fichier ? '/' : ''), { method: 'PROPFIND', headers: h, body: PROPFIND });
 }
 function lireReponse(xml: string, b: Base): Entree[] {
   const prefixe = decodeURIComponent(new URL(b.url).pathname).replace(/\/$/, '');
@@ -44,7 +44,8 @@ function lireReponse(xml: string, b: Base): Entree[] {
     const dossier = /<(?:[a-z0-9]+:)?collection\s*\/?>/i.test(bloc);
     const taille = Number(bloc.match(/<(?:[a-z0-9]+:)?getcontentlength>(\d+)</i)?.[1] || 0);
     const date = bloc.match(/<(?:[a-z0-9]+:)?getlastmodified>([^<]*)</i)?.[1] || '';
-    out.push({ c: p.normalize('NFC'), dossier, taille, date });
+    const id = bloc.match(/<(?:[a-z0-9]+:)?fileid>(\d+)</i)?.[1] || '';
+    out.push({ c: p.normalize('NFC'), dossier, taille, date, id });
   }
   return out;
 }
@@ -101,6 +102,16 @@ Deno.serve(async (req) => {
     const b = await choisirBase(m[1], m[2]);
 
     if (action === 'liste') return json({ fichiers: await lister(b) });
+
+    // un seul fichier : numéro Nuage (pour l'ouvrir dans Nuage, avec l'éditeur en ligne)
+    if (action === 'info') {
+      const c = String(chemin || '').replace(/^\/+/, '');
+      if (!c || c.split('/').includes('..')) return json({ erreur: 'Chemin de fichier invalide.' }, 400);
+      const r = await propfind(b, c, '0', true);
+      const t = await r.text();
+      if (r.status !== 207) return json({ erreur: r.status === 404 ? `Fichier introuvable sur Nuage : ${c}` : `Nuage ne répond pas comme prévu (code ${r.status}).` }, r.status === 404 ? 404 : 502);
+      return json({ id: t.match(/<(?:[a-z0-9]+:)?fileid>(\d+)</i)?.[1] || '', taille: Number(t.match(/<(?:[a-z0-9]+:)?getcontentlength>(\d+)</i)?.[1] || 0) });
+    }
 
     if (action === 'fichier') {
       const c = String(chemin || '').replace(/^\/+/, '');
