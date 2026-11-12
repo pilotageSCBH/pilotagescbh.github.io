@@ -198,11 +198,11 @@ export const cheminRelatif = (f) => String(f.webkitRelativePath || f.name).norma
 export const ignore = (chemin) => chemin.split('/').some((p) => p.startsWith('.') || p.startsWith('_') || p.startsWith('~$') || /^(desktop\.ini|thumbs\.db)$/i.test(p));
 
 // ------------------------------------------------------------------------------------------- lecture directe de Nuage (relais Supabase « nuage »)
-// liste de tout le dossier partagé : [{ c: chemin, dossier, taille, date }] (gardée 5 minutes)
+// liste de tout le dossier partagé : [{ c: chemin, dossier, taille, date }] (gardée 1 minute)
 const listesNuage = new Map();
 export async function nuageListe(lien, { force = false } = {}) {
   const k = String(lien || '').trim(), m = listesNuage.get(k);
-  if (m && !force && Date.now() - m.t < 300000) return m.l;
+  if (m && !force && Date.now() - m.t < 60000) return m.l;
   const d = await fonctionServeur('nuage', { action: 'liste', lien: k });
   const l = (d.fichiers || []).map((x) => ({ ...x, c: String(x.c).normalize('NFC') })).filter((x) => x.c && !ignore(x.c));
   listesNuage.set(k, { l, t: Date.now() });

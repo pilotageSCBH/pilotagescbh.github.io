@@ -154,10 +154,12 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const modif = vue === 'mes' && gestion;
 
   const mesLivres = [...L.values()].filter(aMoi), sesLivres = [...L.values()].filter((l) => !aMoi(l));
+  const mesFiches = () => [...L.values()].filter(aMoi);     // liste à jour (après des créations sur la même page)
   const reglage = reglagesDe(moi);
 
   // ------------------------------------------------------------------ squelette
   const contenu = h('div', { class: 'contenu-biblio' });
+  const bandeauNuage = h('div', { class: 'bandeau-nuage-zone' });
   const champ = h('input', { class: 'recherche-biblio', type: 'search', value: recherche, placeholder: E.recherche, 'aria-label': 'Rechercher',
     oninput: () => { recherche = recherches[E.cle] = champ.value; dessiner(); } });
   vider(zone,
@@ -178,7 +180,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       h('a', { href: E.base + '/partages', class: vue === 'partages' ? 'actif' : '' }, `👥 Partagés avec moi (${sesLivres.length})`)),
     !reglage[E.lien] && vue === 'mes' ? h('div', { class: 'avertissement' }, `🔗  Pour ouvrir vos fichiers depuis le site, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans `,
       h('button', { class: 'lien', type: 'button', onclick: () => dialogueReglages(ctx, recharger) }, '⚙ Réglages Nuage'), '.') : null,
-    contenu);
+    bandeauNuage, contenu);
 
   // ------------------------------------------------------------------ rendu
   function dessiner() {
@@ -326,7 +328,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   }
   function resultats() {
     const T2 = sansAccent(recherche).split(/\s+/).filter(Boolean);
-    const liste = (vue === 'mes' ? mesLivres : sesLivres);
+    const liste = (vue === 'mes' ? mesFiches() : sesLivres);
     const trouves = [];
     for (const l of liste) {
       const tete = sansAccent([l.titre, E.genres ? genreDe(l)[1] : '', l.auteur, l.editeur, l.isbn, l.notes, ...(l.savoirs || [])].join(' '));
@@ -520,7 +522,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const choisisN = new Set();
     const zoneN = h('div', { class: 'choix-dossier arbre-pdf choix-nuage' });
     let listeN = null, visiblesN = [];
-    const connus = new Set(mesLivres.map((l) => l.chemin.normalize('NFC')));
+    const connus = new Set(mesFiches().map((l) => l.chemin.normalize('NFC')));
     const dessinerN = () => {
       if (!listeN) return;
       const t = theme.value ? T.get(Number(theme.value)) : null, pfx = t?.dossier ? t.dossier.normalize('NFC') + '/' : '';
@@ -573,7 +575,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         L.set(l.id, l); n++;
       }
     } catch (e) { erreur(e); }
-    pr.fin(); toast(`${n} fiche(s) créée(s)`); dessiner();
+    pr.fin(); toast(`${n} fiche(s) créée(s)`); dessiner(); verifierNuage();
   }
 
   // ------------------------------------------------------------------ mise à jour depuis le dossier synchronisé
@@ -606,7 +608,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     if (!tous.length) return null;
     // dossier « Livres » choisi directement : les chemins enregistrés commencent par « Livres/ »
     const racineChoisie = String(tous[0].webkitRelativePath || '').split('/')[0];
-    const prefixe = racineChoisie === 'Livres' && mesLivres.some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
+    const prefixe = racineChoisie === 'Livres' && mesFiches().some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
     return tous.map((f) => ({ c: prefixe + cheminRelatif(f), f, taille: f.size, charger: async () => f }));
   }
   async function mettreAJour() {
@@ -617,10 +619,10 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [x.c.split('/').slice(0, -1).join('/'), x]));
     fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));
     const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.map((t) => [t.dossier.normalize('NFC'), t]));
-    const connus = new Set(mesLivres.map((l) => l.chemin.normalize('NFC')));
+    const connus = new Set(mesFiches().map((l) => l.chemin.normalize('NFC')));
     const nouveaux = fichiers.filter((x) => !connus.has(x.c));
     const presents = new Set(fichiers.map((x) => x.c));
-    const disparus = mesLivres.filter((l) => l.chemin && !presents.has(l.chemin.normalize('NFC')));
+    const disparus = mesFiches().filter((l) => l.chemin && !presents.has(l.chemin.normalize('NFC')));
     const dossiers = [...new Set(nouveaux.map((x) => x.c.split('/').slice(0, -1).join('/')).filter(Boolean))];
     const aCreer = [...new Set(dossiers.flatMap((d) => d.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))].filter((d) => d !== 'Livres' && !parDossier.has(d)).sort();
     const lire = h('input', { type: 'checkbox', checked: true }), retirer = h('input', { type: 'checkbox' });
@@ -823,4 +825,25 @@ ${listeSavoirs(ref)}`,
 
   dessiner();
   if (recherche) { champ.focus(); champ.setSelectionRange(champ.value.length, champ.value.length); }
+  verifierNuage();
+
+  // ------------------------------------------------------------------ nouveaux fichiers sur Nuage (vérification en arrière-plan)
+  async function verifierNuage() {
+    const lienN = reglage[E.lien];
+    if (vue !== 'mes' || !analyserLien(lienN)) return;
+    let liste;
+    try { liste = await nuageListe(lienN); } catch { return; }      // relais absent ou Nuage injoignable : rien à signaler
+    if (!bandeauNuage.isConnected) return;
+    const connus = new Set(mesFiches().map((l) => l.chemin.normalize('NFC')));
+    const nouveaux = liste.filter((x) => !x.dossier && !connus.has(x.c) && !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));
+    const cle = 'pilotage-scbh-' + E.cle + '-nuage-ignore', signature = nouveaux.map((x) => x.c).sort().join('|');
+    let ignore = ''; try { ignore = sessionStorage.getItem(cle) || ''; } catch { /* sans stockage */ }
+    if (!nouveaux.length || ignore === signature) { vider(bandeauNuage); return; }
+    const noms = nouveaux.slice(0, 4).map((x) => x.c.split('/').pop()).join(', ') + (nouveaux.length > 4 ? '…' : '');
+    vider(bandeauNuage, h('div', { class: 'bandeau-nuage' },
+      h('span', { class: 'icone-bandeau' }, '📥'),
+      h('div', { class: 'texte-bandeau' }, h('b', {}, `${pluriel(nouveaux.length, 'nouveau fichier', 'nouveaux fichiers')} sur votre Nuage`), h('small', {}, noms)),
+      h('button', { class: 'btn petit principal', type: 'button', onclick: () => mettreAJour() }, 'Créer les fiches'),
+      h('button', { class: 'btn petit', type: 'button', title: 'Ne plus signaler ces fichiers pendant cette session', onclick: () => { try { sessionStorage.setItem(cle, signature); } catch { /* sans stockage */ } vider(bandeauNuage); } }, 'Plus tard')));
+  }
 }

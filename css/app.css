@@ -1856,3 +1856,10 @@ th.eleve.hors span { opacity: .55; }
 .tranche-doc.couv-grande { font-size: 84px; }
 .etiquette-doc.mini { font-size: 11px; padding: 1px 6px; margin-left: 6px; }
 .arbre-pdf { max-height: 46vh; overflow: auto; }
+
+/* ---- Mes ressources : nouveaux fichiers détectés sur Nuage */
+.bandeau-nuage { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 14px; border-radius: 10px;
+  background: #EAF5F3; border: 1px solid #9FD0C8; color: var(--fonce); }
+.bandeau-nuage .icone-bandeau { font-size: 22px; }
+.bandeau-nuage .texte-bandeau { flex: 1 1 260px; display: flex; flex-direction: column; min-width: 0; }
+.bandeau-nuage .texte-bandeau small { color: var(--gris); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
