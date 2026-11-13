@@ -299,6 +299,30 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
       page.drawLine({ start: { x: gauche, y }, end: { x: gauche + largeur, y }, thickness: 0.5, color: LIGNE });
       y -= 10;
     },
+    // question de QCM : numéro, énoncé, réponses avec une case ; corrigé : bonnes réponses cochées et explication
+    question(b) {
+      const taille = 9.5, pas = 12, ret = 24, tc = 9, pc = 11.5;
+      const lt = lignes(b.texte || '', FB, taille, largeur - ret - 4);
+      const lc = b.choix.map((c) => lignes(c.texte || '', F, tc, largeur - ret - 22));
+      const le = b.corrige && b.explication ? lignes('Explication : ' + b.explication, FI, 8, largeur - ret - 4) : [];
+      const hTot = lt.length * pas + 8 + (b.aide ? 11 : 0) + lc.reduce((x, l) => x + l.length * pc + 4, 0) + le.length * 10 + 10;
+      place(Math.min(hTot, 320));
+      page.drawCircle({ x: gauche + 10, y: y - 8, size: 9, color: TEAL });
+      const n = String(b.num), w = FB.widthOfTextAtSize(n, 8.5);
+      texte(n, gauche + 10 - w / 2, y - 11, FB, 8.5, BLANC);
+      lt.forEach((l, j) => texte(l, gauche + ret, y - 11 - j * pas, FB, taille, FONCE));
+      y -= lt.length * pas + 6;
+      if (b.aide) { texte(b.aide, gauche + ret, y - 8, FI, 7.5, GRIS); y -= 11; }
+      b.choix.forEach((c, i) => {
+        const ls = lc[i]; place(ls.length * pc + 4);
+        const coche = b.corrige && c.bon;
+        page.drawRectangle({ x: gauche + ret, y: y - 10, width: 9, height: 9, borderColor: coche ? TEAL : LIGNE, borderWidth: 1, color: coche ? TEAL : BLANC });
+        ls.forEach((l, j) => texte(l, gauche + ret + 16, y - 8.5 - j * pc, coche ? FB : F, tc, coche ? FONCE : TEXTE));
+        y -= ls.length * pc + 4;
+      });
+      le.forEach((l) => { place(10); texte(l, gauche + ret, y - 8, FI, 8, GRIS); y -= 10; });
+      y -= 9;
+    },
     // nouvelle page (une fiche par élève)
     saut() { if (y < A4[1] - MARGE - 1) nouvellePage(); },
     // identifiant et code en grand, dans un encadré (fiche de connexion d'un élève)

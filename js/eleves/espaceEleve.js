@@ -56,6 +56,7 @@ function menu(page, retourConnexion) {
       lien('#/semaine', '📅', 'Ma semaine', 'semaine'),
       lien('#/formation', '🧱', 'Ma formation', 'formation'),
       lien('#/documents', '📚', 'Mes documents', 'documents'),
+      lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
       lien('#/resultats', '🏆', 'Mes résultats', 'resultats'),
       lien('#/compte', '👤', 'Mon compte', 'compte')),
     h('div', { class: 'pied-menu' }, h('span', { class: 'avatar petit' }, ((s.prenom || '?')[0] + (s.nom || '?')[0]).toUpperCase()),
@@ -85,7 +86,7 @@ function ecranCode(app, retourConnexion) {
 }
 
 // ------------------------------------------------------------------------------------------- pages
-const PAGES = { semaine: pageSemaine, formation: pageFormation, documents: pageDocuments, resultats: pageResultats, compte: pageCompte };
+const PAGES = { semaine: pageSemaine, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
 const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, titre), sous ? h('p', { class: 'sous-titre' }, sous) : null),
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
@@ -273,7 +274,7 @@ async function pageResultats(zone) {
         h('thead', {}, h('tr', {}, ['Date', 'Matière', 'Évaluation', 'Note', 'Coef.'].map((t) => h('th', {}, t)))),
         h('tbody', {}, evals.sort((a, b) => String(a.date_eval || '').localeCompare(String(b.date_eval || ''))).map((v) => h('tr', {},
           h('td', {}, dateFr(v.date_eval)), h('td', {}, h('span', { class: 'pastille', style: { background: D.mats.get(v.matiere_id).couleur } }), ' ', D.mats.get(v.matiere_id).nom),
-          h('td', {}, v.libelle || ''), h('td', { class: 'num' }, h('b', {}, res.get(v.id)), v.bareme ? ' / ' + virgule(Number(v.bareme), 0) : ''), h('td', { class: 'num' }, virgule(Number(v.coefficient) || 1)))))))
+          h('td', {}, v.libelle || ''), h('td', { class: 'num' }, h('b', {}, /^[0-9.]+$/.test(String(res.get(v.id))) ? virgule(Number(res.get(v.id)), 2) : res.get(v.id)), v.bareme ? ' / ' + virgule(Number(v.bareme), 0) : ''), h('td', { class: 'num' }, virgule(Number(v.coefficient) || 1)))))))
         : h('p', { class: 'vide' }, 'Pas encore de résultat.')),
     apprec.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Appréciations'),
       apprec.map((a) => h('div', { class: 'appreciation-eleve' }, h('b', {}, D.mats.get(a.matiere_id).nom), h('p', {}, a.texte)))) : null);
@@ -298,4 +299,75 @@ async function pageCompte(zone) {
           try { await rpcEleve('eleve_changer_code', { nouveau: c1.value }); c1.value = c2.value = ''; toast('Code modifié'); } catch (x) { erreur(x); }
         } }, h('label', {}, 'Nouveau code', c1), h('label', {}, 'Confirmer', c2), h('button', { class: 'btn principal', type: 'submit' }, 'Enregistrer le nouveau code')))),
     blocInstallation());
+}
+
+// ---- mes QCM : liste, passation, correction
+async function pageQcmEleve(zone, arg) {
+  await donnees();
+  const a = String(arg || '');
+  if (/^c-\d+$/.test(a)) return correction(zone, await rpcEleve('eleve_qcm_correction', { session: Number(a.slice(2)) }));
+  if (/^\d+$/.test(a)) return passation(zone, Number(a));
+  const l = await rpcEleve('eleve_qcm_liste');
+  const now = Date.now();
+  const etat = (x) => (now < new Date(x.ouverture) ? 'avenir' : now > new Date(x.fermeture) ? 'ferme' : 'ouvert');
+  const carte = (x) => {
+    const e = etat(x), reste = x.tentatives - x.faites, m = D.mats.get(x.matiere_id);
+    return h('div', { class: 'carte-qcm-eleve', style: { '--couleur': m?.couleur || 'var(--teal)' } },
+      h('div', {}, h('b', {}, x.titre), h('div', { class: 'gris petit' }, [m?.nom, `${x.nb_questions} questions`,
+        e === 'avenir' ? 'ouvre le ' + dateHeureE(x.ouverture) : e === 'ouvert' ? 'jusqu’au ' + dateHeureE(x.fermeture) : 'fermé le ' + dateHeureE(x.fermeture)].filter(Boolean).join(' · '))),
+      h('div', { class: 'actions-qcm-eleve' },
+        x.faites ? h('span', { class: 'note-qcm' }, virgule(Number(x.meilleur)), ' / 20') : null,
+        e === 'ouvert' && reste > 0 ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, x.faites ? 'Recommencer' : 'Commencer') : null,
+        x.faites ? h('a', { class: 'btn', href: '#/qcm/c-' + x.session }, 'Voir la correction') : null,
+        e === 'ouvert' && !x.faites && reste <= 0 ? h('span', { class: 'gris' }, 'déjà fait') : null));
+  };
+  const ouverts = l.filter((x) => etat(x) === 'ouvert'), avenir = l.filter((x) => etat(x) === 'avenir'), fermes = l.filter((x) => etat(x) === 'ferme');
+  vider(zone, entete('📝  Mes QCM', 'QCM proposés par vos enseignants'),
+    h('section', {}, h('h2', { class: 'titre-section' }, 'À faire maintenant'), ouverts.length ? ouverts.map(carte) : h('p', { class: 'vide' }, 'Aucun QCM ouvert pour l’instant.')),
+    avenir.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Bientôt'), avenir.map(carte)) : null,
+    fermes.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Terminés'), fermes.map(carte)) : null);
+}
+const dateHeureE = (d) => new Date(d).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function melange(l, graine) { let s = 2166136261; for (const c of String(graine)) { s ^= c.charCodeAt(0); s = Math.imul(s, 16777619); } const a = [...l]; for (let i = a.length - 1; i > 0; i--) { s = Math.imul(s ^ (s >>> 15), 2246822507) >>> 0; const j = s % (i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+async function passation(zone, session) {
+  let Q;
+  try { Q = await rpcEleve('eleve_qcm_ouvrir', { session }); }
+  catch (e) { vider(zone, entete('📝  QCM'), h('p', { class: 'vide' }, e.message), h('a', { class: 'btn', href: '#/qcm' }, '← Mes QCM')); return; }
+  const graine = `${D.eleve.id}-${session}`;
+  const questions = Q.melanger ? melange(Q.questions, graine).map((x) => ({ ...x, choix: x.type === 'vraifaux' ? x.choix : melange(x.choix, graine + x.id) })) : Q.questions;
+  const rep = {};
+  const compte = h('span', { class: 'gris' });
+  const maj = () => { compte.textContent = `${Object.values(rep).filter((v) => v.length).length} / ${questions.length} répondues`; };
+  vider(zone, entete('📝  ' + Q.titre, `${questions.length} questions · à rendre avant le ${dateHeureE(Q.fermeture)}`),
+    Q.consigne ? h('p', { class: 'consigne-qcm' }, Q.consigne) : h('p', { class: 'consigne-qcm' }, 'Cochez la ou les bonnes réponses. Une question rapporte 1 point si toutes les bonnes réponses, et elles seules, sont cochées.'),
+    h('form', { class: 'passation-qcm', onsubmit: async (e) => {
+      e.preventDefault();
+      const vides = questions.filter((x) => !(rep[x.id] || []).length).length;
+      if (vides && !window.confirm(`${vides} question(s) sans réponse. Rendre quand même ?`)) return;
+      const b = e.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Envoi…';
+      try { const c = await rpcEleve('eleve_qcm_rendre', { session, reponses: rep }); charge = 0; history.replaceState(null, '', '#/qcm/c-' + session); correction(zone, c); window.scrollTo(0, 0); }
+      catch (x) { erreur(x); b.disabled = false; b.textContent = 'Rendre mes réponses'; }
+    } },
+    questions.map((x, i) => h('fieldset', { class: 'question-eleve' },
+      h('legend', {}, h('span', { class: 'num-question' }, i + 1), x.texte),
+      x.type === 'multiple' ? h('p', { class: 'aide' }, 'Plusieurs réponses possibles') : null,
+      x.choix.map((c) => h('label', { class: 'choix-eleve' }, h('input', { type: x.type === 'multiple' ? 'checkbox' : 'radio', name: 'q-' + x.id, value: c.id, onchange: (e) => {
+        if (x.type === 'multiple') { const s2 = new Set(rep[x.id] || []); e.target.checked ? s2.add(c.id) : s2.delete(c.id); rep[x.id] = [...s2]; } else rep[x.id] = [c.id];
+        maj(); } }), h('span', {}, c.texte))))),
+    h('div', { class: 'pied-passation' }, compte, h('button', { class: 'btn principal', type: 'submit' }, 'Rendre mes réponses'))));
+  maj();
+}
+function correction(zone, C) {
+  const note = C.total ? (Number(C.points) / C.total) * 20 : null;
+  vider(zone, entete('📝  ' + C.titre, `Correction · ${virgule(Number(C.points), 0)} bonne(s) réponse(s) sur ${C.total}`, h('a', { class: 'btn', href: '#/qcm' }, '← Mes QCM')),
+    h('div', { class: 'score-qcm' }, h('strong', {}, virgule(note)), h('span', {}, '/ 20')),
+    C.questions.map((x, i) => {
+      const mes = new Set((C.reponses || {})[x.id] || []);
+      const ok = x.choix.filter((c) => c.bon).every((c) => mes.has(c.id)) && [...mes].every((id) => x.choix.find((c) => c.id === id)?.bon);
+      return h('section', { class: 'question-eleve corrigee ' + (ok ? 'juste' : 'fausse') },
+        h('div', { class: 'legende' }, h('span', { class: 'num-question' }, i + 1), x.texte, h('span', { class: 'verdict' }, ok ? '✔ juste' : '✖ à revoir')),
+        x.choix.map((c) => h('div', { class: 'choix-corrige' + (c.bon ? ' bon' : '') + (mes.has(c.id) ? ' coche' : '') },
+          h('span', { class: 'marque' }, c.bon ? '✔' : mes.has(c.id) ? '✖' : ''), h('span', {}, c.texte), mes.has(c.id) ? h('small', { class: 'gris' }, ' (votre réponse)') : null)),
+        x.explication ? h('p', { class: 'explication' }, '💡 ', x.explication) : null);
+    }));
 }

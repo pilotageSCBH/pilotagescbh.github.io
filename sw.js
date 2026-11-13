@@ -20,6 +20,9 @@ const marque = (r) => (r && (r.headers.get('etag') || r.headers.get('last-modifi
 self.addEventListener('fetch', (e) => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== 'GET' || u.origin !== self.location.origin || u.pathname.includes('/video/') || r.headers.has('range')) return;
+  // seulement les fichiers du site (jamais de données)
+  if (r.mode !== 'navigate' && !/\.(js|mjs|css|png|jpe?g|gif|svg|webp|ico|webmanifest|json|woff2?|ttf|html)$/i.test(u.pathname)) return;
+  if (/^\/(rest|auth|functions|storage)\//.test(u.pathname)) return;
   const page = r.mode === 'navigate';
   const cle = page ? new Request(new URL('./', self.location).href) : r;
   e.respondWith((async () => {

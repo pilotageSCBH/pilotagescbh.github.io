@@ -339,6 +339,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('div', { class: 'boutons-fiche' }, boutonOuvrir(l, 'btn principal'),
             aMoi(l) ? h('button', { class: 'btn' + (estPartage(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, estPartage(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
             boutonEleves('livre_id', l, 'btn'),
+            E.genres && aMoi(l) ? h('a', { class: 'btn', href: '#/qcm/l-' + l.id, title: 'Préparer un QCM à partir de ce document (avec une IA)' }, '📝 Créer un QCM') : null,
             aMoi(l) ? h('button', { class: 'btn', onclick: () => modifierLivre(l) }, '✎ Modifier') : null,
             h('button', { class: 'btn', onclick: () => envoyerPDF(documentPDF([l], { sommaire: true, savoirs: true, liens: true }, l.titre), 'pdf') }, '⬇ PDF'),
             !aMoi(l) ? h('button', { class: 'btn', onclick: () => copierLivre(l) }, '⧉ Copier dans mon espace') : null,
