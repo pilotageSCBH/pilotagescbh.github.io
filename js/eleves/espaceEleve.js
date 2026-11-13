@@ -214,30 +214,50 @@ async function pageDocuments(zone, arg) {
   if (doc) return ficheDocument(zone, doc);
   const chemin = (id) => { const l = []; let t = D.dossiers.get(id), n = 0; while (t && n++ < 30) { l.unshift(t.nom); t = D.dossiers.get(t.parent_id); } return l; };
   const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher un document (titre, sommaire)…', 'aria-label': 'Rechercher un document' });
-  const liste = h('div', {});
+  const liste = h('div', { class: 'arbre-docs' });
+  // dossiers ouverts : mémorisés sur cet appareil (simple confort)
+  const CLE = 'docs-ouverts';
+  let ouverts; try { ouverts = new Set(JSON.parse(localStorage.getItem(CLE) || '[]')); } catch { ouverts = new Set(); }
+  const memoriser = () => { try { localStorage.setItem(CLE, JSON.stringify([...ouverts])); } catch { /* stockage indisponible */ } };
+  const tri = (x, y) => (x.ordre ?? 0) - (y.ordre ?? 0) || String(x.nom || x.titre || '').localeCompare(String(y.nom || y.titre || ''), 'fr', { numeric: true });
   const dessiner = () => {
     const t = sansAccent(champ.value).split(/\s+/).filter(Boolean);
     const docs = [...D.docs.values()].filter((d) => !t.length || t.every((m) => sansAccent([d.titre, (GENRES[d.genre] || GENRES.cours)[1], chemin(d.theme_id).join(' '), (d.sommaire || []).map((e) => e.t).join(' ')].join(' ')).includes(m)));
-    const groupes = new Map();
-    for (const d of docs) { const g = chemin(d.theme_id).join(' › ') || 'Documents'; if (!groupes.has(g)) groupes.set(g, []); groupes.get(g).push(d); }
-    vider(liste, docs.length ? [...groupes.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr', { numeric: true })).map(([g, l]) => h('section', {},
-      h('h2', { class: 'titre-section' }, '📁 ', g),
-      h('div', { class: 'livres-biblio' }, l.map((d) => carteDocument(d)))))
+    const dossiers = [...D.dossiers.values()];
+    const docsDe = (id) => docs.filter((d) => (D.dossiers.has(d.theme_id) ? d.theme_id : null) === id).sort(tri);
+    const enfants = (id) => dossiers.filter((x) => (x.parent_id ?? null) === id && D.dossiers.has(x.id)).sort(tri);
+    const total = (id) => docsDe(id).length + enfants(id).reduce((n, x) => n + total(x.id), 0);
+    const noeud = (x, prof) => {
+      const n = total(x.id); if (!n) return null;
+      const det = h('details', { class: 'dossier-doc', open: t.length > 0 || ouverts.has(x.id) || null,
+        ontoggle: (e) => { if (t.length) return; e.target.open ? ouverts.add(x.id) : ouverts.delete(x.id); memoriser(); } },
+        h('summary', {}, h('span', { class: 'icone-dossier' }), h('span', { class: 'nom-dossier' }, x.nom), h('span', { class: 'compte-dossier' }, String(n))),
+        h('div', { class: 'contenu-dossier' }, enfants(x.id).map((y) => noeud(y, prof + 1)), docsDe(x.id).map(ligneDocument)));
+      return det;
+    };
+    const racines = enfants(null).map((x) => noeud(x, 0)).filter(Boolean), libres = docsDe(null);
+    vider(liste, docs.length ? [
+      racines.length ? h('div', { class: 'outils-arbre' },
+        h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier'),
+        h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier')) : null,
+      ...racines, libres.length ? h('div', { class: 'contenu-dossier racine' }, libres.map(ligneDocument)) : null]
       : h('p', { class: 'vide' }, D.docs.size ? 'Aucun document ne correspond.' : 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
   };
   champ.addEventListener('input', dessiner);
   vider(zone, entete('📚  Mes documents', `${D.docs.size} document(s) publié(s) par vos enseignants`), h('div', { class: 'zone-recherche-eleve' }, champ), liste);
   dessiner();
 }
+// une ligne compacte de l'arborescence
+function ligneDocument(d) {
+  const g = GENRES[d.genre] || GENRES.cours;
+  return h('div', { class: 'ligne-doc' },
+    h('span', { class: 'icone-doc', title: g[1] }, g[0]),
+    h('a', { class: 'titre-doc', href: '#/documents/' + d.id }, d.titre || 'Document'),
+    h('span', { class: 'details-doc' }, g[1] + (d.auteur ? ' · ' + d.auteur : '')),
+    h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn mini') : null));
+}
 const tranche = (d, classe = 'couv-mini') => (d.vignette ? h('img', { class: classe, src: d.vignette, alt: '', loading: 'lazy' })
   : h('div', { class: 'tranche tranche-doc ' + classe, style: { '--couleur': ({ cours: '#1E8F86', exercice: '#C79A12', tdtp: '#C8790B', evaluation: '#B03A2E', corrige: '#4E9A2F', ressource: '#3D84C6', autre: '#6F6A8A', livre: '#7A4E2D' })[d.genre] || '#1E8F86' } }, (GENRES[d.genre] || GENRES.cours)[0]));
-function carteDocument(d) {
-  return h('article', { class: 'livre-biblio' }, h('div', { class: 'livre-tete' },
-    h('a', { class: 'lien-couv', href: '#/documents/' + d.id, tabindex: -1 }, tranche(d)),
-    h('div', { class: 'livre-infos' }, h('div', { class: 'livre-titre' }, h('a', { href: '#/documents/' + d.id }, d.titre || 'Document')),
-      h('div', { class: 'livre-details' }, (GENRES[d.genre] || GENRES.cours).join(' '), d.auteur ? ' · ' + d.auteur : '')),
-    h('div', { class: 'actions-livre' }, d.fichier ? boutonsFichier(d, 'btn petit') : null)));
-}
 const AFFICHABLES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', txt: 'text/plain;charset=utf-8' };
 function boutonsFichier(d, classe) {
   const type = AFFICHABLES[d.extension || ''];
