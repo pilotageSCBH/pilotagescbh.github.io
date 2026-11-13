@@ -5,6 +5,7 @@ import { db } from '../api.js';
 import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
 import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
+import { apercuEleve } from '../app.js';
 
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 function codeProvisoire() {
@@ -46,13 +47,14 @@ export async function pageAcces(zone, ctx) {
       h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '🎓  Espace élèves · comptes'),
         h('p', { class: 'sous-titre' }, `Promotion ${P.libelle} · accès valable jusqu’au ${dateLongue(finAcces)} (un mois après la fin de formation)`)),
         h('div', { class: 'actions-page' }, h('a', { class: 'btn', href: '#/eleves' }, '← Liste des élèves'),
+          h('button', { class: 'btn', title: 'Voir l’espace élève de cette promotion comme un élève fictif (rien n’est enregistré)', onclick: () => apercuEleve(P.id) }, '👁  Voir comme un élève'),
           admin ? h('button', { class: 'btn principal', onclick: creerLot }, `🔑  Créer les comptes et les fiches${coches.size ? ` (${coches.size})` : ''}`) : null)),
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, n.ok), h('span', {}, 'comptes actifs')),
         h('div', { class: 'tuile' }, h('strong', {}, n.provisoire), h('span', {}, 'en attente de 1re connexion')),
         h('div', { class: 'tuile' }, h('strong', {}, n.aucun), h('span', {}, 'sans compte'))),
       admin ? h('p', { class: 'aide' }, 'Cochez des élèves (ou aucun : tous ceux qui n’ont pas de compte) puis « Créer les comptes et les fiches » : le site crée les identifiants et des codes provisoires, puis produit le PDF des fiches de connexion à distribuer. Les codes provisoires ne sont jamais conservés : gardez le PDF jusqu’à la distribution.')
-        : h('p', { class: 'aide' }, 'Seul l’administrateur crée les comptes et donne un nouveau code. Vous voyez ici qui se connecte et quels documents sont consultés.'),
+        : h('p', { class: 'aide' }, '🔒 Seul l’administrateur crée les comptes et produit les fiches de connexion des élèves. Vous voyez ici qui se connecte et quels documents sont consultés ; « 👁 Voir comme un élève » vous montre l’espace élève de la promotion.'),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'liste comptes-eleves' },
         h('thead', {}, h('tr', {}, [admin ? h('input', { type: 'checkbox', 'aria-label': 'Tout cocher', checked: coches.size > 0 && coches.size === actifs.length, onchange: (ev) => { actifs.forEach((e) => (ev.target.checked ? coches.add(e.id) : coches.delete(e.id))); dessiner(); } }) : '',
           'Élève', 'Identifiant', 'État', 'Dernière connexion', 'Documents consultés', admin ? 'Actions' : ''].map((t) => h('th', {}, t)))),

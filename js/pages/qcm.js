@@ -7,6 +7,7 @@ import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
 import { boutonIA, listeSavoirs, resume } from '../ia.js';
 import { chargerCollegues, nomCollegue, dialoguePartage, pluriel } from '../ressources.js';
+import { apercuEleve } from '../app.js';
 
 const TYPES = { unique: 'Une seule bonne réponse', multiple: 'Plusieurs bonnes réponses', vraifaux: 'Vrai ou faux' };
 const id6 = () => Math.random().toString(36).slice(2, 8);
@@ -153,6 +154,7 @@ async function editeur(zone, ctx, q, sessions, partages, ref) {
         h('input', { class: 'champ titre-qcm', value: q.titre, readonly: !mien, 'aria-label': 'Titre du QCM', oninput: (e) => { q.titre = e.target.value; enregistrer(); } }),
         h('p', { class: 'sous-titre' }, compte, source ? ` · source : ${source.type} « ${source.titre} »` : '', !mien ? ` · partagé par ${nomCollegue(q.proprietaire)}` : '', ' ', etat)),
       h('div', { class: 'actions-page' },
+        h('button', { class: 'btn', title: 'Faire le QCM comme un élève (rien n’est enregistré)', onclick: () => { if (!questions.some((x) => x.texte)) return toast('Ajoutez d’abord des questions', 'erreur'); enregistrer(true); apercuEleve(ctx.promo?.id, '#/qcm/' + q.id); } }, '👁  Tester comme un élève'),
         h('button', { class: 'btn', onclick: () => dialoguePDF(ctx, q, questions) }, '⬇  PDF (sujets et corrigés)'),
         mien ? h('button', { class: 'btn principal', onclick: () => ouvrirEnLigne(ctx, q, questions) }, '🌐  Ouvrir en ligne') : null,
         mien ? h('button', { class: 'btn', onclick: () => partager(q, partages) }, '👥  Partager') : null,

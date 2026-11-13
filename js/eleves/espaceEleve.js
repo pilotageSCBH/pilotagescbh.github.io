@@ -1,7 +1,33 @@
 // Espace élève : ce que voit un élève connecté (sa semaine, sa formation, les documents publiés, ses résultats, son compte).
 // Toutes les données viennent de la fonction « eleve_donnees », qui ne renvoie que celles de l'élève et de sa promotion.
 import { NOM_APPLI } from '../../config.js';
-import { rpcEleve, sessionEleve, deconnexionEleve, fichierEleve, majSessionEleve, SESSION_ELEVE_FINIE } from '../api.js';
+import { rpcEleve as rpcReel, sessionEleve as sessionReelle, deconnexionEleve, fichierEleve, majSessionEleve, SESSION_ELEVE_FINIE, db } from '../api.js';
+import { nuageFichier } from '../ressources.js';
+
+// ---- aperçu enseignant : un élève fictif de la promotion choisie ; rien n'est enregistré
+let apercu = null;                    // { promotion_id, libelle, quitter }
+const corrigesApercu = new Map();
+const sessionEleve = () => (apercu ? { prenom: 'Élève', nom: 'fictif', identifiant: 'aperçu enseignant' } : sessionReelle());
+async function rpcEleve(fonction, args = {}) {
+  if (!apercu) return rpcReel(fonction, args);
+  const p = apercu.promotion_id;
+  switch (fonction) {
+    case 'eleve_donnees': return db.rpc('apercu_eleve_donnees', { p });
+    case 'eleve_qcm_liste': return db.rpc('apercu_qcm_liste', { p });
+    case 'eleve_qcm_ouvrir': return db.rpc('apercu_qcm_ouvrir', { q: args.session });
+    case 'eleve_qcm_rendre': { const c = await db.rpc('apercu_qcm_rendre', { q: args.session, reponses: args.reponses }); corrigesApercu.set(args.session, c); return c; }
+    case 'eleve_qcm_correction': { if (corrigesApercu.has(args.session)) return corrigesApercu.get(args.session); throw new Error('Aperçu : faites d’abord le QCM.'); }
+    default: throw new Error('Aperçu : rien n’est modifié.');
+  }
+}
+// fichier d'un document : l'élève passe par le relais ; l'enseignant en aperçu l'ouvre avec le lien de partage de son auteur
+async function fichierDocument(d) {
+  if (!apercu) return fichierEleve(d.id);
+  if (d.lien) { window.open(d.lien, '_blank', 'noopener'); return null; }
+  const g = (await db.lire('ressources_reglages', `proprietaire=eq.${d.proprietaire}`))[0];
+  if (!g?.lien_cours) throw new Error('L’auteur du document n’a pas renseigné le lien de partage de « Mes cours ».');
+  return nuageFichier(g.lien_cours, d.chemin);
+}
 import { h, vider, toast, erreur } from '../ui.js';
 import { lundi, libSemaine, semaineActuelle, jourDe, NB_SEM, SEM_AN } from '../pilotage.js';
 import { GENRES } from '../pages/espace.js';
@@ -30,22 +56,28 @@ const codeMat = (m) => ({ Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', '
 const etiquette = (x) => `${codeMat(x.mat)} ${x.seq?.numero}.${x.numero}`;
 
 // ------------------------------------------------------------------------------------------- cadre
-export function lancerEspaceEleve(app, { retourConnexion }) {
-  window.addEventListener(SESSION_ELEVE_FINIE, () => retourConnexion('Votre session est terminée : reconnectez-vous.'), { once: true });
+export function lancerEspaceEleve(app, { retourConnexion, apercu: ap = null }) {
+  apercu = ap; D = null; corrigesApercu.clear();
+  if (!apercu) window.addEventListener(SESSION_ELEVE_FINIE, () => retourConnexion('Votre session est terminée : reconnectez-vous.'), { once: true });
   const s = sessionEleve();
-  if (s?.doit_changer) return ecranCode(app, retourConnexion);
+  if (!apercu && s?.doit_changer) return ecranCode(app, retourConnexion);
   const route = () => { const p = (location.hash || '#/semaine').replace(/^#\//, '').split('/'); return [PAGES[p[0]] ? p[0] : 'semaine', p[1]]; };
   const afficher = async () => {
     if (!sessionEleve()) return;
     const [page, arg] = route();
     const zone = h('main', { class: 'contenu contenu-eleve' }, h('div', { class: 'chargement' }, 'Chargement…'));
-    vider(app, h('div', { class: 'cadre cadre-eleve' }, menu(page, retourConnexion), zone));
+    vider(app, h('div', { class: 'cadre cadre-eleve' + (apercu ? ' en-apercu' : '') }, menu(page, retourConnexion), h('div', { class: 'colonne-eleve' }, apercu ? bandeauApercu() : null, zone)));
     try { await PAGES[page](zone, arg); }
     catch (e) { vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message), h('button', { class: 'btn', onclick: () => { D = null; afficher(); } }, 'Réessayer'))); }
   };
   window.onhashchange = afficher;
   afficher();
 }
+function bandeauApercu() {
+  return h('div', { class: 'bandeau-apercu', role: 'status' }, h('span', {}, `👁  Aperçu élève · promotion ${apercu.libelle} · élève fictif : rien n’est enregistré`),
+    h('button', { class: 'btn petit', type: 'button', onclick: () => quitterApercu() }, 'Quitter l’aperçu'));
+}
+function quitterApercu() { const q = apercu?.quitter; apercu = null; D = null; window.onhashchange = null; q?.(); }
 function menu(page, retourConnexion) {
   const s = sessionEleve() || {};
   const lien = (href, icone, texte, cle) => h('a', { href, class: 'lien-menu' + (page === cle ? ' actif' : '') }, h('span', { class: 'ico' }, icone), h('span', { class: 'txt' }, texte));
@@ -61,7 +93,8 @@ function menu(page, retourConnexion) {
       lien('#/compte', '👤', 'Mon compte', 'compte')),
     h('div', { class: 'pied-menu' }, h('span', { class: 'avatar petit' }, ((s.prenom || '?')[0] + (s.nom || '?')[0]).toUpperCase()),
       h('div', { class: 'qui' }, h('b', {}, `${s.prenom || ''} ${s.nom || ''}`), h('small', {}, s.identifiant || '')),
-      h('button', { class: 'deconnexion', type: 'button', title: 'Se déconnecter', onclick: async () => { await deconnexionEleve(); D = null; window.onhashchange = null; retourConnexion(''); } }, '⏻')));
+      apercu ? h('button', { class: 'deconnexion', type: 'button', title: 'Quitter l’aperçu', onclick: () => quitterApercu() }, '✕')
+        : h('button', { class: 'deconnexion', type: 'button', title: 'Se déconnecter', onclick: async () => { await deconnexionEleve(); D = null; window.onhashchange = null; retourConnexion(''); } }, '⏻')));
 }
 
 // premier code : l'élève choisit son propre code avant d'entrer
@@ -210,7 +243,8 @@ function boutonsFichier(d, classe) {
     const b = ev.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = '…';
     const w = !telecharger && type ? window.open('', '_blank') : null;
     try {
-      const blob = await fichierEleve(d.id);
+      const blob = await fichierDocument(d);
+      if (!blob) { w?.close(); b.disabled = false; b.textContent = avant; return; }
       const url = URL.createObjectURL(type ? new Blob([blob], { type }) : blob);
       setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
       if (telecharger || !type) { const a = h('a', { href: url, download: (d.titre || 'document').replace(/[\\/:*?"<>|]+/g, ' ') + (d.extension ? '.' + d.extension : '') }); document.body.append(a); a.click(); a.remove(); }
@@ -317,7 +351,7 @@ async function pageQcmEleve(zone, arg) {
         e === 'avenir' ? 'ouvre le ' + dateHeureE(x.ouverture) : e === 'ouvert' ? 'jusqu’au ' + dateHeureE(x.fermeture) : 'fermé le ' + dateHeureE(x.fermeture)].filter(Boolean).join(' · '))),
       h('div', { class: 'actions-qcm-eleve' },
         x.faites ? h('span', { class: 'note-qcm' }, virgule(Number(x.meilleur)), ' / 20') : null,
-        e === 'ouvert' && reste > 0 ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, x.faites ? 'Recommencer' : 'Commencer') : null,
+        apercu ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, 'Tester') : e === 'ouvert' && reste > 0 ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, x.faites ? 'Recommencer' : 'Commencer') : null,
         x.faites ? h('a', { class: 'btn', href: '#/qcm/c-' + x.session }, 'Voir la correction') : null,
         e === 'ouvert' && !x.faites && reste <= 0 ? h('span', { class: 'gris' }, 'déjà fait') : null));
   };

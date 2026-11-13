@@ -2012,3 +2012,10 @@ a.publie-actif, .publie-actif { background: #E3F4E5 !important; border-color: #8
 .choix-corrige .marque { width: 16px; flex: none; }
 .explication { margin: 8px 0 0; color: var(--gris); font-size: 14px; }
 .barre-ia-qcm select.champ { width: auto; max-width: 100%; }
+
+/* ---- aperçu élève (enseignants) */
+.colonne-eleve { min-width: 0; display: flex; flex-direction: column; }
+.bandeau-apercu { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between;
+  background: #7A4FA0; color: #fff; padding: 8px max(16px, env(safe-area-inset-left, 0px)); font-weight: 600; font-size: 14px; }
+.bandeau-apercu .btn { background: #fff; color: #4B2D66; border-color: #fff; }
+.cadre-eleve.en-apercu .menu-eleve .bandeau-eleve::after { content: ' · aperçu'; }

@@ -99,6 +99,14 @@ function lancerEleve() {
   modeEleve = true;
   lancerEspaceEleve(app, { retourConnexion: (msg) => { modeEleve = false; window.onhashchange = null; ecranConnexion(msg, 'eleve'); } });
 }
+// aperçu élève (enseignants) : l'espace élève d'une promotion, vu par un élève fictif ; rien n'est enregistré
+export function apercuEleve(promotion, depart = '#/semaine') {
+  const P = ctx.promotions.find((p) => p.id === promotion) || ctx.promo;
+  const retour = location.hash || '#/accueil';
+  modeEleve = true;
+  location.hash = depart;
+  lancerEspaceEleve(app, { apercu: { promotion_id: P.id, libelle: P.libelle, quitter: () => { modeEleve = false; location.hash = retour; afficher(); } }, retourConnexion: () => { modeEleve = false; afficher(); } });
+}
 function ecranConnexion(message = '', mode = /[?&]eleve\b/.test(location.search) ? 'eleve' : 'enseignant') {
   let premiere = false;
   let eleve = mode === 'eleve';
