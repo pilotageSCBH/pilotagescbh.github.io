@@ -244,8 +244,9 @@ function assistant() {
 
 // ------------------------------------------------------------------------------------------- vidéos
 export const VIDEOS = [
-  { cle: 'decouverte', titre: 'Découvrir le site en 3 minutes', sous: 'les principales fonctionnalités', duree: '3 min', src: 'video/decouverte' },
-  { cle: 'tutoriel', titre: 'Apprendre à travailler avec le site', sous: 'tutoriel complet, chapitre par chapitre', duree: '', src: 'video/tutoriel', chapitres: true },
+  { cle: 'decouverte', titre: 'Découvrir le site en 3 minutes', sous: 'les principales fonctionnalités', duree: '2 min 45', src: 'video/decouverte' },
+  { cle: 'tutoriel', titre: 'Apprendre à travailler avec le site', sous: 'tutoriel complet, chapitre par chapitre', duree: '7 min 20', src: 'video/tutoriel',
+    chapitres: [{t: 6.0, titre: "Premiers pas"}, {t: 46.0, titre: "Séquençages"}, {t: 90.0, titre: "Progression"}, {t: 131.0, titre: "Documents pédagogiques"}, {t: 181.0, titre: "Évaluer et suivre"}, {t: 228.0, titre: "Les élèves"}, {t: 251.0, titre: "Mes ressources"}, {t: 312.0, titre: "Les QCM"}, {t: 366.0, titre: "L’espace élèves"}, {t: 399.0, titre: "Administration"}, {t: 421.0, titre: "L’aide"}] },
 ];
 function blocVideos() {
   return h('section', { class: 'videos-aide' }, VIDEOS.map((v) => h('button', { class: 'carte-video', type: 'button', onclick: () => import('../app.js').then((m) => m.ouvrirVideo(v.cle)) },
