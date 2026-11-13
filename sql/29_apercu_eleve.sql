@@ -26,8 +26,12 @@ $$;
 -- données de l'espace élève : un élève (ses données) ou un élève fictif (aperçu enseignant : aucune note)
 create or replace function public.donnees_eleve(e bigint, c bigint, p bigint, apercu boolean) returns json
 language plpgsql stable security definer set search_path = public as $$
-declare r json;
+declare r json; ap json := '[]';
 begin
+  -- appréciations : seulement si la table existe (script 15)
+  if e is not null and to_regclass('public.appreciations') is not null then
+    execute 'select coalesce(json_agg(json_build_object(''matiere_id'', a.matiere_id, ''texte'', a.texte)), ''[]'') from public.appreciations a where a.eleve_id = $1' into ap using e;
+  end if;
   with seqs as (select * from sequences where promotion_id = p),
   seas as (select x.* from seances x join seqs s on s.id = x.sequence_id),
   ctr as (select * from contrats where promotion_id = p or sequence_id in (select id from seqs) or seance_id in (select id from seas)),
@@ -61,7 +65,7 @@ begin
     'notes', (select coalesce(json_agg(json_build_object('critere_id', n.critere_id, 'eleve_id', n.eleve_id, 'valeur', n.valeur)), '[]') from notes n where n.eleve_id = e and n.critere_id in (select id from crit)),
     'evaluations', (select coalesce(json_agg(json_build_object('id', v.id, 'matiere_id', v.matiere_id, 'libelle', v.libelle, 'date_eval', v.date_eval, 'coefficient', v.coefficient, 'bareme', v.bareme, 'promotion_id', v.promotion_id)), '[]') from evaluations v where v.promotion_id = p),
     'resultats', (select coalesce(json_agg(row_to_json(x)), '[]') from resultats x where x.eleve_id = e),
-    'appreciations', (select coalesce(json_agg(json_build_object('matiere_id', a.matiere_id, 'texte', a.texte)), '[]') from appreciations a where a.eleve_id = e),
+    'appreciations', ap,
     'documents', (select coalesce(json_agg(json_build_object('id', l.id, 'titre', l.titre, 'genre', l.genre, 'theme_id', l.theme_id, 'sommaire', l.sommaire, 'savoirs', l.savoirs,
         'pages', l.pages, 'vignette', l.vignette, 'ordre', l.ordre, 'extension', lower(substring(coalesce(nullif(l.chemin, ''), l.lien) from '\.([A-Za-z0-9]{1,5})$')),
         'fichier', (l.chemin <> '' or l.lien <> ''), 'auteur', (select nom from profils where id = l.proprietaire),
