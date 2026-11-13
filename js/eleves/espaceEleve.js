@@ -93,7 +93,7 @@ function menu(page, retourConnexion) {
       lien('#/semaine', '📅', 'Ma semaine', 'semaine'),
       lien('#/progression', '🗓', 'Calendrier de ma formation', 'progression'),
       lien('#/formation', '🧱', 'Ma formation', 'formation'),
-      lien('#/documents', '📚', 'Mes documents', 'documents'),
+      lien('#/documents', '🎓', 'Mes cours', 'documents'),
       lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
       lien('#/resultats', '🏆', 'Mes résultats', 'resultats'),
       lien('#/compte', '👤', 'Mon compte', 'compte')),
@@ -330,7 +330,7 @@ async function pageDocuments(zone, arg) {
       : h('p', { class: 'vide' }, D.docs.size ? 'Aucun document ne correspond.' : 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
   };
   champ.addEventListener('input', dessiner);
-  vider(zone, entete('📚  Mes documents', `${D.docs.size} document(s) publié(s) par vos enseignants`), h('div', { class: 'zone-recherche-eleve' }, champ), liste);
+  vider(zone, entete('🎓  Mes cours', `${D.docs.size} document(s) publié(s) par vos enseignants`), h('div', { class: 'zone-recherche-eleve' }, champ), liste);
   dessiner();
 }
 // une ligne compacte de l'arborescence
@@ -366,7 +366,7 @@ function boutonsFichier(d, classe) {
 function ficheDocument(zone, d) {
   const lignes = d.sommaire || [];
   const seances = [...D.seances.values()].filter((x) => (x.cours_lies || []).some((c) => c.id === d.id));
-  vider(zone, h('nav', { class: 'ariane-biblio' }, h('a', { href: '#/documents' }, 'Mes documents'), ' › ', h('b', {}, d.titre)),
+  vider(zone, h('nav', { class: 'ariane-biblio' }, h('a', { href: '#/documents' }, 'Mes cours'), ' › ', h('b', {}, d.titre)),
     h('div', { class: 'grille-fiche-livre' },
       h('div', { class: 'col-couv' }, tranche(d, 'couv-grande'), h('div', { class: 'boutons-fiche' }, d.fichier ? boutonsFichier(d, 'btn') : h('p', { class: 'aide' }, 'Pas de fichier associé.'))),
       h('div', { class: 'col-infos' }, h('h2', { class: 'titre-livre' }, d.titre),

@@ -716,8 +716,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const nom = cle === 'theme_id' ? `le dossier « ${x.nom} »` : `« ${x.titre} »`;
     const ok = await fenetre(`Publier ${nom} aux élèves`, h('div', { class: 'formulaire' },
       h('p', { class: 'aide large' }, cle === 'theme_id'
-        ? 'Les élèves des promotions cochées verront dans « Mes documents » tous les documents de ce dossier et de ses sous-dossiers, y compris ceux ajoutés plus tard. Ils les ouvrent et les téléchargent ; ils ne voient jamais l’adresse de votre Nuage.'
-        : 'Les élèves des promotions cochées verront ce document dans « Mes documents » (titre, type, sommaire, savoirs) et pourront l’ouvrir et le télécharger. Ils ne voient jamais l’adresse de votre Nuage.'),
+        ? 'Les élèves des promotions cochées verront dans « Mes cours » de leur espace tous les documents de ce dossier et de ses sous-dossiers, y compris ceux ajoutés plus tard. Ils les ouvrent et les téléchargent ; ils ne voient jamais l’adresse de votre Nuage.'
+        : 'Les élèves des promotions cochées verront ce document dans « Mes cours » de leur espace (titre, type, sommaire, savoirs) et pourront l’ouvrir et le télécharger. Ils ne voient jamais l’adresse de votre Nuage.'),
       herite ? h('p', { class: 'info-partage large' }, `👁 Déjà visible par le dossier « ${herite.nom} ».`) : null,
       h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Promotions'), h('div', { class: 'liste-choix' }, promos.map((p) => h('label', { class: 'option' }, cases.get(p.id), 'Promotion ' + p.libelle)))),
       h('label', {}, 'Visible à partir du (facultatif)', date)),
@@ -753,7 +753,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     if (!avecEleves || !aMoi(x)) return null;
     const actuelles = pubsDe(cle, x.id).filter((p) => p.origine !== 'auto'), herite = cle === 'livre_id' ? publieHerite(x) : null, auto = cle === 'livre_id' && autoDe(x).length ? '📅 Cours mobilisé : publication automatique ' + autoDe(x).map((a) => libPromo(a.promotion_id) + ' ' + quandAuto(a)).join(' ; ') + '.' : null;
     return { promos: [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut), coches: actuelles.map((p) => p.promotion_id), date: actuelles[0]?.a_partir_de || '',
-      texte: (cle === 'theme_id' ? 'Les élèves des promotions cochées voient dans « Mes documents » tout ce dossier, sous-dossiers compris (y compris ce qui y sera ajouté plus tard).' : 'Les élèves des promotions cochées voient ce document dans « Mes documents » et peuvent l’ouvrir et le télécharger.')
+      texte: (cle === 'theme_id' ? 'Les élèves des promotions cochées voient dans « Mes cours » de leur espace tout ce dossier, sous-dossiers compris (y compris ce qui y sera ajouté plus tard).' : 'Les élèves des promotions cochées voient ce document dans « Mes cours » de leur espace et peuvent l’ouvrir et le télécharger.')
         + ' Ils ne voient jamais l’adresse de votre Nuage.' + (herite ? ` Déjà visible par le dossier « ${herite.nom} ».` : '') + (auto ? ' ' + auto : '') };
   }
   async function partagerUn(cle, x) {
@@ -797,7 +797,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('div', { class: 'liste-choix' }, autres.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', onchange: (e) => (e.target.checked ? qui.add(c.id) : qui.delete(c.id)) }), c.nom))),
           avecEleves ? [h('p', { class: 'sous-titre-choix' }, '… et / ou les élèves (classe entière)'),
             h('div', { class: 'liste-choix' }, promos.map((p) => h('label', { class: 'option' }, h('input', { type: 'checkbox', onchange: (e) => (e.target.checked ? classes.add(p.id) : classes.delete(p.id)) }), '🎓 Promotion ' + p.libelle))),
-            h('small', { class: 'gris' }, 'Les élèves voient les documents dans « Mes documents » de leur espace ; pour un dossier, aussi ceux ajoutés plus tard.')] : null,
+            h('small', { class: 'gris' }, 'Les élèves voient les documents dans « Mes cours » de leur espace ; pour un dossier, aussi ceux ajoutés plus tard.')] : null,
           h('p', { class: 'sous-titre-choix' }, '3. Action'), mode))),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Appliquer', classe: 'principal', action: () => {
       if (!coches.size) throw new Error(`Cochez au moins une fiche ou un ${E.theme}.`);

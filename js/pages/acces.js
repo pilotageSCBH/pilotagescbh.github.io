@@ -144,7 +144,7 @@ export async function pageAcces(zone, ctx) {
         { t: 'etapes', titre: 'Dans votre espace', items: [
           'Ma semaine : les séances prévues et les prochaines évaluations.',
           'Ma formation : les séquences et séances de chaque matière, avec les documents utilisés.',
-          'Mes documents : les cours, exercices, TD/TP et ressources publiés par vos enseignants.',
+          'Mes cours : les cours, exercices, TD/TP et ressources publiés par vos enseignants.',
           'Mes résultats : vos notes, vos résultats et le niveau atteint dans chaque compétence.',
           'Mon compte : changer votre code.'] },
         { t: 'qr', liens: [{ url: lienEleve, lib: 'Page d’accueil du site' }] },
