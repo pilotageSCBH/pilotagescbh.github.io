@@ -1285,6 +1285,9 @@ table.frise-evals { border-collapse: separate; border-spacing: 2px; font-size: 1
   border-radius: 23px; border: 0; background: var(--fonce); color: #fff; font: inherit; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
 .retour-flottant .fleche { width: 28px; height: 28px; border-radius: 50%; background: #C9E265; color: var(--fonce); display: grid; place-items: center; font-size: 17px; }
 .retour-flottant:hover { background: var(--teal); }
+.retour-flottant { transition: opacity .2s, transform .2s; }
+/* pendant la saisie, le bouton s'efface pour ne jamais cacher le texte tapé */
+body:has(:is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select, [contenteditable=true]):focus) .retour-flottant { opacity: 0; transform: translateY(16px); pointer-events: none; }
 .cadre.menu-reduit .retour-flottant { left: calc(66px + 24px); }
 .contenu { padding-bottom: 90px; }
 @media (max-width: 900px) { .retour-flottant { left: 16px; } }
@@ -2046,7 +2049,11 @@ a.video-menu { text-decoration: none; }
 .puce-exemple { font: inherit; font-size: 12.5px; border: 1px solid #BFD9D5; background: #fff; color: var(--teal); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
 .puce-exemple:hover { background: var(--teal); color: #fff; }
 .saisie-assistant { display: flex; gap: 8px; margin-top: 10px; }
-.saisie-assistant .champ { flex: 1; min-width: 0; }
+.saisie-assistant .champ { flex: 1; min-width: 0; border-color: var(--ligne); background: #fff; color: var(--texte, #1F2D2B); font-size: 15px; padding: 9px 12px; scroll-margin-bottom: 110px; }
+.titre-partage { font-size: 15px; margin: 16px 0 6px; color: var(--fonce); }
+.titre-partage:first-of-type { margin-top: 6px; }
+.date-partage { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.date-partage .champ { width: auto; border-color: var(--ligne); background: #fff; }
 .question-aide.cible-aide { outline: 3px solid var(--teal); border-radius: 8px; }
 /* vidéo avec chapitres */
 .corps-video { display: flex; }

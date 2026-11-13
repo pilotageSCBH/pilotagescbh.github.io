@@ -44,7 +44,7 @@ export async function pageQcm(zone, arg, ctx) {
   const miens = liste.filter((q) => q.proprietaire === moi), autres = liste.filter((q) => q.proprietaire !== moi);
   const carte = (q) => {
     const ss = sessions.filter((s) => s.qcm_id === q.id), ouverte = ss.find((s) => new Date(s.ouverture) <= new Date() && new Date(s.fermeture) > new Date());
-    const partage = q.partage_tous || partages.some((p) => p.qcm_id === q.id) || (avecDossiers && q.dossier && dossiersP.some((d) => d.proprietaire === q.proprietaire && d.dossier === q.dossier));
+    const partage = q.partage_tous || partages.some((p) => p.qcm_id === q.id) || ss.some(enLibreAcces) || (avecDossiers && q.dossier && dossiersP.some((d) => d.proprietaire === q.proprietaire && d.dossier === q.dossier));
     return h('a', { class: 'carte-qcm', href: '#/qcm/' + q.id, style: { '--couleur': mats.get(q.matiere_id)?.couleur || 'var(--teal)' } },
       h('b', {}, q.titre || 'QCM sans titre'),
       h('span', { class: 'gris' }, [pluriel((q.questions || []).length, 'question', 'questions'), mats.get(q.matiere_id)?.nom, q.proprietaire !== moi ? 'par ' + nomCollegue(q.proprietaire) : null].filter(Boolean).join(' · ')),
@@ -57,9 +57,10 @@ export async function pageQcm(zone, arg, ctx) {
   const blocDossier = (d) => {
     const qs = miens.filter((q) => (q.dossier || '') === d);
     const dp = avecDossiers && d ? dossiersP.filter((x) => x.proprietaire === moi && x.dossier === d) : [];
+    const classeD = qs.length && ctx.promotions.some((p) => qs.every((q) => sessions.some((s) => s.qcm_id === q.id && s.promotion_id === p.id && enLibreAcces(s))));
     return h('section', { class: 'dossier-qcm' },
       nomsDossiers.length > 1 || d ? h('div', { class: 'tete-dossier-qcm' }, h('h2', { class: 'titre-section' }, d ? '📁 ' + d : '📄 Sans dossier', h('small', { class: 'gris' }, ' · ' + pluriel(qs.length, 'QCM', 'QCM'))),
-        d && avecDossiers ? h('button', { class: 'btn petit' + (dp.length ? ' partage-actif' : ''), onclick: () => partagerDossier(d, dossiersP, moi, zone, ctx) }, dp.length ? '👥 Dossier partagé' : '👥 Partager le dossier') : null,
+        d ? h('button', { class: 'btn petit' + (dp.length || classeD ? ' partage-actif' : ''), onclick: () => partagerDossier(d, dossiersP, moi, zone, ctx, qs, sessions) }, dp.length || classeD ? '👥 Dossier partagé' : '👥 Partager le dossier') : null,
         h('button', { class: 'btn petit', onclick: () => ouvrirEnLigne(ctx, qs.map((q) => ({ q, questions: q.questions || [] }))) }, '🌐 Ouvrir aux élèves (tout le dossier)')) : null,
       h('div', { class: 'grille-qcm' }, qs.map(carte)));
   };
@@ -326,7 +327,7 @@ async function editeur(zone, ctx, q, sessions, partages, ref, tous = []) {
         h('button', { class: 'btn', title: 'Faire le QCM comme un élève (rien n’est enregistré)', onclick: () => { if (!questions.some((x) => x.texte)) return toast('Ajoutez d’abord des questions', 'erreur'); enregistrer(true); apercuEleve(ctx.promo?.id, '#/qcm/' + q.id); } }, '👁  Tester comme un élève'),
         h('button', { class: 'btn', onclick: () => dialoguePDF(ctx, q, questions) }, '⬇  PDF (sujets et corrigés)'),
         mien ? h('button', { class: 'btn principal', onclick: () => ouvrirEnLigne(ctx, [{ q, questions }]) }, '🌐  Ouvrir en ligne') : null,
-        mien ? h('button', { class: 'btn', onclick: () => partager(q, partages) }, '👥  Partager') : null,
+        mien ? h('button', { class: 'btn', onclick: async () => { if (await partager(q, partages, ctx, ss)) pageQcm(zone, String(q.id), ctx); } }, '👥  Partager') : null,
         h('button', { class: 'btn', onclick: () => copier(q, mien) }, mien ? '⧉  Dupliquer' : '⧉  Copier dans mes QCM'),
         mien ? h('button', { class: 'btn danger', onclick: async () => { if (await confirmer('Supprimer le QCM', `Supprimer « ${q.titre} »${ss.length ? ' et les résultats de ses passations en ligne' : ''} ?`, 'Supprimer')) { try { await db.supprimer('qcm', q.id); toast('QCM supprimé'); location.hash = '#/qcm'; } catch (e) { erreur(e); } } } }, '✖') : null)),
     mien ? h('div', { class: 'formulaire bloc-qcm' },
@@ -550,32 +551,67 @@ async function reporter(ctx, s, q, zone) {
 }
 
 // ------------------------------------------------------------------------------------------- partage et copie
-async function partager(q, partages) {
+// partage avec la classe = QCM en libre accès dans l'espace élèves (entraînement, tentatives illimitées) jusqu'à la fin de l'année scolaire
+const LIBRE = 20;
+const finAnnee = () => { const d = new Date(), a = d.getMonth() >= 8 ? d.getFullYear() + 1 : d.getFullYear(); return new Date(a, 7, 31, 23, 0); };
+const enLibreAcces = (s) => s.tentatives === LIBRE && new Date(s.fermeture) > new Date();
+const completQ = (questions) => (questions || []).length && questions.every((x) => x.texte && x.choix?.some((c) => c.bon) && x.choix.every((c) => String(c.texte || '').trim()));
+function sectionClasse(ctx, qs, sessions, dossier = false) {
+  const promos = [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut);
+  const coches = promos.filter((p) => qs.length && qs.every((q) => sessions.some((s) => s.qcm_id === q.id && s.promotion_id === p.id && enLibreAcces(s)))).map((p) => p.id);
+  return { promos, coches, texte: `Les élèves des promotions cochées trouvent ${dossier ? 'les QCM de ce dossier' : 'ce QCM'} dans « Mes QCM » de leur espace, en libre accès (entraînement, tentatives illimitées, correction après chaque essai) jusqu’au ${finAnnee().toLocaleDateString('fr-FR')}.${dossier ? ' Un QCM rangé plus tard dans le dossier : partagez le dossier à nouveau.' : ''} Pour une évaluation à dates fixes, utilisez plutôt « 🌐 Ouvrir en ligne ».` };
+}
+async function enregistrerClasse(qs, sessions, avant, voulues) {
+  let ouverts = 0, incomplets = 0;
+  const maintenant = new Date(); maintenant.setSeconds(0, 0);
+  for (const pid of voulues) for (const q of qs) {
+    if (sessions.some((s) => s.qcm_id === q.id && s.promotion_id === pid && enLibreAcces(s))) continue;
+    if (!completQ(q.questions)) { incomplets++; continue; }
+    const s = await db.ajouter('qcm_sessions', { qcm_id: q.id, promotion_id: pid, ouverture: maintenant.toISOString(), fermeture: finAnnee().toISOString(), tentatives: LIBRE, melanger: true });
+    sessions.push(s); ouverts++;
+  }
+  for (const pid of avant) if (!voulues.includes(pid)) for (const s of sessions.filter((x) => x.promotion_id === pid && qs.some((q) => q.id === x.qcm_id) && enLibreAcces(x))) {
+    const v = { fermeture: new Date().toISOString(), ouverture: new Date(Math.min(new Date(s.ouverture), Date.now() - 60000)).toISOString() };
+    await db.modifier('qcm_sessions', s.id, v); Object.assign(s, v);
+  }
+  if (incomplets) toast(`${pluriel(incomplets, 'QCM incomplet n’a pas été ouvert', 'QCM incomplets n’ont pas été ouverts')} aux élèves (questions à compléter)`, 'erreur');
+  return ouverts;
+}
+async function partager(q, partages, ctx, sessions) {
+  const classe = ctx ? sectionClasse(ctx, [q], sessions) : null;
   const r = await dialoguePartage(`Partager « ${q.titre} »`, 'Les collègues choisis voient ce QCM, l’impriment et peuvent le copier dans leurs QCM pour l’adapter ou l’ouvrir à leurs élèves ; ils ne modifient pas le vôtre.',
-    { tous: q.partage_tous, qui: partages.filter((p) => p.qcm_id === q.id).map((p) => p.destinataire), moi: q.proprietaire });
-  if (!r) return;
+    { tous: q.partage_tous, qui: partages.filter((p) => p.qcm_id === q.id).map((p) => p.destinataire), moi: q.proprietaire, eleves: classe });
+  if (!r) return false;
   try {
     if (r.tous !== q.partage_tous) { await db.modifier('qcm', q.id, { partage_tous: r.tous }); q.partage_tous = r.tous; }
     const avant = partages.filter((p) => p.qcm_id === q.id).map((p) => p.destinataire);
     for (const u of avant) if (!r.qui.includes(u)) await db.supprimer('qcm_partages', u, `qcm_id=eq.${q.id}&destinataire`);
     const ajout = r.qui.filter((u) => !avant.includes(u)).map((u) => ({ qcm_id: q.id, destinataire: u }));
     if (ajout.length) await db.ajouter('qcm_partages', ajout);
-    toast(r.tous || r.qui.length ? 'Partage enregistré' : 'De nouveau privé');
-  } catch (e) { erreur(e); }
+    if (classe) await enregistrerClasse([q], sessions, classe.coches, r.promos);
+    toast(r.tous || r.qui.length || r.promos?.length ? 'Partage enregistré' : 'De nouveau privé');
+    return true;
+  } catch (e) { erreur(e); return false; }
 }
-async function partagerDossier(d, dossiersP, moi, zone, ctx) {
-  const avant = dossiersP.filter((x) => x.proprietaire === moi && x.dossier === d);
-  const r = await dialoguePartage(`Partager le dossier « ${d} »`, 'Les collègues choisis voient tous les QCM de ce dossier, y compris ceux que vous y rangerez plus tard ; ils les impriment et peuvent les copier dans leurs QCM ; ils ne modifient pas les vôtres.',
-    { tous: avant.some((x) => !x.destinataire), qui: avant.filter((x) => x.destinataire).map((x) => x.destinataire), moi });
+async function partagerDossier(d, dossiersP, moi, zone, ctx, qs = [], sessions = []) {
+  const avant = avecTable(dossiersP) ? dossiersP.filter((x) => x.proprietaire === moi && x.dossier === d) : null;
+  const classe = sectionClasse(ctx, qs, sessions, true);
+  const r = await dialoguePartage(`Partager le dossier « ${d} »`, avant ? 'Les collègues choisis voient tous les QCM de ce dossier, y compris ceux que vous y rangerez plus tard ; ils les impriment et peuvent les copier dans leurs QCM ; ils ne modifient pas les vôtres.'
+    : 'Partage du dossier avec des collègues : exécutez d’abord le script 30 dans Supabase (les cases « enseignants » ne sont pas enregistrées).',
+  { tous: avant ? avant.some((x) => !x.destinataire) : false, qui: avant ? avant.filter((x) => x.destinataire).map((x) => x.destinataire) : [], moi, eleves: classe });
   if (!r) return;
   try {
-    for (const x of avant) if (x.destinataire ? !r.qui.includes(x.destinataire) : !r.tous) await db.supprimer('qcm_dossiers_partages', x.id);
-    const ajout = r.qui.filter((u) => !avant.some((x) => x.destinataire === u)).map((u) => ({ dossier: d, destinataire: u }));
-    if (r.tous && !avant.some((x) => !x.destinataire)) ajout.push({ dossier: d, destinataire: null });
-    if (ajout.length) await db.ajouter('qcm_dossiers_partages', ajout);
-    toast(r.tous || r.qui.length ? 'Dossier partagé' : 'Dossier de nouveau privé'); pageQcm(zone, '', ctx);
+    if (avant) {
+      for (const x of avant) if (x.destinataire ? !r.qui.includes(x.destinataire) : !r.tous) await db.supprimer('qcm_dossiers_partages', x.id);
+      const ajout = r.qui.filter((u) => !avant.some((x) => x.destinataire === u)).map((u) => ({ dossier: d, destinataire: u }));
+      if (r.tous && !avant.some((x) => !x.destinataire)) ajout.push({ dossier: d, destinataire: null });
+      if (ajout.length) await db.ajouter('qcm_dossiers_partages', ajout);
+    }
+    await enregistrerClasse(qs, sessions, classe.coches, r.promos);
+    toast(r.tous || r.qui.length || r.promos.length ? 'Dossier partagé' : 'Dossier de nouveau privé'); pageQcm(zone, '', ctx);
   } catch (e) { erreur(e); }
 }
+const avecTable = (x) => Array.isArray(x);
 async function copier(q, mien) {
   try {
     const v = { titre: q.titre + (mien ? ' (copie)' : ''), consigne: q.consigne, matiere_id: q.matiere_id, livre_id: mien ? q.livre_id : null, seance_id: q.seance_id, questions: q.questions || [] };

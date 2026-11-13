@@ -155,6 +155,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const pubsDe = (cle, id) => (C.publications || []).filter((p) => p[cle] === id);
   const publieHerite = (l) => { let t = l.theme_id ? T.get(l.theme_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return t; t = t.parent_id ? T.get(t.parent_id) : null; } return null; };
   const estPublie = (cle, x) => pubsDe(cle, x.id).length > 0 || (cle === 'livre_id' && autoDe(x).some((a) => new Date(a.le) <= new Date())) || (cle === 'livre_id' ? !!publieHerite(x) : (() => { let t = x.parent_id ? T.get(x.parent_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return true; t = t.parent_id ? T.get(t.parent_id) : null; } return false; })());
+  const partageActif = (x, cle) => estPartage(x, cle) || pubsDe(cle, x.id).some((p) => p.origine !== 'auto');
   const boutonEleves = (cle, x, classe) => (avecEleves && aMoi(x) ? h('button', { class: classe + (pubsDe(cle, x.id).length ? ' publie-actif' : ''), title: 'Rendre visible aux élèves dans leur espace', onclick: () => publierEleves(cle, x) },
     pubsDe(cle, x.id).length ? '👁 Visible des élèves' : '👁 Publier aux élèves') : null);
 
@@ -250,7 +251,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('div', { class: 'boutons-detail' },
           urlTheme(t) ? h('a', { class: 'btn petit', href: urlTheme(t), target: '_blank', rel: 'noopener', title: 'Ouvrir ce dossier dans Nuage' }, '📂 Dossier sur Nuage') : null,
           modif ? h('button', { class: 'btn petit', onclick: () => modifierTheme(t) }, `✎ Modifier le ${E.theme}`) : null,
-          vue === 'mes' ? h('button', { class: 'btn petit' + (estPartage(t, 'theme_id') ? ' partage-actif' : ''), onclick: () => partagerUn('theme_id', t) }, estPartage(t, 'theme_id') ? '👥 Partagé' : '👥 Partager') : null,
+          vue === 'mes' ? h('button', { class: 'btn petit' + (partageActif(t, 'theme_id') ? ' partage-actif' : ''), onclick: () => partagerUn('theme_id', t) }, partageActif(t, 'theme_id') ? '👥 Partagé' : '👥 Partager') : null,
           vue === 'mes' ? boutonEleves('theme_id', t, 'btn petit') : null,
           h('button', { class: 'btn petit', onclick: () => dialoguePDF(t) }, '⬇ PDF'),
           vue === 'partages' ? h('span', { class: 'info-partage' }, '👤 Partagé par ' + nomCollegue(t.proprietaire)) : null)),
@@ -341,7 +342,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       h('div', { class: 'grille-fiche-livre' },
         h('div', { class: 'col-couv' }, couverture(l, 'couv-grande'),
           h('div', { class: 'boutons-fiche' }, boutonOuvrir(l, 'btn principal'),
-            aMoi(l) ? h('button', { class: 'btn' + (estPartage(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, estPartage(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
+            aMoi(l) ? h('button', { class: 'btn' + (partageActif(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, partageActif(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
             boutonEleves('livre_id', l, 'btn'),
             aMoi(l) && autoDe(l).length ? h('p', { class: 'info-partage petit' }, '📅 Publication automatique (cours mobilisé dans le séquençage) : ',
               autoDe(l).map((a, i) => [i ? ' ; ' : '', h('b', {}, libPromo(a.promotion_id)), ' ' + quandAuto(a)])) : null,
@@ -720,12 +721,18 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     if (!ok) return;
     try {
       const voulues = promos.filter((p) => cases.get(p.id).checked).map((p) => p.id);
-      for (const p of actuelles) if (!voulues.includes(p.promotion_id) || (p.a_partir_de || '') !== date.value) await db.supprimer('publications_eleves', p.id);
-      const reste = (C.publications = (C.publications || []).filter((p) => !(p[cle] === x.id && (!voulues.includes(p.promotion_id) || (p.a_partir_de || '') !== date.value))));
-      const ajout = voulues.filter((pid) => !reste.some((p) => p[cle] === x.id && p.promotion_id === pid)).map((pid) => ({ [cle]: x.id, promotion_id: pid, a_partir_de: date.value || null }));
-      if (ajout.length) C.publications.push(...(await db.ajouter('publications_eleves', ajout)));
+      await enregistrerEleves(cle, x, voulues, date.value);
       toast(voulues.length ? 'Visible des élèves' : 'Retiré de l’espace élèves'); dessiner();
     } catch (e) { erreur(e); }
+  }
+  async function enregistrerEleves(cle, x, voulues, dateV = '') {
+    dateV = dateV || '';
+    const actuelles = pubsDe(cle, x.id).filter((p) => p.origine !== 'auto');
+    const garder = (p) => voulues.includes(p.promotion_id) && (p.a_partir_de || '') === dateV;
+    for (const p of actuelles) if (!garder(p)) await db.supprimer('publications_eleves', p.id);
+    const reste = (C.publications = (C.publications || []).filter((p) => !(p[cle] === x.id && p.origine !== 'auto' && !garder(p))));
+    const ajout = voulues.filter((pid) => !reste.some((p) => p[cle] === x.id && p.promotion_id === pid && p.origine !== 'auto')).map((pid) => ({ [cle]: x.id, promotion_id: pid, a_partir_de: dateV || null }));
+    if (ajout.length) C.publications.push(...(await db.ajouter('publications_eleves', ajout)));
   }
 
   // ------------------------------------------------------------------ partage
@@ -737,14 +744,26 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const nouveaux = ajout.length ? await db.ajouter('biblio_partages', ajout) : [];
     C.partages = P().filter((p) => !(p[cle] === x.id && !voulus.has(p.destinataire))).concat(nouveaux);
   }
+  // section « classe » de la fenêtre de partage (si la table des publications est disponible)
+  function elevesPartage(cle, x) {
+    if (!avecEleves || !aMoi(x)) return null;
+    const actuelles = pubsDe(cle, x.id).filter((p) => p.origine !== 'auto'), herite = cle === 'livre_id' ? publieHerite(x) : null, auto = cle === 'livre_id' && autoDe(x).length ? '📅 Cours mobilisé : publication automatique ' + autoDe(x).map((a) => libPromo(a.promotion_id) + ' ' + quandAuto(a)).join(' ; ') + '.' : null;
+    return { promos: [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut), coches: actuelles.map((p) => p.promotion_id), date: actuelles[0]?.a_partir_de || '',
+      texte: (cle === 'theme_id' ? 'Les élèves des promotions cochées voient dans « Mes documents » tout ce dossier, sous-dossiers compris (y compris ce qui y sera ajouté plus tard).' : 'Les élèves des promotions cochées voient ce document dans « Mes documents » et peuvent l’ouvrir et le télécharger.')
+        + ' Ils ne voient jamais l’adresse de votre Nuage.' + (herite ? ` Déjà visible par le dossier « ${herite.nom} ».` : '') + (auto ? ' ' + auto : '') };
+  }
   async function partagerUn(cle, x) {
     const nom = cle === 'theme_id' ? `le ${E.theme} « ${x.nom} »` : `« ${x.titre} »`;
     const r = await dialoguePartage(`Partager ${nom}`, cle === 'theme_id'
       ? `Les collègues choisis verront ce ${E.theme}, ses sous-${E.themes} et toutes leurs fiches (y compris celles ajoutées plus tard), en consultation. Pour ouvrir les fichiers, ils utilisent le lien de partage de votre dossier « ${E.nomDossierNuage} » sur Nuage.`
       : `Les collègues choisis verront cette fiche (sommaire, couverture) en consultation. Pour ouvrir le fichier, ils utilisent le lien de partage de votre dossier « ${E.nomDossierNuage} » sur Nuage.`,
-    { tous: x.partage_tous, qui: partagesDe(cle, x.id).map((p) => p.destinataire), moi });
+    { tous: x.partage_tous, qui: partagesDe(cle, x.id).map((p) => p.destinataire), moi, eleves: elevesPartage(cle, x) });
     if (!r) return;
-    try { await enregistrerPartage(cle, x, r); toast(r.tous || r.qui.length ? 'Partage enregistré' : 'De nouveau privé'); dessiner(); } catch (e) { erreur(e); }
+    try {
+      await enregistrerPartage(cle, x, r);
+      if (r.promos && avecEleves) await enregistrerEleves(cle, x, r.promos, r.date);
+      toast(r.tous || r.qui.length || r.promos?.length ? 'Partage enregistré' : 'De nouveau privé'); dessiner();
+    } catch (e) { erreur(e); }
   }
   async function partagerLot() {
     const coches = new Set();

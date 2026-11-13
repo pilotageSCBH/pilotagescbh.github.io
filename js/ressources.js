@@ -244,21 +244,32 @@ export function grainDeBois(cle) {
 export const couleurTranche = (t) => ESSENCES[hachage(String(t)) % ESSENCES.length][1];
 
 // ------------------------------------------------------------------------------------------- partage (fenêtre commune)
-// tous : partagé avec toute l'équipe ; qui : collègues déjà cochés ; renvoie { tous, qui } ou null
-export async function dialoguePartage(titre, texteAide, { tous = false, qui = [], herite = '', moi = '' } = {}) {
+// tous : partagé avec toute l'équipe ; qui : collègues déjà cochés ;
+// eleves (facultatif) : { promos, coches, date, texte } → section « La classe » ; renvoie { tous, qui, promos, date } ou null
+export async function dialoguePartage(titre, texteAide, { tous = false, qui = [], herite = '', moi = '', eleves = null } = {}) {
   const autres = (await chargerCollegues()).filter((c) => c.id !== moi);
-  const coches = new Set(qui);
+  const coches = new Set(qui), promosCochees = new Set(eleves?.coches || []);
+  const debutAnnee = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1;   // promotions encore en cours (ou déjà cochées)
+  const promosVisibles = (eleves?.promos || []).filter((p) => promosCochees.has(p.id) || !p.annee_debut || p.annee_debut + 2 > debutAnnee);
   const cbTous = h('input', { type: 'checkbox', checked: tous });
+  const date = eleves && eleves.date !== undefined ? h('input', { class: 'champ', type: 'date', value: eleves.date || '' }) : null;
   const ok = await fenetre(titre, h('div', { class: 'partage-cours' },
     h('p', { class: 'aide' }, texteAide),
     herite ? h('p', { class: 'info-herite' }, 'ℹ ' + herite) : null,
+    h('h3', { class: 'titre-partage' }, '👩‍🏫 Avec des enseignants'),
     h('label', { class: 'option tous' }, cbTous, h('b', {}, 'Toute l’équipe'), h('small', {}, ' (y compris les collègues qui arriveront plus tard)')),
     h('p', { class: 'sous-titre-choix' }, 'Ou seulement certains collègues :'),
     h('div', { class: 'liste-choix colonnes' }, autres.length ? autres.map((c) => h('label', { class: 'option' },
       h('input', { type: 'checkbox', checked: coches.has(c.id), onchange: (e) => (e.target.checked ? coches.add(c.id) : coches.delete(c.id)) }), c.nom))
-      : h('p', { class: 'vide' }, 'Aucun autre enseignant n’a encore de compte.'))),
-  [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer le partage', classe: 'principal', valeur: true }]);
-  return ok ? { tous: cbTous.checked, qui: [...coches] } : null;
+      : h('p', { class: 'vide' }, 'Aucun autre enseignant n’a encore de compte.')),
+    eleves ? [h('h3', { class: 'titre-partage' }, '🎓 Avec la classe (tous les élèves de la promotion)'),
+      eleves.texte ? h('p', { class: 'aide' }, eleves.texte) : null,
+      h('div', { class: 'liste-choix colonnes' }, promosVisibles.length ? promosVisibles.map((p) => h('label', { class: 'option' },
+        h('input', { type: 'checkbox', checked: promosCochees.has(p.id), onchange: (e) => (e.target.checked ? promosCochees.add(p.id) : promosCochees.delete(p.id)) }), 'Promotion ' + p.libelle))
+        : h('p', { class: 'vide' }, 'Aucune promotion.')),
+      date ? h('label', { class: 'date-partage' }, 'Visible des élèves à partir du (facultatif) ', date) : null] : null),
+  [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer le partage', classe: 'principal', valeur: true }], eleves ? { large: true } : undefined);
+  return ok ? { tous: cbTous.checked, qui: [...coches], promos: [...promosCochees], date: date ? date.value : null } : null;
 }
 
 // petit indicateur d'avancement dans une fenêtre
