@@ -32,7 +32,7 @@ export function genreDepuisNom(nom) {
 // titres (styles Titre 1 / 2 / 3 ou niveaux hiérarchiques) → sommaire [{ t, p, n }] ; codes des savoirs du référentiel cités dans le texte
 export async function lireWord(fichier, ref, { niveaux = 3, numeroter = true } = {}) {
   if (!/\.docx$/i.test(fichier.name)) throw new Error(`« ${fichier.name} » : seuls les fichiers Word récents (.docx) peuvent être lus.`);
-  const P = await import('../pdf.js?v=20261111'); await P.chargerOutils();
+  const P = await import('../pdf.js?v=20261113'); await P.chargerOutils();
   const zip = await window.JSZip.loadAsync(await fichier.arrayBuffer());
   const xml = async (chemin) => { const f = zip.file(chemin); return f ? new DOMParser().parseFromString(await f.async('string'), 'application/xml') : null; };
   const [doc, styles, core] = await Promise.all([xml('word/document.xml'), xml('word/styles.xml'), xml('docProps/core.xml')]);
@@ -94,8 +94,9 @@ const recherches = {};       // par espace, gardée d'une page à l'autre
 async function charger(E, force) {
   const c = caches[E.cle];
   if (c && !force && Date.now() - c.t < 120000) return c;
-  const [themes, livres, partages] = await Promise.all([db.lire('biblio_themes', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_partages')]);
-  caches[E.cle] = { themes: new Map(themes.map((t) => [t.id, t])), livres: new Map(livres.map((l) => [l.id, l])), partages, t: Date.now() };
+  const [themes, livres, partages, publications] = await Promise.all([db.lire('biblio_themes', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_partages'),
+    E.genres ? db.lire('publications_eleves').catch(() => null) : null]);
+  caches[E.cle] = { themes: new Map(themes.map((t) => [t.id, t])), livres: new Map(livres.map((l) => [l.id, l])), partages, publications, t: Date.now() };
   return caches[E.cle];
 }
 export const oublierEspaces = () => { for (const k of Object.keys(caches)) delete caches[k]; };
@@ -145,6 +146,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const memoGestion = (v) => { gestion = v; try { sessionStorage.setItem(CLE_GESTION, v ? '1' : '0'); } catch { /* sans stockage */ } };
   const recharger = () => ctx.recharger();
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
+  // publication pour les élèves (Mes cours) : un document, ou un dossier entier (et tout ce qu'il contient)
+  const avecEleves = E.genres && Array.isArray(C.publications);
+  const pubsDe = (cle, id) => (C.publications || []).filter((p) => p[cle] === id);
+  const publieHerite = (l) => { let t = l.theme_id ? T.get(l.theme_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return t; t = t.parent_id ? T.get(t.parent_id) : null; } return null; };
+  const estPublie = (cle, x) => pubsDe(cle, x.id).length > 0 || (cle === 'livre_id' ? !!publieHerite(x) : (() => { let t = x.parent_id ? T.get(x.parent_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return true; t = t.parent_id ? T.get(t.parent_id) : null; } return false; })());
+  const boutonEleves = (cle, x, classe) => (avecEleves && aMoi(x) ? h('button', { class: classe + (pubsDe(cle, x.id).length ? ' publie-actif' : ''), title: 'Rendre visible aux élèves dans leur espace', onclick: () => publierEleves(cle, x) },
+    pubsDe(cle, x.id).length ? '👁 Visible des élèves' : '👁 Publier aux élèves') : null);
 
   // route (un numéro seul = une fiche : liens des séquençages)
   const [k, idTxt] = /^\d+$/.test(String(arg || '')) ? ['l', arg] : String(arg || '').split('-');
@@ -239,6 +247,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           urlTheme(t) ? h('a', { class: 'btn petit', href: urlTheme(t), target: '_blank', rel: 'noopener', title: 'Ouvrir ce dossier dans Nuage' }, '📂 Dossier sur Nuage') : null,
           modif ? h('button', { class: 'btn petit', onclick: () => modifierTheme(t) }, `✎ Modifier le ${E.theme}`) : null,
           vue === 'mes' ? h('button', { class: 'btn petit' + (estPartage(t, 'theme_id') ? ' partage-actif' : ''), onclick: () => partagerUn('theme_id', t) }, estPartage(t, 'theme_id') ? '👥 Partagé' : '👥 Partager') : null,
+          vue === 'mes' ? boutonEleves('theme_id', t, 'btn petit') : null,
           h('button', { class: 'btn petit', onclick: () => dialoguePDF(t) }, '⬇ PDF'),
           vue === 'partages' ? h('span', { class: 'info-partage' }, '👤 Partagé par ' + nomCollegue(t.proprietaire)) : null)),
       st.length || modif ? tuiles(st, t.id) : null,
@@ -292,6 +301,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     if (l.sommaire?.length && !A_COMPLETER[l.source]) meta.push(pluriel(l.sommaire.length, 'entrée au sommaire', 'entrées au sommaire'));
     if (A_COMPLETER[l.source]) meta.push(h('span', { class: 'pastille-a-completer' }, A_COMPLETER[l.source] + (modif ? ' : à compléter' : '')));
     if (aMoi(l) && estPartage(l, 'livre_id')) meta.push('👥 partagé');
+    if (avecEleves && aMoi(l) && estPublie('livre_id', l)) meta.push(h('span', { class: 'publie-eleves' }, '👁 élèves'));
     if (!aMoi(l)) meta.push('👤 ' + nomCollegue(l.proprietaire));
     let corps = null;
     if (lignes?.length) {
@@ -328,6 +338,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('div', { class: 'col-couv' }, couverture(l, 'couv-grande'),
           h('div', { class: 'boutons-fiche' }, boutonOuvrir(l, 'btn principal'),
             aMoi(l) ? h('button', { class: 'btn' + (estPartage(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, estPartage(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
+            boutonEleves('livre_id', l, 'btn'),
             aMoi(l) ? h('button', { class: 'btn', onclick: () => modifierLivre(l) }, '✎ Modifier') : null,
             h('button', { class: 'btn', onclick: () => envoyerPDF(documentPDF([l], { sommaire: true, savoirs: true, liens: true }, l.titre), 'pdf') }, '⬇ PDF'),
             !aMoi(l) ? h('button', { class: 'btn', onclick: () => copierLivre(l) }, '⧉ Copier dans mon espace') : null,
@@ -682,6 +693,32 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       if (retirer.checked) for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); }
     } catch (e) { erreur(e); }
     await creerFiches(nouveaux.map((x) => ({ f: x.f, charger: x.charger, taille: x.taille, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);
+  }
+
+  // ------------------------------------------------------------------ publication pour les élèves
+  async function publierEleves(cle, x) {
+    const actuelles = pubsDe(cle, x.id), promos = [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut);
+    const cases = new Map(promos.map((p) => [p.id, h('input', { type: 'checkbox', checked: actuelles.some((y) => y.promotion_id === p.id) || (!actuelles.length && p.id === ctx.promo?.id) })]));
+    const date = h('input', { class: 'champ', type: 'date', value: actuelles[0]?.a_partir_de || '' });
+    const herite = cle === 'livre_id' ? publieHerite(x) : null;
+    const nom = cle === 'theme_id' ? `le dossier « ${x.nom} »` : `« ${x.titre} »`;
+    const ok = await fenetre(`Publier ${nom} aux élèves`, h('div', { class: 'formulaire' },
+      h('p', { class: 'aide large' }, cle === 'theme_id'
+        ? 'Les élèves des promotions cochées verront dans « Mes documents » tous les documents de ce dossier et de ses sous-dossiers, y compris ceux ajoutés plus tard. Ils les ouvrent et les téléchargent ; ils ne voient jamais l’adresse de votre Nuage.'
+        : 'Les élèves des promotions cochées verront ce document dans « Mes documents » (titre, type, sommaire, savoirs) et pourront l’ouvrir et le télécharger. Ils ne voient jamais l’adresse de votre Nuage.'),
+      herite ? h('p', { class: 'info-partage large' }, `👁 Déjà visible par le dossier « ${herite.nom} ».`) : null,
+      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Promotions'), h('div', { class: 'liste-choix' }, promos.map((p) => h('label', { class: 'option' }, cases.get(p.id), 'Promotion ' + p.libelle)))),
+      h('label', {}, 'Visible à partir du (facultatif)', date)),
+    [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', valeur: true }], { large: true });
+    if (!ok) return;
+    try {
+      const voulues = promos.filter((p) => cases.get(p.id).checked).map((p) => p.id);
+      for (const p of actuelles) if (!voulues.includes(p.promotion_id) || (p.a_partir_de || '') !== date.value) await db.supprimer('publications_eleves', p.id);
+      const reste = (C.publications = (C.publications || []).filter((p) => !(p[cle] === x.id && (!voulues.includes(p.promotion_id) || (p.a_partir_de || '') !== date.value))));
+      const ajout = voulues.filter((pid) => !reste.some((p) => p[cle] === x.id && p.promotion_id === pid)).map((pid) => ({ [cle]: x.id, promotion_id: pid, a_partir_de: date.value || null }));
+      if (ajout.length) C.publications.push(...(await db.ajouter('publications_eleves', ajout)));
+      toast(voulues.length ? 'Visible des élèves' : 'Retiré de l’espace élèves'); dessiner();
+    } catch (e) { erreur(e); }
   }
 
   // ------------------------------------------------------------------ partage

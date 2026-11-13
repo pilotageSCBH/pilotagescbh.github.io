@@ -4,7 +4,7 @@
 // « ⚙ Réglages Nuage » : liste des dossiers et fichiers, et lecture d'un fichier (pour le sommaire et la couverture).
 // Un navigateur n'a pas le droit de lire Nuage directement : ce relais le fait côté serveur.
 // Lecture seule : le relais ne peut rien modifier, ni rien lire d'autre que les dossiers partagés par lien.
-// Seuls les comptes connectés au site peuvent l'utiliser.
+// Seuls les comptes connectés au site peuvent l'utiliser ; un élève connecté n'obtient que les documents publiés pour sa promotion.
 //
 // Installation (une seule fois) : Supabase → Edge Functions → « Deploy a new function » → « Via Editor »
 //   nom : nuage  ·  coller tout ce fichier  ·  « Deploy function »
@@ -85,10 +85,35 @@ async function lister(b: Base): Promise<Entree[]> {
   return tout;
 }
 
+// document publié pour un élève : emplacement donné par la base (fonction eleve_document), jamais par l'élève
+async function fichierEleve(req: Request, corps: { jeton?: string; livre?: number }) {
+  const r = await fetch(Deno.env.get('SUPABASE_URL') + '/rest/v1/rpc/eleve_document', {
+    method: 'POST', headers: { apikey: req.headers.get('apikey') || '', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jeton: String(corps.jeton || ''), livre: Number(corps.livre) || 0 }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ erreur: d.message || 'Accès refusé.' }, 403);
+  const m = String(d.lien || '').trim().match(/^(https:\/\/[^/?#]+)\/(?:index\.php\/)?s\/([A-Za-z0-9]+)/);
+  if (!d.chemin || !m || !HOTES.test(m[1])) return json({ erreur: 'Ce document n’a pas de fichier sur Nuage : voyez votre enseignant.' }, 404);
+  const b = await choisirBase(m[1], m[2]);
+  const c = String(d.chemin).replace(/^\/+/, '');
+  if (c.split('/').includes('..')) return json({ erreur: 'Chemin de fichier invalide.' }, 400);
+  const h: Record<string, string> = {};
+  if (b.auth) h.Authorization = b.auth;
+  const f = await fetch(b.url + '/' + encoder(c), { headers: h });
+  if (!f.ok) { await f.text(); return json({ erreur: f.status === 404 ? 'Fichier introuvable sur Nuage : voyez votre enseignant.' : `Nuage refuse la lecture du fichier (code ${f.status}).` }, 502); }
+  if (Number(f.headers.get('content-length') || 0) > MAX_FICHIER) { await f.body?.cancel(); return json({ erreur: 'Fichier trop volumineux pour être lu (plus de 80 Mo).' }, 413); }
+  return new Response(f.body, { headers: { ...CORS, 'Content-Type': f.headers.get('content-type') || 'application/octet-stream' } });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ erreur: 'Méthode non prise en charge.' }, 405);
   try {
+    const corps = await req.json();
+    // élève : la base vérifie sa session et que le document est publié pour sa promotion, puis donne son emplacement
+    if (corps.action === 'eleve_fichier') return await fichierEleve(req, corps);
+
     // la demande vient-elle d'un compte connecté au site ?
     const u = await fetch(Deno.env.get('SUPABASE_URL') + '/auth/v1/user', {
       headers: { Authorization: req.headers.get('authorization') || '', apikey: req.headers.get('apikey') || '' },
@@ -96,7 +121,7 @@ Deno.serve(async (req) => {
     await u.text();
     if (!u.ok) return json({ erreur: 'Connexion au site requise.' }, 401);
 
-    const { action, lien, chemin = '' } = await req.json();
+    const { action, lien, chemin = '' } = corps;
     const m = String(lien || '').trim().match(/^(https:\/\/[^/?#]+)\/(?:index\.php\/)?s\/([A-Za-z0-9]+)/);
     if (!m || !HOTES.test(m[1])) return json({ erreur: 'Lien de partage Nuage non reconnu (https://…apps.education.fr/s/…).' }, 400);
     const b = await choisirBase(m[1], m[2]);

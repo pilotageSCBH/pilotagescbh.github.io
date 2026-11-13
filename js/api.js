@@ -97,6 +97,42 @@ export async function changerCode(code) {
 // sans être connecté (code oublié) : fonctions ouvertes au public, rien d'autre
 export const rpcPublic = (fonction, args = {}) => envoyer(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: args });
 
+// ------------------------------------------------------------------------------------------- espace élèves
+// Les élèves n'ont pas de compte Supabase : un jeton de session, vérifié par des fonctions dédiées qui ne renvoient
+// que leurs propres données. Le jeton est gardé sur l'appareil de l'élève.
+const CLE_ELEVE = 'pilotage-scbh-eleve';
+export const SESSION_ELEVE_FINIE = 'session-eleve-finie';
+export function sessionEleve() { try { return JSON.parse(localStorage.getItem(CLE_ELEVE) || 'null'); } catch { return null; } }
+function memoriserEleve(s) { try { s ? localStorage.setItem(CLE_ELEVE, JSON.stringify(s)) : localStorage.removeItem(CLE_ELEVE); } catch { /* sans stockage */ } }
+export async function connexionEleve(ident, code) {
+  const d = await envoyer('/rest/v1/rpc/eleve_connexion', { method: 'POST', body: { ident: String(ident || '').trim().toLowerCase(), code } });
+  if (!d?.jeton) throw new Error(d?.erreur || 'Identifiant ou code incorrect.');
+  memoriserEleve(d); return d;
+}
+export const majSessionEleve = (patch) => { const s = sessionEleve(); if (s) memoriserEleve({ ...s, ...patch }); };
+export async function rpcEleve(fonction, args = {}) {
+  const s = sessionEleve();
+  if (!s) { window.dispatchEvent(new Event(SESSION_ELEVE_FINIE)); throw new Error('Session expirée : reconnectez-vous.'); }
+  try { return await envoyer(`/rest/v1/rpc/${fonction}`, { method: 'POST', body: { jeton: s.jeton, ...args } }); }
+  catch (e) {
+    if (/Session expirée|pris fin|désactivé|fermé/.test(e.message)) { memoriserEleve(null); window.dispatchEvent(new Event(SESSION_ELEVE_FINIE)); }
+    throw e;
+  }
+}
+export async function deconnexionEleve() {
+  const s = sessionEleve(); memoriserEleve(null);
+  if (s) { try { await envoyer('/rest/v1/rpc/eleve_deconnexion', { method: 'POST', body: { jeton: s.jeton } }); } catch { /* sans importance */ } }
+}
+// fichier d'un document publié, lu par le relais « nuage » (l'adresse Nuage de l'enseignant n'est jamais montrée)
+export async function fichierEleve(livre) {
+  const s = sessionEleve(); if (!s) throw new Error('Session expirée : reconnectez-vous.');
+  let r;
+  try { r = await fetch(`${SUPABASE_URL}/functions/v1/nuage`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'eleve_fichier', jeton: s.jeton, livre }) }); }
+  catch { throw new Error('Le document ne peut pas être ouvert pour l’instant (relais Nuage indisponible).'); }
+  if (!r.ok) { let m = ''; try { m = (await r.json()).erreur || ''; } catch { /* pas de JSON */ } throw new Error(m || `Le document ne peut pas être ouvert (${r.status}).`); }
+  return r.blob();
+}
+
 // ------------------------------------------------------------------------------------------- données
 export const SESSION_EXPIREE = 'session-expiree';
 

@@ -299,6 +299,21 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
       page.drawLine({ start: { x: gauche, y }, end: { x: gauche + largeur, y }, thickness: 0.5, color: LIGNE });
       y -= 10;
     },
+    // nouvelle page (une fiche par élève)
+    saut() { if (y < A4[1] - MARGE - 1) nouvellePage(); },
+    // identifiant et code en grand, dans un encadré (fiche de connexion d'un élève)
+    acces(b) {
+      const hh = 26 + b.lignes.length * 30;
+      place(hh + 10);
+      page.drawRectangle({ x: gauche, y: y - hh, width: largeur, height: hh, color: CLAIR, borderColor: TEAL, borderWidth: 1.4 });
+      texte(b.titre || '', gauche + 12, y - 16, FB, 9, TEAL);
+      b.lignes.forEach(([lib, val], i) => {
+        const yy = y - 40 - i * 30;
+        texte(lib, gauche + 12, yy, F, 10, GRIS);
+        texte(val, gauche + 150, yy - 1, FB, 17, FONCE);
+      });
+      y -= hh + 12;
+    },
     // cadre de couleur autour d'un groupe de blocs (travail à la maison)
     cadre(b) {
       const c = coul(b.couleur || '#E8893A');

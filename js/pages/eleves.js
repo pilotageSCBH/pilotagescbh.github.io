@@ -4,6 +4,7 @@ import { boutonAnnuler } from '../annuler.js';
 import { anneau, barresH, carteGraph } from '../graphiques.js';
 import { h, vider, toast, erreur, fenetre, confirmer, dateFr, imprimer } from '../ui.js';
 import { badgeRedoublant, libPromo } from '../redoublants.js';
+import { pageAcces } from './acces.js';
 
 const CHAMPS = [
   ['nom', 'NOM'], ['prenom', 'Prénom'], ['naissance', 'Né(e) le', 'date'], ['statut', 'Statut', ['Scolaire', 'Apprenti']],
@@ -16,6 +17,7 @@ const CHAMPS = [
 ];
 
 export async function pageEleves(zone, _arg, ctx) {
+  if (_arg === 'acces') return pageAcces(zone, ctx);
   const admin = ctx.estAdmin();
 
   async function dessiner() {
@@ -33,6 +35,7 @@ export async function pageEleves(zone, _arg, ctx) {
         h('div', { class: 'actions-page' },
           admin ? boutonAnnuler(ctx, 'eleves') : null,
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer la liste'),
+          ctx.peutEcrire() ? h('a', { class: 'btn', href: '#/eleves/acces', title: 'Comptes des élèves, fiches de connexion, suivi des connexions' }, '🎓  Espace élèves') : null,
           admin ? h('button', { class: 'btn', onclick: accueillir, title: 'Inscrire dans cette promotion des élèves d’une promotion précédente qui redoublent' }, '↻  Accueillir des redoublants') : null,
           admin ? h('button', { class: 'btn principal', onclick: () => formulaire(null) }, '＋  Ajouter un élève') : null)),
       h('section', { class: 'chiffres-cles' },

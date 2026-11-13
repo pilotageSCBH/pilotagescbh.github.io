@@ -1893,3 +1893,66 @@ th.eleve.hors span { opacity: .55; }
 .bouton-installer[hidden] { display: none; }
 .bandeau-version { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
   background: var(--fonce); color: #fff; padding: 10px 14px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.25); max-width: calc(100vw - 32px); }
+
+/* ---- espace élèves : comptes (enseignants) */
+.comptes-eleves td { vertical-align: middle; }
+.comptes-eleves code { font-size: 13px; }
+.etat-compte { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: #EEF1F0; color: #5F6F6C; white-space: nowrap; }
+.etat-compte.vert { background: #E3F4E5; color: #2F7A3A; }
+.etat-compte.orange { background: #FCEFD9; color: #9A5B0C; }
+.etat-compte.rouge { background: #F8E1DE; color: #A43327; }
+.actions-compte { display: flex; gap: 6px; flex-wrap: wrap; }
+.liste-consultations { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; max-height: 60vh; overflow: auto; }
+.publie-eleves { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; color: #2F7A3A; background: #E3F4E5; border-radius: 99px; padding: 1px 8px; }
+
+/* ---- connexion : enseignant ou élève */
+.choix-profil { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--fond); padding: 4px; border-radius: 12px; }
+.onglet-connexion { font: inherit; font-weight: 600; border: 0; border-radius: 9px; padding: 9px 8px; background: transparent; color: var(--gris); cursor: pointer; }
+.onglet-connexion.actif { background: var(--carte); color: var(--fonce); box-shadow: var(--ombre); }
+
+/* ---- espace élève */
+.menu-eleve .bandeau-eleve { margin: 4px 12px 10px; padding: 6px 10px; border-radius: 9px; background: rgba(255,255,255,.12); color: #fff; font-weight: 700; font-size: 13px; }
+.menu-eleve .pied-menu { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-top: auto; }
+.menu-eleve .pied-menu .qui { display: flex; flex-direction: column; min-width: 0; color: #fff; }
+.menu-eleve .pied-menu .qui small { opacity: .8; overflow: hidden; text-overflow: ellipsis; }
+.menu-eleve .deconnexion { margin-left: auto; background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 8px; padding: 6px 9px; cursor: pointer; }
+.puces-semaine { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.puce-info.evt { background: #FFF6DA; color: #7A5A06; }
+.grille-semaine-eleve { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+.carte-mat-eleve { background: var(--carte); border-radius: 12px; box-shadow: var(--ombre); border-top: 5px solid var(--couleur); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.carte-mat-eleve h3 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+.seance-eleve { border-top: 1px solid var(--ligne); padding-top: 8px; }
+.seance-eleve .objectif, .seances-eleve .objectif { margin: 3px 0 0; color: var(--gris); font-size: 14px; }
+.docs-seance { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.liste-evals-eleve { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.liste-evals-eleve li { background: var(--carte); border-radius: 10px; box-shadow: var(--ombre); border-left: 5px solid var(--couleur); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.liste-evals-eleve .date { font-weight: 700; min-width: 92px; }
+.liste-evals-eleve .mat { color: var(--gris); }
+.sequence-eleve { background: var(--carte); border-radius: 12px; box-shadow: var(--ombre); border-left: 6px solid var(--couleur); padding: 12px 16px; margin-bottom: 14px; }
+.sequence-eleve .tete-sequence { padding: 0; flex-wrap: wrap; }
+.sequence-eleve h2 { margin: 0; font-size: 18px; }
+.seances-eleve { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.seances-eleve li { border-top: 1px solid var(--ligne); padding-top: 8px; }
+.seances-eleve .quand { color: var(--teal); }
+.zone-recherche-eleve { margin-bottom: 14px; }
+.recherche-eleve { width: 100%; }
+.livret-eleve { display: grid; gap: 6px; }
+.ligne-livret { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--carte); border-radius: 10px; padding: 8px 12px; box-shadow: var(--ombre); }
+.niveau { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.niveau.mini { padding: 1px 6px; margin-right: 4px; font-size: 11px; }
+.niveau.niv-a { background: #DDF1E1; color: #23692F; } .niveau.niv-eva { background: #FCEFD3; color: #8A5A08; }
+.niveau.niv-na { background: #F8DEDA; color: #9C2E22; } .niveau.niv-ne { background: #EEF1F0; color: #5F6F6C; }
+.appreciation-eleve { background: var(--carte); border-radius: 10px; padding: 10px 14px; box-shadow: var(--ombre); margin-bottom: 8px; }
+.appreciation-eleve p { margin: 4px 0 0; white-space: pre-wrap; }
+a.publie-actif, .publie-actif { background: #E3F4E5 !important; border-color: #8CC79A !important; color: #23692F !important; }
+@media (max-width: 900px) {
+  .menu-eleve { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 8px 12px; }
+  .menu-eleve .tete-menu { min-width: 0; }
+  .menu-eleve .tete-menu .logo-large, .menu-eleve .bandeau-eleve, .menu-eleve .pied-menu .avatar, .menu-eleve .pied-menu .qui small { display: none; }
+  .menu-eleve .tete-menu .marque span { font-size: 15px; }
+  .menu-eleve .pied-menu { padding: 0; margin: 0; }
+  .menu-eleve .pied-menu .qui b { font-size: 13px; }
+  .menu-eleve .defile-menu { grid-column: 1 / -1; grid-row: 2; display: flex; gap: 6px; overflow-x: auto; max-height: none; padding-bottom: 2px; }
+  .menu-eleve .defile-menu .lien-menu { flex: none; width: auto !important; margin: 0 !important; padding: 7px 10px; border-radius: 9px; }
+  .menu-eleve .defile-menu .lien-menu::before { display: none; }
+}

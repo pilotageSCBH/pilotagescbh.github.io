@@ -1,6 +1,7 @@
 // Application « Pilotage BTS SCBH » : connexion, menu, navigation entre les pages.
 import { NOM_APPLI } from '../config.js';
-import { estConnecte, connexion, premiereConnexion, deconnexion, db, emailConnecte, SESSION_EXPIREE, rpcPublic, emailDe, changerCode } from './api.js';
+import { estConnecte, connexion, premiereConnexion, deconnexion, db, emailConnecte, SESSION_EXPIREE, rpcPublic, emailDe, changerCode, sessionEleve, connexionEleve } from './api.js';
+import { lancerEspaceEleve } from './eleves/espaceEleve.js';
 import { h, vider, erreur, toast } from './ui.js';
 import { pageAccueil } from './pages/accueil.js';
 import { pageContratsLibres } from './pages/contratsLibres.js';
@@ -91,8 +92,15 @@ const PAGES = {
 };
 
 // ------------------------------------------------------------------------------------------- connexion
-function ecranConnexion(message = '') {
+// espace élève : lancé à la place de l'espace enseignant quand un élève est connecté sur cet appareil
+let modeEleve = false;
+function lancerEleve() {
+  modeEleve = true;
+  lancerEspaceEleve(app, { retourConnexion: (msg) => { modeEleve = false; window.onhashchange = null; ecranConnexion(msg, 'eleve'); } });
+}
+function ecranConnexion(message = '', mode = /[?&]eleve\b/.test(location.search) ? 'eleve' : 'enseignant') {
   let premiere = false;
+  let eleve = mode === 'eleve';
   const ident = h('input', { id: 'ident', autocomplete: 'username', placeholder: 'prenom.nom', required: true });
   const code = h('input', { id: 'code', type: 'password', autocomplete: 'current-password', required: true, minlength: 6 });
   const code2 = h('input', { id: 'code2', type: 'password', autocomplete: 'new-password', minlength: 6 });
@@ -111,12 +119,18 @@ function ecranConnexion(message = '') {
     code.autocomplete = premiere ? 'new-password' : 'current-password';
     info.textContent = premiere ? "Votre compte doit d'abord avoir été autorisé par l'administrateur. Choisissez un code d'au moins 6 caractères." : '';
   };
+  const oublie = h('button', { class: 'lien', type: 'button', onclick: () => ecranCodeOublie(ident.value) }, 'Code oublié ?');
+  const aideEleve = h('p', { class: 'aide' }, 'Identifiant et code : sur la fiche de connexion donnée par votre enseignant. Code oublié : demandez une nouvelle fiche à l’administrateur du site.');
+  const onglet = (m, txt) => h('button', { type: 'button', class: 'onglet-connexion' + (mode === m ? ' actif' : ''), 'aria-pressed': String(mode === m), onclick: () => { if (mode !== m) ecranConnexion('', m); } }, txt);
+  const choixProfil = h('div', { class: 'choix-profil', role: 'group', 'aria-label': 'Je suis' }, onglet('enseignant', '👩‍🏫  Enseignant'), onglet('eleve', '🎓  Élève'));
+  if (eleve) { ident.placeholder = 'identifiant de votre fiche'; code.minLength = 6; titre.textContent = 'Connexion élève'; }
   const form = h('form', { class: 'carte-connexion', onsubmit: async (e) => {
     e.preventDefault();
     info.textContent = ''; info.classList.remove('erreur');
     if (premiere && code.value !== code2.value) { info.textContent = 'Les deux codes ne sont pas identiques.'; info.classList.add('erreur'); return; }
     valider.disabled = true;
     try {
+      if (eleve) { await connexionEleve(ident.value, code.value); if (location.search) history.replaceState(null, '', location.pathname + '#/semaine'); else location.hash = '#/semaine'; lancerEleve(); return; }
       if (premiere) await premiereConnexion(ident.value, code.value); else await connexion(ident.value, code.value);
       await demarrer();
     } catch (err) {
@@ -124,9 +138,9 @@ function ecranConnexion(message = '') {
     } finally { valider.disabled = false; }
   } },
   h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat', class: 'logo-connexion' }),
-  h('h1', {}, NOM_APPLI), titre,
-  h('label', {}, 'Identifiant', ident), h('label', {}, 'Code', code), ligne2, valider, info, bascule,
-  h('button', { class: 'lien', type: 'button', onclick: () => ecranCodeOublie(ident.value) }, 'Code oublié ?'), aide);
+  h('h1', {}, NOM_APPLI), choixProfil, titre,
+  h('label', {}, 'Identifiant', ident), h('label', {}, 'Code', code), ligne2, valider, info,
+  eleve ? aideEleve : [bascule, oublie, aide]);
   vider(app, h('div', { class: 'ecran-connexion' }, form));
   ident.focus();
   rpcPublic('etat_site').then((e) => {
@@ -397,6 +411,8 @@ function route() {
 
 let rendu = 0;
 async function afficher() {
+  if (!estConnecte() && sessionEleve()) { if (!modeEleve) lancerEleve(); return; }
+  if (modeEleve) return;
   if (!estConnecte()) return ecranConnexion();
   if (!ctx.profil) return demarrer();
   if (ctx.profil.doit_changer) return ecranNouveauCode();
