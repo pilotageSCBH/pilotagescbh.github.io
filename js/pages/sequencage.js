@@ -60,7 +60,7 @@ export async function pageSequencage(zone, id, ctx) {
     const remplies = seances.filter((x) => x.titre || x.objectif_inter);
     const hrs = remplies.reduce((a, x) => a + (Number(x.duree) || 0), 0);
     const maj = (col) => (v) => db.modifier('sequences', s.id, { [col]: v });
-    return h('section', { class: 'sequence', style: { '--couleur': m.couleur } },
+    return h('section', { class: 'sequence', 'data-seq': s.id, style: { '--couleur': m.couleur } },
       h('div', { class: 'tete-sequence' },
         h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero),
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),

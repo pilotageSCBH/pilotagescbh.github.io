@@ -25,6 +25,8 @@ import { pageAlertes } from './pages/alertes.js';
 import { pageCours } from './pages/cours.js';
 import { pageBibliotheque } from './pages/bibliotheque.js';
 import { pagePartages } from './pages/partages.js';
+import { pageRecherche, allerALaCible } from './pages/recherche.js';
+import './appli.js';
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';
@@ -85,7 +87,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, biblio: pageBibliotheque, partages: pagePartages,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -302,10 +304,12 @@ function menu(route) {
     return el;
   });
   // recherche dans le menu
-  const recherche = h('input', { class: 'recherche-menu', type: 'search', placeholder: 'Rechercher une page…', 'aria-label': 'Rechercher une page',
+  const recherche = h('input', { class: 'recherche-menu', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher une page ou dans tout le site',
+    title: 'Filtre les pages du menu ; Entrée cherche dans tout le site (séquençages, fiches, contrats, bibliothèque, cours)',
     oninput: () => {
       const q = sansAccent(recherche.value.trim());
       nav.classList.toggle('en-recherche', !!q);
+      partout.hidden = !q; partout.querySelector('.txt').textContent = `Rechercher « ${recherche.value.trim()} » partout`;
       nav.querySelectorAll('.rubrique-menu').forEach((r) => {
         let n = 0;
         r.querySelectorAll('.lien-menu').forEach((a) => { const ok = !q || a.dataset.texte.includes(q); a.classList.toggle('cache', !ok); if (ok) n++; });
@@ -314,9 +318,11 @@ function menu(route) {
       nav.querySelectorAll('.lien-menu.fixe').forEach((a) => a.classList.toggle('cache', !!q && !a.dataset.texte.includes(q)));
     },
     onkeydown: (e) => {
-      if (e.key === 'Enter') { const a = nav.querySelector('.lien-menu:not(.cache)[href]' + (recherche.value ? ':not(.fixe)' : '')) || nav.querySelector('.lien-menu:not(.cache)[href]'); if (a) { location.hash = a.getAttribute('href'); recherche.value = ''; recherche.dispatchEvent(new Event('input')); } }
+      if (e.key === 'Enter' && recherche.value.trim()) { location.hash = '#/recherche/' + encodeURIComponent(recherche.value.trim()); recherche.value = ''; recherche.dispatchEvent(new Event('input')); }
       if (e.key === 'Escape') { recherche.value = ''; recherche.dispatchEvent(new Event('input')); recherche.blur(); }
     } });
+  const partout = h('a', { class: 'lien-menu partout', href: '#/recherche', hidden: true, onclick: (e) => { e.preventDefault(); location.hash = '#/recherche/' + encodeURIComponent(recherche.value.trim()); recherche.value = ''; recherche.dispatchEvent(new Event('input')); } },
+    h('span', { class: 'ico' }, '🔎'), h('span', { class: 'txt' }, ''));
   const fixe = (x) => { const a = lien(x); a.classList.add('fixe'); return a; };
   const nom = ctx.profil?.nom || emailConnecte();
   const role = ctx.estAdmin() ? 'Administrateur' : ctx.peutEcrire() ? 'Enseignant' : 'Consultation';
@@ -329,7 +335,7 @@ function menu(route) {
         } }, reduit ? '»' : '«'),
         h('button', { class: 'video-menu', type: 'button', title: 'Vidéo de présentation du site (5 min)', onclick: ouvrirVideo }, h('span', { class: 'lecture' }, '▶'), h('small', {}, 'Vidéo')))),
     h('div', { class: 'promo-menu' }, h('label', {}, 'Promotion affichée'), choixPromotion(), h('span', { class: 'promo-courte', title: 'Promotion ' + (ctx.promo?.libelle || '') }, ctx.promo ? String(ctx.promo.annee_debut).slice(2) + '-' + String(ctx.promo.annee_debut + 2).slice(2) : '')),
-    h('div', { class: 'zone-recherche' }, recherche),
+    h('div', { class: 'zone-recherche' }, recherche), partout,
     h('div', { class: 'defile-menu' },
       fixe({ href: '#/accueil', icone: '🏠', texte: 'Tableau de bord', actif: page === 'accueil' }),
       fixe({ href: '#/semaine', icone: '🗓', texte: 'Ma semaine', actif: page === 'semaine' }),
@@ -401,9 +407,10 @@ async function afficher() {
   vider(app, h('div', { class: 'cadre' + (lireL(CLE_MENU_REDUIT, 'non') === 'oui' ? ' menu-reduit' : '') }, menu(r), zone));
   try {
     await PAGES[r[0]](zone, r[1], ctx);
+    if (n === rendu) allerALaCible(zone);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches',
-      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'ressources', biblio: 'ressources', partages: 'ressources', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'ressources', biblio: 'ressources', partages: 'ressources', recherche: 'demarrer', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));

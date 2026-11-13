@@ -1,6 +1,7 @@
 // Mon compte : identité, rôle et matières, changement de code, code de secours.
 import { changerCode, identifiantDe, emailConnecte, db } from '../api.js';
 import { h, vider, toast, erreur, fenetre, confirmer, imprimer } from '../ui.js';
+import { blocInstallation } from '../appli.js';
 
 const initiales = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('');
 
@@ -62,7 +63,8 @@ export async function pageCompte(zone, _arg, ctx) {
           h('li', {}, 'Créez le code de secours et notez-le (carnet, téléphone) : il n’est affiché qu’une fois.'),
           h('li', {}, 'Code oublié ? Écran de connexion → « Code oublié ? ».'),
           h('li', {}, 'Saisissez votre identifiant, le code de secours et votre nouveau code.')),
-        h('button', { class: 'btn ' + (ctx.profil.a_secours ? '' : 'principal'), onclick: creerSecours }, ctx.profil.a_secours ? 'Remplacer mon code de secours' : 'Créer mon code de secours'))));
+        h('button', { class: 'btn ' + (ctx.profil.a_secours ? '' : 'principal'), onclick: creerSecours }, ctx.profil.a_secours ? 'Remplacer mon code de secours' : 'Créer mon code de secours'))),
+    blocInstallation());
 
   async function creerSecours() {
     if (ctx.profil.a_secours && !(await confirmer('Nouveau code de secours', 'L’ancien code de secours ne fonctionnera plus. Continuer ?', 'Remplacer'))) return;
