@@ -383,9 +383,9 @@ function menu(route) {
 export function ouvrirVideo(cle = 'decouverte') {
   const v = VIDEOS.find((x) => x.cle === cle) || VIDEOS[0];
   document.querySelector('.fond-video')?.remove();
-  // MP4 (H.264) pour la plupart des navigateurs ; WebM (VP9) si le MP4 ne peut pas être lu
+  // MP4 (H.264) : lu par tous les navigateurs actuels
   const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg' },
-    h('source', { src: v.src + '.mp4', type: 'video/mp4' }), h('source', { src: v.src + '.webm', type: 'video/webm' }),
+    h('source', { src: v.src + '.mp4', type: 'video/mp4' }),
     'Votre navigateur ne peut pas lire cette vidéo.');
   const fermer = () => { video.pause(); fond.remove(); document.removeEventListener('keydown', touche); window.removeEventListener('hashchange', fermer); };
   const touche = (e) => { if (e.key === 'Escape') fermer(); };
