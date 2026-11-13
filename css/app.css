@@ -2126,3 +2126,31 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .seances-eleve li.seance-ciblee { outline: 3px solid #A4C11E; outline-offset: 4px; border-radius: 6px; background: #F7FBEA; animation: cible-eleve 2.4s ease-out 1; }
 @keyframes cible-eleve { 0% { background: #E4F09F; } 100% { background: #F7FBEA; } }
 @media (max-width: 640px) { .ligne-prog { grid-template-columns: 62px minmax(0, 1fr); gap: 6px; } .tuile-prog span { max-width: 190px; } }
+/* espace élève : calendrier (progression en lecture seule) et détail d'une séance */
+.calendrier-eleve .progression .col-mat, .calendrier-eleve .frise-defile .bloc { cursor: pointer; }
+.calendrier-eleve .progression .puce:hover { box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.calendrier-eleve .progression select.mini:disabled { opacity: 1; color: inherit; -webkit-appearance: none; appearance: none; background-image: none; }
+.lien-seance { color: inherit; text-decoration: none; }
+.lien-seance:hover { color: var(--teal); text-decoration: underline; }
+.entete-seance { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding: 16px 20px; margin: 6px 0 16px; border-left: 8px solid var(--couleur); }
+.entete-seance h1 { margin: 4px 0 6px; font-size: 24px; }
+.entete-seance .num { color: var(--couleur); }
+.entete-seance p { margin: 0; color: #4E6461; }
+.mat-seance { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--couleur); }
+.grille-seance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.bloc-seance { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding: 14px 16px; }
+.bloc-seance h2 { font-size: 16px; margin: 0 0 10px; color: var(--fonce); }
+.bloc-seance:first-child, .bloc-seance:nth-child(2) { grid-column: span 1; }
+.obj-inter { font-weight: 600; margin: 0 0 8px; }
+.liste-ops, .codes-seance { margin: 4px 0 0; padding-left: 18px; }
+.liste-ops li, .codes-seance li { margin: 3px 0; line-height: 1.4; }
+.codes-seance { list-style: none; padding-left: 0; }
+.codes-seance b { display: inline-block; min-width: 54px; color: var(--teal); }
+.cours-seance .ligne-doc { padding: 5px 4px; border-bottom: 1px solid #EEF2F1; }
+.cours-seance .ligne-doc:last-child { border-bottom: 0; }
+.bouton-maison { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin-bottom: 8px; border-left: 5px solid var(--couleur); text-align: left; }
+.bouton-maison small { font-weight: 500; color: #4E6461; }
+.fiche-maison h3 { color: var(--couleur); font-size: 15px; margin: 14px 0 4px; }
+.fiche-maison .texte-maison { white-space: pre-wrap; margin: 0; line-height: 1.45; }
+.infos-maison { margin: 0; }
+@media (max-width: 800px) { .grille-seance { grid-template-columns: 1fr; } }

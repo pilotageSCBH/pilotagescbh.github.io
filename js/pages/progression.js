@@ -15,18 +15,30 @@ const CLE_AN = 'pilotage-scbh-progression-annee', CLE_MAT = 'pilotage-scbh-progr
 const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const ecrire = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
 
-export async function pageProgression(zone, arg, ctx) {
+// opts.eleve : { donnees, ouvrir(seanceId) } → même calendrier, en lecture seule, pour l'espace élève
+export async function pageProgression(zone, arg, ctx, opts = {}) {
+  const eleve = opts.eleve || null;
   const P = ctx.promo, Y = P.annee_debut;
   const ref = await ctx.referentiel();
   let annee = Number(lire(CLE_AN, '0')) === 1 ? 1 : 0;
   let vue = lire(CLE_VUE, 'tableau') === 'frise' ? 'frise' : 'tableau';
   let filtre = arg && ctx.matieres.some((m) => String(m.id) === String(arg)) ? String(arg) : lire(CLE_MAT, 'toutes');
   if (filtre !== 'toutes' && !ctx.matieres.some((m) => String(m.id) === filtre)) filtre = 'toutes';
-  const calendrierModifiable = ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
+  const calendrierModifiable = !eleve && ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
 
   // ------------------------------------------------------------------------------------- données
   let semaines, jours, cases, seances, sequences, commentaires;
   async function charger() {
+    if (eleve) {
+      const d = eleve.donnees;
+      commentaires = new Map();
+      semaines = new Map((d.semaines || []).map((x) => [x.semaine, x]));
+      jours = new Map((d.jours || []).map((x) => [x.jour, x.evenement]));
+      cases = new Map((d.cases || []).map((x) => [`${x.matiere_id}:${x.semaine}`, x]));
+      sequences = new Map((d.sequences || []).map((x) => [x.id, x]));
+      seances = new Map((d.seances || []).filter((x) => sequences.has(x.sequence_id)).map((x) => [x.id, { ...x, seq: sequences.get(x.sequence_id) }]));
+      return;
+    }
     const [s, j, c, sq] = await Promise.all([
       db.lire('progression_semaines', `promotion_id=eq.${P.id}`), db.lire('progression_jours', `promotion_id=eq.${P.id}`),
       db.lire('progression_cases', `promotion_id=eq.${P.id}`), db.lire('sequences', `promotion_id=eq.${P.id}&order=matiere_id,numero`)]);
@@ -215,14 +227,14 @@ export async function pageProgression(zone, arg, ctx) {
     const w0 = annee * SEM_AN, w1 = w0 + SEM_AN;
 
     const entete = h('header', { class: 'entete-page' },
-      h('div', {}, h('h1', {}, 'Progression'),
+      h('div', {}, h('h1', {}, eleve ? '🗓  Calendrier de ma formation' : 'Progression'),
         h('p', { class: 'sous-titre' }, `Promotion ${P.libelle}  ·  ${annee === 0 ? '1re' : '2e'} année ${Y + annee}-${Y + annee + 1}`)),
       h('div', { class: 'actions-page' },
         h('div', { class: 'bascule' }, [['tableau', '☷  Tableau'], ['frise', '▬  Frise']].map(([v, t]) => h('button', { class: 'btn' + (v === vue ? ' principal' : ''),
           onclick: () => { vue = v; ecrire(CLE_VUE, v); garde.x = 0; garde.t = 0; dessiner(); } }, t))),
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); garde.t = 0; garde.x = 0; dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
-        boutonAnnuler(ctx, 'progression'),
+        eleve ? null : boutonAnnuler(ctx, 'progression'),
         h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
         h('button', { class: 'btn', onclick: () => telechargerPDF(mats) }, '⬇  PDF A3'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
@@ -233,7 +245,7 @@ export async function pageProgression(zone, arg, ctx) {
       VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
       h('span', { class: 'leg app-presents' }, 'Apprentis présents'), h('span', { class: 'leg app-pfmp' }, 'Apprentis en PFMP'),
       EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
-      h('span', { class: 'aide' }, detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
+      h('span', { class: 'aide' }, eleve ? 'Cliquez une séance pour ouvrir son détail : objectifs, compétences, savoirs, cours, travail à la maison.' : detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
         : 'Glisser une séance pour la déplacer ; cliquer une case pour choisir la séance. Choisir une seule matière pour voir le détail et les séances à placer.'));
 
     const tete = h('tr', {}, h('th', { class: 'col-sem' }, 'Semaine'), h('th', { class: 'col-jours' }, 'Évènements du jour'),
@@ -241,7 +253,7 @@ export async function pageProgression(zone, arg, ctx) {
       mats.map((m) => {
         const toutes = seancesDe(m), placees = placeesDe(m);
         return h('th', { class: 'col-mat', style: { '--couleur': m.couleur } }, h('div', { class: 'nom-mat' }, m.nom),
-          h('div', { class: 'compte' }, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
+          eleve ? null : h('div', { class: 'compte' }, `${toutes.filter((x) => placees.has(x.id)).length} / ${toutes.length} séances placées`));
       }));
 
     const corps = [];
@@ -274,12 +286,12 @@ export async function pageProgression(zone, arg, ctx) {
       h('thead', {}, tete), h('tbody', {}, corps)));
     if (vue === 'frise') {
       const f = frise(mats, w0);
-      vider(zone, entete, legendeFrise(detail), detail ? aPlacer(mats[0]) : null, f);
+      vider(zone, entete, legendeFrise(detail), detail && !eleve ? aPlacer(mats[0]) : null, f);
       f.scrollLeft = garde.x; f.scrollTop = garde.t;
       window.scrollTo(0, garde.y);
       return;
     }
-    vider(zone, entete, legende, detail ? aPlacer(mats[0]) : null, tableau);
+    vider(zone, entete, legende, detail && !eleve ? aPlacer(mats[0]) : null, tableau);
     tableau.scrollLeft = garde.x; tableau.scrollTop = garde.t;
     window.scrollTo(0, garde.y);
   }
@@ -326,7 +338,7 @@ export async function pageProgression(zone, arg, ctx) {
       h('span', { class: 'leg app-presents' }, 'Apprentis présents'), h('span', { class: 'leg app-pfmp' }, 'Apprentis en PFMP'),
       EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
       h('span', { class: 'leg frise-auj' }, 'Aujourd’hui'),
-      h('span', { class: 'aide' }, detail ? 'Glisser un bloc pour déplacer la séance (les suivantes se décalent) ; glisser une séance « à placer » sur la frise ; cliquer pour modifier.'
+      h('span', { class: 'aide' }, eleve ? 'Cliquez une séance pour ouvrir son détail.' : detail ? 'Glisser un bloc pour déplacer la séance (les suivantes se décalent) ; glisser une séance « à placer » sur la frise ; cliquer pour modifier.'
         : 'Glisser un bloc pour déplacer la séance ; cliquer un bloc ou une case vide pour la modifier. Cliquer les lignes du haut pour les vacances, les apprentis et les évènements.'));
   }
 
@@ -511,6 +523,7 @@ export async function pageProgression(zone, arg, ctx) {
         const p2 = h('div', { class: 'puce deuxieme' + (suite ? ' suite' : ''), title: (se2.objectif_inter || '') + '\n(2e séance de la semaine : elle suit la 1re si on la déplace)' },
           h('b', {}, num(se2)), ' ', suite ? h('span', { class: 'gris' }, '(suite)') : h('span', {}, se2.titre || 'Séance sans titre'));
         if (detail && !suite && se2.objectif_inter) p2.append(h('div', { class: 'obj' }, se2.objectif_inter));
+        if (eleve) p2.addEventListener('click', (e) => { e.stopPropagation(); eleve.ouvrir(se2.id); });
         if (modif && !vac) p2.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Retirer cette 2e séance de la semaine',
           onclick: async (e) => { e.stopPropagation(); try { await enregistrerCases(m, [{ semaine: w, seance2_id: null }]); toast('2e séance retirée'); dessiner(); } catch (er) { erreur(er); } } }, '✖'));
         td.append(p2);
@@ -566,6 +579,7 @@ export async function pageProgression(zone, arg, ctx) {
 
   // ------------------------------------------------------------------------------------- fenêtres
   async function ouvrirCase(m, w) {
+    if (eleve) { const x = seanceDe(m, w); if (x) eleve.ouvrir(x.id); return; }
     const modif = ctx.enseigne(m.id);
     const c = caseDe(m, w) || {};
     const vac = semaines.get(w)?.vacances;

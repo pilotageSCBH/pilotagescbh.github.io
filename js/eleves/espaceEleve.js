@@ -14,6 +14,7 @@ async function rpcEleve(fonction, args = {}) {
   switch (fonction) {
     case 'eleve_donnees': return db.rpc('apercu_eleve_donnees', { p });
     case 'eleve_qcm_liste': return db.rpc('apercu_qcm_liste', { p });
+    case 'eleve_details_seances': return db.rpc('apercu_details_seances', { p });
     case 'eleve_qcm_ouvrir': return db.rpc('apercu_qcm_ouvrir', { q: args.session });
     case 'eleve_qcm_rendre': { const c = await db.rpc('apercu_qcm_rendre', { q: args.session, reponses: args.reponses }); corrigesApercu.set(args.session, c); return c; }
     case 'eleve_qcm_correction': { if (corrigesApercu.has(args.session)) return corrigesApercu.get(args.session); throw new Error('Aperçu : faites d’abord le QCM.'); }
@@ -29,7 +30,7 @@ async function fichierDocument(d) {
   if (!lien) throw new Error(`L’auteur du document n’a pas renseigné le lien de partage de « ${d.espace === 'biblio' ? 'Ma bibliothèque' : 'Mes cours'} ».`);
   return nuageFichier(lien, d.chemin);
 }
-import { h, vider, toast, erreur } from '../ui.js';
+import { h, vider, toast, erreur, fenetre } from '../ui.js';
 import { lundi, libSemaine, semaineActuelle, jourDe, NB_SEM, SEM_AN } from '../pilotage.js';
 import { GENRES as GENRES_ESPACE } from '../pages/espace.js';
 const GENRES = { ...GENRES_ESPACE, livre: ['📖', 'Livre'] };   // documents de « Ma bibliothèque » des enseignants
@@ -45,7 +46,9 @@ const niveau = (n) => (n === null || n === undefined ? 'NE' : n < 2 ? 'NA' : n <
 
 async function donnees(force = false) {
   if (D && !force && Date.now() - charge < 120000) return D;
-  const r = await rpcEleve('eleve_donnees');
+  const [r, details] = await Promise.all([rpcEleve('eleve_donnees'), rpcEleve('eleve_details_seances').catch(() => [])]);   // détails : script 32
+  const det = new Map((details || []).map((x) => [x.id, x]));
+  r.seances = (r.seances || []).map((x) => ({ ...x, ...(det.get(x.id) || {}) }));
   const mats = new Map((r.matieres || []).map((m) => [m.id, m]));
   const seqs = new Map((r.sequences || []).map((s) => [s.id, s]));
   const seances = new Map((r.seances || []).map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: mats.get(seqs.get(x.sequence_id)?.matiere_id) }]));
@@ -88,7 +91,7 @@ function menu(page, retourConnexion) {
     h('div', { class: 'bandeau-eleve' }, '🎓 Espace élève'),
     h('div', { class: 'defile-menu' },
       lien('#/semaine', '📅', 'Ma semaine', 'semaine'),
-      lien('#/progression', '🗓', 'Ma progression', 'progression'),
+      lien('#/progression', '🗓', 'Calendrier de ma formation', 'progression'),
       lien('#/formation', '🧱', 'Ma formation', 'formation'),
       lien('#/documents', '📚', 'Mes documents', 'documents'),
       lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
@@ -122,7 +125,7 @@ function ecranCode(app, retourConnexion) {
 }
 
 // ------------------------------------------------------------------------------------------- pages
-const PAGES = { semaine: pageSemaine, progression: pageProgression, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
+const PAGES = { semaine: pageSemaine, progression: pageCalendrier, seance: pageSeance, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
 const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, titre), sous ? h('p', { class: 'sous-titre' }, sous) : null),
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
@@ -202,7 +205,7 @@ async function pageFormation(zone, arg) {
           h('div', { class: 'tete-sequence' }, h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero), h('h2', {}, s.intitule || 'Séquence')),
           s.objectif ? h('p', { class: 'objectif-seq' }, h('b', {}, 'Objectif : '), s.objectif) : null,
           ls.length ? h('ol', { class: 'seances-eleve' }, ls.map((x) => h('li', { id: 'seance-' + x.id, class: String(x.id) === argSeance ? 'seance-ciblee' : null },
-            h('div', { class: 'tete' }, h('b', {}, `${s.numero}.${x.numero}`), ' ', x.titre || 'Séance', x.duree ? h('small', { class: 'gris' }, ' · ' + heures(x.duree)) : null,
+            h('div', { class: 'tete' }, h('a', { class: 'lien-seance', href: '#/seance/' + x.id }, h('b', {}, `${s.numero}.${x.numero}`), ' ', x.titre || 'Séance'), x.duree ? h('small', { class: 'gris' }, ' · ' + heures(x.duree)) : null,
               (semainesDe.get(x.id) || []).length ? h('small', { class: 'quand' }, ' · ' + (semainesDe.get(x.id) || []).sort((a, b) => a - b).map((w) => 'semaine du ' + lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })).join(', ')) : null),
             x.objectif_inter ? h('p', { class: 'objectif' }, x.objectif_inter) : null,
             puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : null))) : h('p', { class: 'vide' }, 'Séances à venir.'));
@@ -211,46 +214,83 @@ async function pageFormation(zone, arg) {
   if (cible) requestAnimationFrame(() => cible.scrollIntoView({ block: 'center', behavior: 'smooth' }));
 }
 
-// ---- ma progression : la progression pédagogique de la promotion, en lecture seule ; une tuile mène à la séance dans « Ma formation »
-async function pageProgression(zone, arg) {
+// ---- calendrier de ma formation : la progression des enseignants, à l'identique, en lecture seule
+async function pageCalendrier(zone) {
   await donnees();
-  const P = D.P, Y = P.annee_debut, wAuj = semaineActuelle(Y);
-  const annee = arg === '2' ? 2 : arg === '1' ? 1 : wAuj >= SEM_AN ? 2 : 1;
-  const debut = annee === 1 ? 0 : SEM_AN, fin = annee === 1 ? SEM_AN : NB_SEM;
-  const sems = new Map((D.progression_semaines || []).map((x) => [x.semaine, x]));
-  const apprenti = D.eleve?.statut === 'Apprenti';
-  const ordreMat = (id) => D.mats.get(id)?.ordre ?? 99;
-  const mats = [...D.mats.values()].filter((m) => (D.progression_cases || []).some((c) => c.matiere_id === m.id)).sort((a, b) => a.ordre - b.ordre);
-  const tuile = (x, c) => {
-    const m = x?.mat || D.mats.get(c.matiere_id);
-    if (!x) return c.texte ? h('span', { class: 'tuile-prog libre', style: { '--couleur': m?.couleur || '#888' }, title: m?.nom || '' }, h('b', {}, codeMat(m)), ' ', c.texte) : null;
-    return h('a', { class: 'tuile-prog', href: `#/formation/${m?.id}-${x.id}`, style: { '--couleur': m?.couleur || 'var(--teal)' }, title: `${m?.nom || ''} · séquence ${x.seq?.numero} · ${x.titre || 'séance'}${x.duree ? ' · ' + heures(x.duree) : ''}` },
-      h('b', {}, etiquette(x)), h('span', {}, x.titre || 'Séance'));
-  };
-  const lignes = [];
-  for (let w = debut; w < fin; w++) {
-    const sem = sems.get(w) || {};
-    const cases = (D.progression_cases || []).filter((c) => c.semaine === w).sort((a, b) => ordreMat(a.matiere_id) - ordreMat(b.matiere_id));
-    const tuiles = cases.flatMap((c) => { const ids = [c.seance_id, c.seance2_id].filter(Boolean); return ids.length ? ids.map((id) => tuile(D.seances.get(id), c)) : [tuile(null, c)]; }).filter(Boolean);
-    const entreprise = apprenti && sem.apprentis === 'PFMP';
-    const date = lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-    lignes.push(h('div', { class: 'ligne-prog' + (w === wAuj ? ' actuelle' : '') + (sem.vacances ? ' vacances' : '') + (w < wAuj ? ' passee' : ''), id: 'sem-' + w },
-      h('a', { class: 'date-prog', href: '#/semaine/' + w, title: 'Voir ma semaine' }, h('b', {}, date), w === wAuj ? h('small', {}, 'cette semaine') : null),
-      h('div', { class: 'tuiles-prog' },
-        sem.vacances ? h('span', { class: 'info-prog' }, '🏖 ' + sem.vacances) : null,
-        entreprise ? h('span', { class: 'info-prog' }, '🏭 En entreprise') : null,
-        !sem.vacances ? tuiles : null,
-        !sem.vacances && !tuiles.length && !entreprise ? h('span', { class: 'info-prog gris' }, '—') : null)));
-  }
+  const { pageProgression } = await import('../pages/progression.js');
+  const mats = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre);
+  const ref = { comp: Object.fromEntries((D.competences || []).map((c) => [c.code, c])), sav: Object.fromEntries((D.savoirs || []).map((c) => [c.code, c])) };
+  const ctxEleve = { promo: D.P, matieres: mats, codeMat, enseigne: () => false, peutEcrire: () => false, estAdmin: () => false, profil: { id: null }, referentiel: async () => ref };
+  await pageProgression(zone, '', ctxEleve, { eleve: {
+    donnees: { semaines: D.progression_semaines, jours: D.progression_jours, cases: D.progression_cases, sequences: D.sequences, seances: [...D.seances.values()] },
+    ouvrir: (id) => { location.hash = '#/seance/' + id; } } });
+  zone.classList.add('calendrier-eleve');
+}
+
+// ---- détail d'une séance (depuis le calendrier ou « Ma formation »)
+async function pageSeance(zone, arg) {
+  await donnees();
+  const x = D.seances.get(Number(arg));
+  if (!x) { vider(zone, h('p', { class: 'vide' }, 'Séance introuvable.'), h('a', { class: 'btn', href: '#/progression' }, '← Calendrier de ma formation')); return; }
+  const m = x.mat, sq = x.seq, Y = D.P.annee_debut;
+  const libC = new Map((D.competences || []).map((c) => [c.code, c])), libS = new Map((D.savoirs || []).map((c) => [c.code, c]));
+  const semaines = (D.progression_cases || []).filter((c) => c.seance_id === x.id || c.seance2_id === x.id).map((c) => c.semaine).sort((a, b) => a - b);
+  const quand = semaines.length ? semaines.map((w) => 'semaine du ' + lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })).join(', ') : 'pas encore placée dans le calendrier';
+  const cours = (x.cours_lies || []).map((c) => D.docs.get(c.id)).filter(Boolean);
+  const codes = (liste, lib) => (liste || []).length ? h('ul', { class: 'codes-seance' }, liste.map((k) => h('li', {}, h('b', {}, k), ' ', lib.get(k)?.libelle || lib.get(k)?.libelle_court || ''))) : h('p', { class: 'gris' }, '—');
+  const bloc = (titre, ...contenu) => h('section', { class: 'bloc-seance' }, h('h2', {}, titre), ...contenu);
   vider(zone,
-    entete('🗓  Ma progression', `Promotion ${P.libelle} · la progression prévue par vos enseignants, semaine par semaine`,
-      h('a', { class: 'btn' + (annee === 1 ? ' principal' : ''), href: '#/progression/1' }, '1re année'),
-      h('a', { class: 'btn' + (annee === 2 ? ' principal' : ''), href: '#/progression/2' }, '2e année')),
-    mats.length ? h('div', { class: 'legende-prog' }, mats.map((m) => h('span', {}, h('i', { style: { background: m.couleur } }), m.nom)),
-      h('small', { class: 'gris' }, ' · Cliquez une séance pour voir son détail dans « Ma formation ».')) : null,
-    (D.progression_cases || []).length ? h('div', { class: 'grille-prog' }, lignes) : h('p', { class: 'vide' }, 'La progression n’est pas encore saisie.'));
-  const ici = zone.querySelector('.ligne-prog.actuelle');
-  if (ici) requestAnimationFrame(() => ici.scrollIntoView({ block: 'center' }));
+    h('nav', { class: 'ariane-biblio' }, h('a', { href: '#/progression' }, 'Calendrier de ma formation'), ' · ', h('a', { href: `#/formation/${m?.id}-${x.id}` }, 'Ma formation'), ' › ', h('b', {}, etiquette(x))),
+    h('header', { class: 'entete-seance', style: { '--couleur': m?.couleur || 'var(--teal)' } },
+      h('div', { class: 'mat-seance' }, m?.nom || '', ' · Séquence ', sq?.numero, sq?.intitule ? ' · ' + sq.intitule : ''),
+      h('h1', {}, h('span', { class: 'num' }, `${sq?.numero}.${x.numero}`), ' ', x.titre || 'Séance'),
+      h('p', {}, x.duree ? '⏱ ' + heures(x.duree) + ' · ' : '', '🗓 ', quand)),
+    h('div', { class: 'grille-seance' },
+      bloc('🎯 Objectifs', x.objectif_inter ? h('p', { class: 'obj-inter' }, x.objectif_inter) : null,
+        x.objectifs_ops ? h('div', {}, h('b', {}, 'Objectifs opérationnels'), h('ul', { class: 'liste-ops' }, String(x.objectifs_ops).split(/\n+/).map((l) => l.replace(/^\s*[-•*–]\s*/, '').trim()).filter(Boolean).map((l) => h('li', {}, l)))) : null,
+        !x.objectif_inter && !x.objectifs_ops ? h('p', { class: 'gris' }, 'Objectifs à venir.') : null),
+      bloc('📘 Cours mobilisés', cours.length ? h('div', { class: 'cours-seance' }, cours.map((d) => h('div', { class: 'ligne-doc' },
+        h('span', { class: 'icone-doc' }, (GENRES[d.genre] || GENRES.cours)[0]), h('a', { class: 'titre-doc', href: '#/documents/' + d.id }, d.titre),
+        h('span', { class: 'details-doc' }, (GENRES[d.genre] || GENRES.cours)[1]), h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn petit') : null))))
+        : h('p', { class: 'gris' }, 'Aucun cours mis à disposition pour cette séance pour l’instant.')),
+      bloc('🧩 Compétences', codes(x.competences, libC)),
+      bloc('📖 Savoirs associés', codes(x.savoirs, libS)),
+      bloc('🏠 Travail à la maison', boutonMaison(x, 'avant'), boutonMaison(x, 'apres'),
+        !x.maison_avant && !x.maison_apres ? h('p', { class: 'gris' }, 'Pas de travail préparatoire ni de travail à la maison pour cette séance.') : null)));
+}
+const MAISON = {
+  avant: { titre: 'Travail préparatoire (avant la séance)', bouton: '🏠 Fiche de travail préparatoire', echeance: 'À faire pour le', couleur: '#E8893A',
+    rub: [['objectif', 'Objectif'], ['consignes', 'Travail demandé'], ['ressources', 'Ressources']] },
+  apres: { titre: 'Travail à la maison (après la séance)', bouton: '📚 Fiche de travail à la maison', echeance: 'À rendre le', couleur: '#3D84C6',
+    rub: [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']] },
+};
+const dateLongue = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '');
+function boutonMaison(x, cle) {
+  const o = x['maison_' + cle]; if (!o) return null;
+  const M = MAISON[cle];
+  return h('button', { class: 'btn bouton-maison', type: 'button', style: { '--couleur': M.couleur }, onclick: () => ouvrirMaison(x, cle) },
+    M.bouton, o.echeance ? h('small', {}, `${M.echeance} ${dateLongue(o.echeance)}`) : null);
+}
+// fiche de travail : affichée, puis téléchargeable en PDF (même mise en page que celle de l'enseignant)
+async function ouvrirMaison(x, cle) {
+  const o = x['maison_' + cle], M = MAISON[cle], m = x.mat, sq = x.seq;
+  const lien = (t) => String(t || '').split(/(https?:\/\/[^\s)]+)/g).map((p, i) => (i % 2 ? h('a', { href: p, target: '_blank', rel: 'noopener' }, p) : p));
+  const pdf = async () => {
+    try {
+      const [{ envoyerPDF }, { liensLibelles }] = await Promise.all([import('../pages/fiches.js'), import('../qr.js')]);
+      const liens = liensLibelles(o.ressources), num = `${sq?.numero}.${x.numero}`;
+      await envoyerPDF({ fichier: `${codeMat(m)}_S${num}_${cle === 'avant' ? 'travail_preparatoire' : 'travail_a_la_maison'}.pdf`, titre: `${M.titre} · séance ${num}`,
+        pied: `${m?.nom || ''} · Séance ${num} · Promotion ${D.P.libelle}`,
+        blocs: [{ t: 'titre', texte: cle === 'avant' ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', sous: `${m?.nom || ''} · Séance ${num} · ${x.titre || ''}`, couleur: M.couleur },
+          { t: 'infos', paires: [['Matière', m?.nom || ''], [M.echeance, dateLongue(o.echeance)], ['Durée estimée', o.duree || ''], ['Promotion', D.P.libelle], ['Séance', `${num} · ${x.titre || ''}`]] },
+          ...M.rub.flatMap(([k, l]) => [o[k] ? { t: 'rubrique', titre: l, texte: o[k] } : null, k === 'ressources' && liens.length ? { t: 'qr', liens } : null]).filter(Boolean),
+          { t: 'note', texte: liens.length ? 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' : '' }] }, 'pdf');
+    } catch (e) { erreur(e); }
+  };
+  await fenetre(M.titre + ` · ${sq?.numero}.${x.numero}`, h('div', { class: 'fiche-maison', style: { '--couleur': M.couleur } },
+    h('p', { class: 'infos-maison' }, o.echeance ? h('b', {}, `${M.echeance} ${dateLongue(o.echeance)}`) : null, o.duree ? ` · durée estimée : ${o.duree}` : ''),
+    M.rub.map(([k, l]) => (o[k] ? h('section', {}, h('h3', {}, l), h('p', { class: 'texte-maison' }, lien(o[k]))) : null))),
+  [{ texte: '⬇ Télécharger la fiche (PDF)', action: () => { pdf(); return false; } }, { texte: 'Fermer', classe: 'principal', valeur: true }], { large: true });
 }
 
 // ---- mes documents : documents publiés par les enseignants
