@@ -148,7 +148,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
   // publication pour les élèves : un document, ou un dossier entier (et tout ce qu'il contient) ; Mes cours : aussi
   // publication automatique des cours mobilisés du séquençage (lundi de la semaine prévue dans la progression, 6 h)
-  const avecEleves = Array.isArray(C.publications);
+  const avecEleves = E.cle === 'cours' && Array.isArray(C.publications);   // la bibliothèque n'est jamais partagée avec les élèves
   const autoDe = (l) => (C.auto || []).filter((a) => a.livre_id === l.id);
   const libPromo = (id) => 'promotion ' + (ctx.promotions.find((p) => p.id === id)?.libelle || '');
   const quandAuto = (a) => { const d = new Date(a.le); return (d <= new Date() ? 'depuis le ' : 'le ') + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d <= new Date() ? '' : ' à 6 h'); };
@@ -676,12 +676,15 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const disparus = mesFiches().filter((l) => l.chemin && !presents.has(l.chemin.normalize('NFC')));
     const dossiers = [...new Set(nouveaux.map((x) => x.c.split('/').slice(0, -1).join('/')).filter(Boolean))];
     const aCreer = [...new Set(dossiers.flatMap((d) => d.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))].filter((d) => d !== 'Livres' && !parDossier.has(d)).sort();
+    // tuiles déjà créées : image « illustration.* » ajoutée depuis dans le dossier Nuage
+    const illus = mesT.filter((t) => !t.image && images.has(String(t.dossier || '').normalize('NFC')));
     const lire = h('input', { type: 'checkbox', checked: true }), retirer = h('input', { type: 'checkbox' });
     const ok = await fenetre('Mettre à jour depuis mon dossier', h('div', {},
       h('p', {}, `Dossier lu : ${pluriel(fichiers.length, 'fichier', 'fichiers')}.`),
       h('ul', { class: 'conseils-cours' },
         h('li', {}, h('b', {}, pluriel(nouveaux.length, 'nouveau fichier', 'nouveaux fichiers')), nouveaux.length ? ' : ' + nouveaux.slice(0, 8).map((x) => x.c.split('/').pop()).join(', ') + (nouveaux.length > 8 ? '…' : '') : ''),
         h('li', {}, h('b', {}, pluriel(aCreer.length, 'nouveau ' + E.theme, 'nouveaux ' + E.themes)), aCreer.length ? ' : ' + aCreer.slice(0, 8).map((d) => d.split('/').pop()).join(', ') : ''),
+        illus.length ? h('li', {}, h('b', {}, pluriel(illus.length, 'image de tuile', 'images de tuiles')), ' (illustration) : ' + illus.slice(0, 8).map((t) => t.nom).join(', ')) : null,
         h('li', {}, h('b', {}, pluriel(disparus.length, 'fiche dont le fichier est introuvable', 'fiches dont le fichier est introuvable')), disparus.length ? ' : ' + disparus.slice(0, 6).map((l) => l.titre).join(', ') : '')),
       nouveaux.length ? h('label', { class: 'case' }, lire, ' Lire les nouveaux PDF et Word (sommaire, couverture) — plus long') : null,
       disparus.length ? h('label', { class: 'case' }, retirer, ' Supprimer les fiches dont le fichier est introuvable') : null,
@@ -698,6 +701,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         const t = await db.ajouter('biblio_themes', { espace: E.cle, parent_id: parent?.id ?? null, nom, dossier: d, ordre, image });
         T.set(t.id, t); parDossier.set(d, t);
       }
+      for (const t of illus) { try { const image = await reduireImage(await images.get(String(t.dossier).normalize('NFC')).charger(), 520, 0.72); await db.modifier('biblio_themes', t.id, { image }); t.image = image; } catch { /* image illisible */ } }
       if (retirer.checked) for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); }
     } catch (e) { erreur(e); }
     await creerFiches(nouveaux.map((x) => ({ f: x.f, charger: x.charger, taille: x.taille, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);

@@ -88,6 +88,7 @@ function menu(page, retourConnexion) {
     h('div', { class: 'bandeau-eleve' }, '🎓 Espace élève'),
     h('div', { class: 'defile-menu' },
       lien('#/semaine', '📅', 'Ma semaine', 'semaine'),
+      lien('#/progression', '🗓', 'Ma progression', 'progression'),
       lien('#/formation', '🧱', 'Ma formation', 'formation'),
       lien('#/documents', '📚', 'Mes documents', 'documents'),
       lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
@@ -121,7 +122,7 @@ function ecranCode(app, retourConnexion) {
 }
 
 // ------------------------------------------------------------------------------------------- pages
-const PAGES = { semaine: pageSemaine, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
+const PAGES = { semaine: pageSemaine, progression: pageProgression, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
 const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, titre), sous ? h('p', { class: 'sous-titre' }, sous) : null),
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
@@ -187,7 +188,8 @@ function listeEvaluations() {
 async function pageFormation(zone, arg) {
   await donnees();
   const mats = [...D.mats.values()].filter((m) => (D.sequences || []).some((s) => s.matiere_id === m.id)).sort((a, b) => a.ordre - b.ordre);
-  const m = mats.find((x) => String(x.id) === String(arg)) || mats[0];
+  const [argMat, argSeance] = String(arg || '').split('-');
+  const m = mats.find((x) => String(x.id) === argMat) || mats[0];
   const Y = D.P.annee_debut;
   const semainesDe = new Map();
   for (const c of D.progression_cases || []) for (const id of [c.seance_id, c.seance2_id]) if (id) semainesDe.set(id, (semainesDe.get(id) || []).concat(c.semaine));
@@ -199,12 +201,56 @@ async function pageFormation(zone, arg) {
         return h('section', { class: 'sequence-eleve', style: { '--couleur': m.couleur } },
           h('div', { class: 'tete-sequence' }, h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero), h('h2', {}, s.intitule || 'Séquence')),
           s.objectif ? h('p', { class: 'objectif-seq' }, h('b', {}, 'Objectif : '), s.objectif) : null,
-          ls.length ? h('ol', { class: 'seances-eleve' }, ls.map((x) => h('li', {},
+          ls.length ? h('ol', { class: 'seances-eleve' }, ls.map((x) => h('li', { id: 'seance-' + x.id, class: String(x.id) === argSeance ? 'seance-ciblee' : null },
             h('div', { class: 'tete' }, h('b', {}, `${s.numero}.${x.numero}`), ' ', x.titre || 'Séance', x.duree ? h('small', { class: 'gris' }, ' · ' + heures(x.duree)) : null,
               (semainesDe.get(x.id) || []).length ? h('small', { class: 'quand' }, ' · ' + (semainesDe.get(x.id) || []).sort((a, b) => a - b).map((w) => 'semaine du ' + lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })).join(', ')) : null),
             x.objectif_inter ? h('p', { class: 'objectif' }, x.objectif_inter) : null,
             puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : null))) : h('p', { class: 'vide' }, 'Séances à venir.'));
       }));
+  const cible = argSeance && zone.querySelector('#seance-' + CSS.escape(argSeance));
+  if (cible) requestAnimationFrame(() => cible.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+}
+
+// ---- ma progression : la progression pédagogique de la promotion, en lecture seule ; une tuile mène à la séance dans « Ma formation »
+async function pageProgression(zone, arg) {
+  await donnees();
+  const P = D.P, Y = P.annee_debut, wAuj = semaineActuelle(Y);
+  const annee = arg === '2' ? 2 : arg === '1' ? 1 : wAuj >= SEM_AN ? 2 : 1;
+  const debut = annee === 1 ? 0 : SEM_AN, fin = annee === 1 ? SEM_AN : NB_SEM;
+  const sems = new Map((D.progression_semaines || []).map((x) => [x.semaine, x]));
+  const apprenti = D.eleve?.statut === 'Apprenti';
+  const ordreMat = (id) => D.mats.get(id)?.ordre ?? 99;
+  const mats = [...D.mats.values()].filter((m) => (D.progression_cases || []).some((c) => c.matiere_id === m.id)).sort((a, b) => a.ordre - b.ordre);
+  const tuile = (x, c) => {
+    const m = x?.mat || D.mats.get(c.matiere_id);
+    if (!x) return c.texte ? h('span', { class: 'tuile-prog libre', style: { '--couleur': m?.couleur || '#888' }, title: m?.nom || '' }, h('b', {}, codeMat(m)), ' ', c.texte) : null;
+    return h('a', { class: 'tuile-prog', href: `#/formation/${m?.id}-${x.id}`, style: { '--couleur': m?.couleur || 'var(--teal)' }, title: `${m?.nom || ''} · séquence ${x.seq?.numero} · ${x.titre || 'séance'}${x.duree ? ' · ' + heures(x.duree) : ''}` },
+      h('b', {}, etiquette(x)), h('span', {}, x.titre || 'Séance'));
+  };
+  const lignes = [];
+  for (let w = debut; w < fin; w++) {
+    const sem = sems.get(w) || {};
+    const cases = (D.progression_cases || []).filter((c) => c.semaine === w).sort((a, b) => ordreMat(a.matiere_id) - ordreMat(b.matiere_id));
+    const tuiles = cases.flatMap((c) => { const ids = [c.seance_id, c.seance2_id].filter(Boolean); return ids.length ? ids.map((id) => tuile(D.seances.get(id), c)) : [tuile(null, c)]; }).filter(Boolean);
+    const entreprise = apprenti && sem.apprentis === 'PFMP';
+    const date = lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    lignes.push(h('div', { class: 'ligne-prog' + (w === wAuj ? ' actuelle' : '') + (sem.vacances ? ' vacances' : '') + (w < wAuj ? ' passee' : ''), id: 'sem-' + w },
+      h('a', { class: 'date-prog', href: '#/semaine/' + w, title: 'Voir ma semaine' }, h('b', {}, date), w === wAuj ? h('small', {}, 'cette semaine') : null),
+      h('div', { class: 'tuiles-prog' },
+        sem.vacances ? h('span', { class: 'info-prog' }, '🏖 ' + sem.vacances) : null,
+        entreprise ? h('span', { class: 'info-prog' }, '🏭 En entreprise') : null,
+        !sem.vacances ? tuiles : null,
+        !sem.vacances && !tuiles.length && !entreprise ? h('span', { class: 'info-prog gris' }, '—') : null)));
+  }
+  vider(zone,
+    entete('🗓  Ma progression', `Promotion ${P.libelle} · la progression prévue par vos enseignants, semaine par semaine`,
+      h('a', { class: 'btn' + (annee === 1 ? ' principal' : ''), href: '#/progression/1' }, '1re année'),
+      h('a', { class: 'btn' + (annee === 2 ? ' principal' : ''), href: '#/progression/2' }, '2e année')),
+    mats.length ? h('div', { class: 'legende-prog' }, mats.map((m) => h('span', {}, h('i', { style: { background: m.couleur } }), m.nom)),
+      h('small', { class: 'gris' }, ' · Cliquez une séance pour voir son détail dans « Ma formation ».')) : null,
+    (D.progression_cases || []).length ? h('div', { class: 'grille-prog' }, lignes) : h('p', { class: 'vide' }, 'La progression n’est pas encore saisie.'));
+  const ici = zone.querySelector('.ligne-prog.actuelle');
+  if (ici) requestAnimationFrame(() => ici.scrollIntoView({ block: 'center' }));
 }
 
 // ---- mes documents : documents publiés par les enseignants

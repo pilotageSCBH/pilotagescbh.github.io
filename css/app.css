@@ -2103,3 +2103,26 @@ a.video-menu { text-decoration: none; }
   .ligne-doc .titre-doc { white-space: normal; }
   .details-doc, .actions-doc { grid-column: 2; }
 }
+/* espace élève : ma progression (lecture seule) */
+.legende-prog { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 12px; font-size: 13px; }
+.legende-prog span { display: inline-flex; align-items: center; gap: 6px; }
+.legende-prog i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.grille-prog { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding: 6px; }
+.ligne-prog { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; align-items: start; padding: 5px 6px; border-bottom: 1px solid #EEF2F1; scroll-margin-top: 80px; }
+.ligne-prog:last-child { border-bottom: 0; }
+.ligne-prog.passee { opacity: .62; }
+.ligne-prog.actuelle { background: #F1F8E0; border-radius: 8px; box-shadow: inset 4px 0 0 #A4C11E; opacity: 1; }
+.ligne-prog.vacances { background: repeating-linear-gradient(135deg, #F6F8F8 0 8px, #EEF2F2 8px 16px); }
+.date-prog { display: flex; flex-direction: column; text-decoration: none; color: var(--fonce); font-size: 13px; padding-top: 3px; }
+.date-prog small { color: #6E8A1A; font-weight: 700; font-size: 11px; }
+.tuiles-prog { display: flex; flex-wrap: wrap; gap: 5px; }
+.tuile-prog { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 4px 9px; border-radius: 7px; font-size: 12.5px; text-decoration: none; color: var(--texte);
+  background: color-mix(in srgb, var(--couleur) 14%, #fff); border-left: 4px solid var(--couleur); }
+.tuile-prog b { color: color-mix(in srgb, var(--couleur) 70%, #000); white-space: nowrap; }
+.tuile-prog span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.tuile-prog.libre { font-style: italic; }
+.info-prog { font-size: 12.5px; padding: 4px 2px; color: #4E6461; }
+.seances-eleve li.seance-ciblee { outline: 3px solid #A4C11E; outline-offset: 4px; border-radius: 6px; background: #F7FBEA; animation: cible-eleve 2.4s ease-out 1; }
+@keyframes cible-eleve { 0% { background: #E4F09F; } 100% { background: #F7FBEA; } }
+@media (max-width: 640px) { .ligne-prog { grid-template-columns: 62px minmax(0, 1fr); gap: 6px; } .tuile-prog span { max-width: 190px; } }
