@@ -42,5 +42,5 @@ export function blocInstallation() {
         h('button', { class: 'btn principal bouton-installer', type: 'button', hidden: !invitation, onclick: async () => {
           if (!invitation) return; invitation.prompt(); try { await invitation.userChoice; } catch { /* refus */ } invitation = null;
         } }, '📲  Installer l’application')],
-    h('p', { class: 'aide' }, 'Mises à jour : quand le site change, un message « Nouvelle version disponible » propose de recharger. Plus besoin de Ctrl+F5.'));
+    h('p', { class: 'aide' }, 'Mises à jour : le site ouvre toujours sa dernière version quand vous êtes connecté à internet ; la copie gardée sur l’appareil ne sert que hors connexion.'));
 }

@@ -1,41 +1,33 @@
-// Pilotage BTS SCBH · fichiers du site gardés sur l'appareil (ouverture rapide, installation comme une application).
-// Les fichiers du site sont servis depuis l'appareil puis vérifiés en arrière-plan : si l'un a changé, la page propose
-// « Nouvelle version disponible ». Les données (Supabase) et les fichiers Nuage ne sont jamais gardés ici.
-const CACHE = 'pilotage-scbh-site';
-const ESSENTIELS = ['./', 'index.html', 'css/app.css', 'js/app.js', 'img/icone.png', 'img/logo.jpg', 'manifest.webmanifest'];
+// Pilotage BTS SCBH · service de l'application installée.
+// Les fichiers du site sont toujours pris sur internet en priorité (version à jour, jamais de mélange d'anciennes et de
+// nouvelles versions) ; la copie gardée sur l'appareil ne sert que hors connexion. Les données (Supabase) et les
+// fichiers Nuage ne passent jamais par ici.
+const CACHE = 'pilotage-scbh-v3';
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ESSENTIELS)).catch(() => {}));
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  // anciennes copies (dont celles qui pouvaient mélanger les versions) : supprimées
+  for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+  await self.clients.claim();
+})()));
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'vider') e.waitUntil(caches.keys().then((l) => Promise.all(l.map((k) => caches.delete(k)))));
 });
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-
-let delai = null;
-function signaler() {
-  clearTimeout(delai);
-  delai = setTimeout(async () => { for (const c of await self.clients.matchAll({ type: 'window' })) c.postMessage({ type: 'nouvelle-version' }); }, 2000);
-}
-const marque = (r) => (r && (r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length'))) || '';
 
 self.addEventListener('fetch', (e) => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== 'GET' || u.origin !== self.location.origin || u.pathname.includes('/video/') || r.headers.has('range')) return;
-  // seulement les fichiers du site (jamais de données)
   if (r.mode !== 'navigate' && !/\.(js|mjs|css|png|jpe?g|gif|svg|webp|ico|webmanifest|json|woff2?|ttf|html)$/i.test(u.pathname)) return;
   if (/^\/(rest|auth|functions|storage)\//.test(u.pathname)) return;
-  const page = r.mode === 'navigate';
-  const cle = page ? new Request(new URL('./', self.location).href) : r;
+  const cle = r.mode === 'navigate' ? new URL('./', self.location).href : r;
   e.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const ancien = await cache.match(cle, { ignoreSearch: page });
-    const reseau = fetch(r, { cache: 'no-cache' }).then(async (rep) => {
-      if (rep.ok && rep.type === 'basic') {
-        await cache.put(cle, rep.clone());
-        if (ancien && marque(ancien) && marque(rep) && marque(ancien) !== marque(rep)) signaler();
-      }
+    try {
+      const rep = await fetch(r, { cache: 'no-cache' });
+      if (rep.ok && rep.type === 'basic') { const c = await caches.open(CACHE); c.put(cle, rep.clone()).catch(() => {}); }
       return rep;
-    }).catch(() => null);
-    if (ancien) { e.waitUntil(reseau); return ancien; }
-    return (await reseau) || new Response('Hors connexion : ce fichier n’a pas encore été ouvert sur cet appareil.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    } catch {
+      const ancien = await (await caches.open(CACHE)).match(cle, { ignoreSearch: r.mode === 'navigate' });
+      return ancien || new Response('Hors connexion : ouvrez le site une première fois avec internet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
   })());
 });

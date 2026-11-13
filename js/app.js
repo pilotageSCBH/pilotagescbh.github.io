@@ -29,6 +29,7 @@ import { pagePartages } from './pages/partages.js';
 import { pageRecherche, allerALaCible } from './pages/recherche.js';
 import { pageQcm } from './pages/qcm.js';
 import './appli.js';
+window.__pilotageDemarre = true;      // le site a démarré (voir le secours dans index.html)
 
 const app = document.getElementById('app');
 const CLE_PROMO = 'pilotage-scbh-promotion';

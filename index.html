@@ -16,6 +16,37 @@
   <div id="app"><div class="chargement">Chargement…</div></div>
   <div id="toast" role="status" aria-live="polite"></div>
   <noscript>Cette application a besoin de JavaScript.</noscript>
+  <script>
+    // Secours : si le site n'a pas démarré après quelques secondes (ancienne copie des fichiers, erreur), on l'affiche
+    // avec un bouton qui efface la copie gardée sur l'appareil et recharge.
+    (function () {
+      var erreurs = [];
+      window.addEventListener('error', function (e) { erreurs.push((e && (e.message || (e.target && e.target.src))) || 'erreur'); }, true);
+      window.addEventListener('unhandledrejection', function (e) { erreurs.push(String(e && e.reason && (e.reason.message || e.reason))); });
+      async function reparer() {
+        try { var r = await navigator.serviceWorker.getRegistrations(); for (var i = 0; i < r.length; i++) await r[i].unregister(); } catch (x) { /* rien */ }
+        try { var k = await caches.keys(); for (var j = 0; j < k.length; j++) await caches.delete(k[j]); } catch (x) { /* rien */ }
+        location.reload();
+      }
+      function verifier(delai) {
+        setTimeout(function () {
+          if (window.__pilotageDemarre) return;
+          var app = document.getElementById('app');
+          if (!app || !app.querySelector('.chargement')) return;
+          // première fois : réparation automatique (une seule fois par session)
+          var deja = false; try { deja = sessionStorage.getItem('pilotage-reparation') === '1'; sessionStorage.setItem('pilotage-reparation', '1'); } catch (x) { deja = true; }
+          if (!deja && 'serviceWorker' in navigator) { reparer(); return; }
+          app.innerHTML = '<div class="ecran-connexion"><div class="carte-connexion"><h1>Pilotage BTS SCBH</h1><h2>Le site ne démarre pas</h2>' +
+            '<p class="aide">Cliquez sur « Réparer et recharger » : la copie du site gardée sur cet appareil est effacée, vos données ne sont pas touchées.</p>' +
+            '<button class="btn principal large" id="reparer">Réparer et recharger</button>' +
+            (erreurs.length ? '<p class="aide">Si le problème continue, envoyez ce message à l’administrateur :<br><code id="erreur-demarrage"></code></p>' : '') + '</div></div>';
+          document.getElementById('reparer').onclick = reparer;
+          var c = document.getElementById('erreur-demarrage'); if (c) c.textContent = erreurs.slice(0, 3).join(' | ');
+        }, delai);
+      }
+      verifier(9000);
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
