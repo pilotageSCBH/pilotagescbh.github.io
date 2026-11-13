@@ -591,7 +591,7 @@ export async function modelesSequence(S, ctx, choisis) {
 
 
 // ------------------------------------------------------------------------------------- liste des séquences
-// documents ouverts depuis le menu « Documents professeurs » : titre de la page et onglet à ouvrir dans chaque séquence
+// documents ouverts depuis le menu « Mes documents pédagogiques » : titre de la page et onglet à ouvrir dans chaque séquence
 const MODES = {
   preparation: ['Fiches de préparation de séquence', 'preparation', '📋', 'Documents de préparation'],
   deroulement: ['Fiches de déroulement de séance', 'deroulement', '📝', 'Documents de préparation'],
@@ -603,7 +603,7 @@ async function index(zone, ctx, mode = 'preparation') {
   const sequences = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`);
   vider(zone,
     h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, `${icone}  ${titre}`),
-      h('p', { class: 'sous-titre' }, `Documents professeurs · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
+      h('p', { class: 'sous-titre' }, `Mes documents pédagogiques · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
     h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
     (mode === 'formatifs' || mode === 'sommatif') && ctx.matieres.some((m) => ctx.peutMatiere(m.id)) ? bandeauCreation(ctx) : null,
     mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, h('a', { href: '#/contrats' }, '📌 Voir tous les contrats hors séquence de la promotion →')) : null,

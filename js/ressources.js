@@ -50,6 +50,8 @@ export async function dialogueReglages(ctx, apres) {
   const lc = h('input', { class: 'champ', type: 'url', value: r.lien_cours, placeholder: 'https://…/index.php/s/…' });
   const fmt = h('select', { class: 'champ' }, h('option', { value: 'dav', selected: r.format_liens !== 'telechargement' }, 'Ouverture directe dans le navigateur (recommandé)'),
     h('option', { value: 'telechargement', selected: r.format_liens === 'telechargement' }, 'Téléchargement du fichier'));
+  // publication automatique des cours du séquençage (script 30)
+  const auto = 'partage_auto' in r || !reglages?.has(ctx.profil.id) ? h('input', { type: 'checkbox', checked: r.partage_auto !== false }) : null;
   const etat = (inp) => { const z = h('small', { class: 'etat-lien' }); const maj = () => { const v = inp.value.trim(); z.textContent = !v ? '' : analyserLien(v) ? '✔ lien de partage reconnu' : '✖ ce n’est pas un lien de partage Nuage (…/s/…)'; z.className = 'etat-lien ' + (!v ? '' : analyserLien(v) ? 'ok' : 'ko'); }; inp.addEventListener('input', maj); maj(); return z; };
   const ok = await fenetre('⚙  Mes réglages Nuage', h('div', { class: 'reglages-nuage' },
     h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule, sans mot de passe) sur le dossier de votre bibliothèque, et un autre sur votre dossier « Mes cours », puis collez-les ici : le site lit alors directement vos dossiers (« ↻ Mettre à jour ») et ouvre chaque fichier à partir de son chemin.'),
@@ -66,6 +68,8 @@ export async function dialogueReglages(ctx, apres) {
       }
       z.textContent = res.join('  ·  ') || 'Collez d’abord un lien de partage.'; z.className = 'etat-lien ' + (res.some((x) => x.startsWith('✖')) ? 'ko' : 'ok'); b.disabled = false;
     } }, '☁ Tester la lecture de mes dossiers'), h('small', { class: 'etat-lien' })),
+    auto ? h('label', { class: 'case' }, auto, ' ', h('span', {}, h('b', {}, '📅 Publier automatiquement aux élèves les cours mobilisés de mes séances'),
+      h('small', { class: 'gris' }, ' (le lundi de la semaine prévue dans la progression, à 6 h ; un cours déjà publié le reste même si la progression change)'))) : null,
     h('label', {}, h('b', {}, 'Ouverture des fichiers'), fmt,
       h('small', { class: 'gris' }, 'Si un fichier ne s’ouvre pas, essayez l’autre réglage (bouton « Tester » dans la bibliothèque).')),
     h('p', { class: 'aide' }, '🔒 Partage en lecture seule. Vos collègues ne verront que les documents que vous partagez avec eux dans le site ; pour ouvrir les fichiers, ils utilisent ces liens.')),
@@ -76,6 +80,8 @@ export async function dialogueReglages(ctx, apres) {
   if (!ok) return;
   try {
     const v = { proprietaire: ctx.profil.id, lien_bibliotheque: lb.value.trim(), lien_cours: lc.value.trim(), format_liens: fmt.value };
+    if (auto && 'partage_auto' in r) v.partage_auto = auto.checked;
+    else if (auto && !auto.checked) v.partage_auto = false;
     await db.enregistrer('ressources_reglages', [v], 'proprietaire');
     reglages.set(ctx.profil.id, v);
     toast('Réglages Nuage enregistrés');

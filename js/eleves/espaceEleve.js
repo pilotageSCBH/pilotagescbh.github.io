@@ -25,12 +25,14 @@ async function fichierDocument(d) {
   if (!apercu) return fichierEleve(d.id);
   if (d.lien) { window.open(d.lien, '_blank', 'noopener'); return null; }
   const g = (await db.lire('ressources_reglages', `proprietaire=eq.${d.proprietaire}`))[0];
-  if (!g?.lien_cours) throw new Error('L’auteur du document n’a pas renseigné le lien de partage de « Mes cours ».');
-  return nuageFichier(g.lien_cours, d.chemin);
+  const lien = d.espace === 'biblio' ? g?.lien_bibliotheque : g?.lien_cours;
+  if (!lien) throw new Error(`L’auteur du document n’a pas renseigné le lien de partage de « ${d.espace === 'biblio' ? 'Ma bibliothèque' : 'Mes cours'} ».`);
+  return nuageFichier(lien, d.chemin);
 }
 import { h, vider, toast, erreur } from '../ui.js';
 import { lundi, libSemaine, semaineActuelle, jourDe, NB_SEM, SEM_AN } from '../pilotage.js';
-import { GENRES } from '../pages/espace.js';
+import { GENRES as GENRES_ESPACE } from '../pages/espace.js';
+const GENRES = { ...GENRES_ESPACE, livre: ['📖', 'Livre'] };   // documents de « Ma bibliothèque » des enseignants
 import { blocInstallation } from '../appli.js';
 
 let D = null, charge = 0;            // données de l'élève (gardées 2 minutes)
@@ -228,7 +230,7 @@ async function pageDocuments(zone, arg) {
   dessiner();
 }
 const tranche = (d, classe = 'couv-mini') => (d.vignette ? h('img', { class: classe, src: d.vignette, alt: '', loading: 'lazy' })
-  : h('div', { class: 'tranche tranche-doc ' + classe, style: { '--couleur': ({ cours: '#1E8F86', exercice: '#C79A12', tdtp: '#C8790B', evaluation: '#B03A2E', corrige: '#4E9A2F', ressource: '#3D84C6', autre: '#6F6A8A' })[d.genre] || '#1E8F86' } }, (GENRES[d.genre] || GENRES.cours)[0]));
+  : h('div', { class: 'tranche tranche-doc ' + classe, style: { '--couleur': ({ cours: '#1E8F86', exercice: '#C79A12', tdtp: '#C8790B', evaluation: '#B03A2E', corrige: '#4E9A2F', ressource: '#3D84C6', autre: '#6F6A8A', livre: '#7A4E2D' })[d.genre] || '#1E8F86' } }, (GENRES[d.genre] || GENRES.cours)[0]));
 function carteDocument(d) {
   return h('article', { class: 'livre-biblio' }, h('div', { class: 'livre-tete' },
     h('a', { class: 'lien-couv', href: '#/documents/' + d.id, tabindex: -1 }, tranche(d)),

@@ -19,7 +19,7 @@ export async function pageContratsLibres(zone, arg, ctx) {
   vider(zone,
     h('header', { class: 'entete-page' },
       h('div', {}, h('h1', {}, '📌  Contrats hors séquence'),
-        h('p', { class: 'sous-titre' }, `Documents professeurs · Documents d’évaluation  ·  Promotion ${P.libelle}`)),
+        h('p', { class: 'sous-titre' }, `Mes documents pédagogiques · Documents d’évaluation  ·  Promotion ${P.libelle}`)),
       h('div', { class: 'actions-page' }, peutCreer ? h('button', { class: 'btn principal', onclick: () => creer(ctx) }, '＋  Nouveau contrat') : null)),
     peutCreer ? bandeauCreation(ctx) : h('p', { class: 'aide' }, 'Fiches contrat formatif ou sommatif qui ne dépendent d’aucune séquence. Seuls les enseignants d’une matière peuvent en créer.'),
     h('section', { class: 'grille-libres' }, ctx.matieres.map((m) => {

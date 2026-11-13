@@ -94,9 +94,9 @@ const recherches = {};       // par espace, gardée d'une page à l'autre
 async function charger(E, force) {
   const c = caches[E.cle];
   if (c && !force && Date.now() - c.t < 120000) return c;
-  const [themes, livres, partages, publications] = await Promise.all([db.lire('biblio_themes', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_partages'),
-    E.genres ? db.lire('publications_eleves').catch(() => null) : null]);
-  caches[E.cle] = { themes: new Map(themes.map((t) => [t.id, t])), livres: new Map(livres.map((l) => [l.id, l])), partages, publications, t: Date.now() };
+  const [themes, livres, partages, publications, auto] = await Promise.all([db.lire('biblio_themes', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${E.cle}&order=ordre,id`), db.lire('biblio_partages'),
+    db.lire('publications_eleves').catch(() => null), E.genres ? db.rpc('cours_auto_miens').catch(() => []) : []]);
+  caches[E.cle] = { themes: new Map(themes.map((t) => [t.id, t])), livres: new Map(livres.map((l) => [l.id, l])), partages, publications, auto: auto || [], t: Date.now() };
   return caches[E.cle];
 }
 export const oublierEspaces = () => { for (const k of Object.keys(caches)) delete caches[k]; };
@@ -146,11 +146,15 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const memoGestion = (v) => { gestion = v; try { sessionStorage.setItem(CLE_GESTION, v ? '1' : '0'); } catch { /* sans stockage */ } };
   const recharger = () => ctx.recharger();
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
-  // publication pour les élèves (Mes cours) : un document, ou un dossier entier (et tout ce qu'il contient)
-  const avecEleves = E.genres && Array.isArray(C.publications);
+  // publication pour les élèves : un document, ou un dossier entier (et tout ce qu'il contient) ; Mes cours : aussi
+  // publication automatique des cours mobilisés du séquençage (lundi de la semaine prévue dans la progression, 6 h)
+  const avecEleves = Array.isArray(C.publications);
+  const autoDe = (l) => (C.auto || []).filter((a) => a.livre_id === l.id);
+  const libPromo = (id) => 'promotion ' + (ctx.promotions.find((p) => p.id === id)?.libelle || '');
+  const quandAuto = (a) => { const d = new Date(a.le); return (d <= new Date() ? 'depuis le ' : 'le ') + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d <= new Date() ? '' : ' à 6 h'); };
   const pubsDe = (cle, id) => (C.publications || []).filter((p) => p[cle] === id);
   const publieHerite = (l) => { let t = l.theme_id ? T.get(l.theme_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return t; t = t.parent_id ? T.get(t.parent_id) : null; } return null; };
-  const estPublie = (cle, x) => pubsDe(cle, x.id).length > 0 || (cle === 'livre_id' ? !!publieHerite(x) : (() => { let t = x.parent_id ? T.get(x.parent_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return true; t = t.parent_id ? T.get(t.parent_id) : null; } return false; })());
+  const estPublie = (cle, x) => pubsDe(cle, x.id).length > 0 || (cle === 'livre_id' && autoDe(x).some((a) => new Date(a.le) <= new Date())) || (cle === 'livre_id' ? !!publieHerite(x) : (() => { let t = x.parent_id ? T.get(x.parent_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return true; t = t.parent_id ? T.get(t.parent_id) : null; } return false; })());
   const boutonEleves = (cle, x, classe) => (avecEleves && aMoi(x) ? h('button', { class: classe + (pubsDe(cle, x.id).length ? ' publie-actif' : ''), title: 'Rendre visible aux élèves dans leur espace', onclick: () => publierEleves(cle, x) },
     pubsDe(cle, x.id).length ? '👁 Visible des élèves' : '👁 Publier aux élèves') : null);
 
@@ -339,6 +343,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('div', { class: 'boutons-fiche' }, boutonOuvrir(l, 'btn principal'),
             aMoi(l) ? h('button', { class: 'btn' + (estPartage(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, estPartage(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
             boutonEleves('livre_id', l, 'btn'),
+            aMoi(l) && autoDe(l).length ? h('p', { class: 'info-partage petit' }, '📅 Publication automatique (cours mobilisé dans le séquençage) : ',
+              autoDe(l).map((a, i) => [i ? ' ; ' : '', h('b', {}, libPromo(a.promotion_id)), ' ' + quandAuto(a)])) : null,
             E.genres && aMoi(l) ? h('a', { class: 'btn', href: '#/qcm/l-' + l.id, title: 'Préparer un QCM à partir de ce document (avec une IA)' }, '📝 Créer un QCM') : null,
             aMoi(l) ? h('button', { class: 'btn', onclick: () => modifierLivre(l) }, '✎ Modifier') : null,
             h('button', { class: 'btn', onclick: () => envoyerPDF(documentPDF([l], { sommaire: true, savoirs: true, liens: true }, l.titre), 'pdf') }, '⬇ PDF'),
@@ -752,12 +758,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       vider(boite, sousThemes(null, moi).flatMap((t) => ligneT(t, 0)), livresDe(null, moi).map((l) => ligneL(l, 0)));
     };
     dessinerArbre();
-    const qui = new Set(), tous = h('input', { type: 'checkbox' });
+    const qui = new Set(), tous = h('input', { type: 'checkbox' }), classes = new Set();
+    const promos = [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut);
     const autres = (await chargerCollegues()).filter((c) => c.id !== moi);
     const mode = h('select', { class: 'champ' }, h('option', { value: 'ajouter' }, 'Ajouter ces collègues (garder les partages existants)'), h('option', { value: 'retirer' }, 'Retirer ces collègues'),
       h('option', { value: 'remplacer' }, 'Partager uniquement avec eux (remplacer)'), h('option', { value: 'prive' }, 'Rendre privé (retirer tous les partages)'));
     const ok = await fenetre(`Partager des ${E.fiches}`, h('div', { class: 'partage-lot' },
-      h('p', { class: 'aide' }, `Cochez une ou plusieurs fiches, ou des ${E.themes} entiers, puis les collègues. Ils consultent les fiches et ouvrent les fichiers par le lien de partage de votre dossier « ${E.nomDossierNuage} » ; ils ne modifient rien.`),
+      h('p', { class: 'aide' }, `Cochez une ou plusieurs fiches, ou des ${E.themes} entiers, puis les collègues${avecEleves ? ' et / ou une promotion d’élèves' : ''}. Ils consultent les fiches et ouvrent les fichiers par le lien de partage de votre dossier « ${E.nomDossierNuage} » ; ils ne modifient rien.`),
       h('div', { class: 'deux-colonnes-partage' },
         h('div', {}, h('p', { class: 'sous-titre-choix' }, `1. Les ${E.fiches}`),
           h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: () => { [...T.values()].filter(aMoi).filter((t) => !t.parent_id).forEach((t) => coches.add('t' + t.id)); livresDe(null, moi).forEach((l) => coches.add('l' + l.id)); dessinerArbre(); } }, 'Tout cocher'),
@@ -765,10 +772,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('div', {}, h('p', { class: 'sous-titre-choix' }, '2. Les collègues'),
           h('label', { class: 'option tous' }, tous, h('b', {}, 'Toute l’équipe')),
           h('div', { class: 'liste-choix' }, autres.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', onchange: (e) => (e.target.checked ? qui.add(c.id) : qui.delete(c.id)) }), c.nom))),
+          avecEleves ? [h('p', { class: 'sous-titre-choix' }, '… et / ou les élèves (classe entière)'),
+            h('div', { class: 'liste-choix' }, promos.map((p) => h('label', { class: 'option' }, h('input', { type: 'checkbox', onchange: (e) => (e.target.checked ? classes.add(p.id) : classes.delete(p.id)) }), '🎓 Promotion ' + p.libelle))),
+            h('small', { class: 'gris' }, 'Les élèves voient les documents dans « Mes documents » de leur espace ; pour un dossier, aussi ceux ajoutés plus tard.')] : null,
           h('p', { class: 'sous-titre-choix' }, '3. Action'), mode))),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Appliquer', classe: 'principal', action: () => {
       if (!coches.size) throw new Error(`Cochez au moins une fiche ou un ${E.theme}.`);
-      if (mode.value !== 'prive' && !qui.size && !tous.checked) throw new Error('Cochez au moins un collègue (ou « Toute l’équipe »).');
+      if (mode.value !== 'prive' && !qui.size && !tous.checked && !classes.size) throw new Error(avecEleves ? 'Cochez au moins un collègue, « Toute l’équipe » ou une promotion.' : 'Cochez au moins un collègue (ou « Toute l’équipe »).');
       return true;
     } }], { large: true });
     if (!ok) return;
@@ -777,9 +787,18 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         const cle = c[0] === 't' ? 'theme_id' : 'livre_id', x = (c[0] === 't' ? T : L).get(Number(c.slice(1)));
         if (!x) continue;
         const actuels = new Set(partagesDe(cle, x.id).map((p) => p.destinataire)), m = mode.value;
-        const voulus = m === 'ajouter' ? [...new Set([...actuels, ...qui])] : m === 'retirer' ? [...actuels].filter((u) => !qui.has(u)) : m === 'remplacer' ? [...qui] : [];
-        const tousV = m === 'ajouter' ? (tous.checked || x.partage_tous) : m === 'retirer' ? (tous.checked ? false : x.partage_tous) : m === 'remplacer' ? tous.checked : false;
-        await enregistrerPartage(cle, x, { tous: tousV, qui: voulus });
+        if (m === 'prive' || qui.size || tous.checked) {
+          const voulus = m === 'ajouter' ? [...new Set([...actuels, ...qui])] : m === 'retirer' ? [...actuels].filter((u) => !qui.has(u)) : m === 'remplacer' ? [...qui] : [];
+          const tousV = m === 'ajouter' ? (tous.checked || x.partage_tous) : m === 'retirer' ? (tous.checked ? false : x.partage_tous) : m === 'remplacer' ? tous.checked : false;
+          await enregistrerPartage(cle, x, { tous: tousV, qui: voulus });
+        }
+        if (avecEleves && (m === 'prive' || classes.size)) {
+          const pubs = pubsDe(cle, x.id), avant = new Set(pubs.map((p) => p.promotion_id));
+          const voulues = m === 'ajouter' ? new Set([...avant, ...classes]) : m === 'retirer' ? new Set([...avant].filter((p) => !classes.has(p))) : m === 'remplacer' ? new Set(classes) : new Set();
+          for (const p of pubs) if (!voulues.has(p.promotion_id)) { await db.supprimer('publications_eleves', p.id); C.publications = C.publications.filter((y) => y.id !== p.id); }
+          const ajout = [...voulues].filter((pid) => !avant.has(pid)).map((pid) => ({ [cle]: x.id, promotion_id: pid }));
+          if (ajout.length) C.publications.push(...(await db.ajouter('publications_eleves', ajout)));
+        }
       }
       toast('Partages enregistrés');
     } catch (e) { erreur(e); }

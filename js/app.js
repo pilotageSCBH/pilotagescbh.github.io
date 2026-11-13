@@ -17,7 +17,7 @@ import { pageValidation } from './pages/validation.js';
 import { pageCouverture } from './pages/couverture.js';
 import { pageSynthese } from './pages/synthese.js';
 import { pageHistorique } from './pages/historique.js';
-import { pageAide } from './pages/aide.js';
+import { pageAide, VIDEOS } from './pages/aide.js';
 import { pageResultats } from './pages/resultats.js';
 import { pageEleve } from './pages/eleve.js';
 import { pageSemaine } from './pages/semaine.js';
@@ -248,7 +248,7 @@ function ecranNouveauCode() {
 }
 
 // ------------------------------------------------------------------------------------------- cadre
-// fiches : quel document du menu « Documents professeurs » est ouvert (d'après l'onglet de la page)
+// fiches : quel document du menu « Mes documents pédagogiques » est ouvert (d'après l'onglet de la page)
 function modeFiches(arg) {
   const [sid, o = 'preparation'] = String(arg || '').split(':');
   if (!/^\d+$/.test(sid || '')) return sid || 'preparation';
@@ -284,7 +284,7 @@ function menu(route) {
     { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
       { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
       { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
-    { cle: 'evaluer', titre: 'Documents professeurs', icone: '📂', items: [
+    { cle: 'evaluer', titre: 'Mes documents pédagogiques', icone: '📂', items: [
       { sous: 'Documents de préparation' },
       { href: '#/fiches/preparation', icone: '📋', texte: 'Fiches de préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
       { href: '#/fiches/deroulement', icone: '📝', texte: 'Fiches de déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
@@ -358,11 +358,11 @@ function menu(route) {
         h('button', { class: 'reduire-menu', type: 'button', title: reduit ? 'Déplier le menu' : 'Réduire le menu (icônes seules)', onclick: () => {
           ecrireL(CLE_MENU_REDUIT, reduit ? 'non' : 'oui'); rafraichirMenu();
         } }, reduit ? '»' : '«'),
-        h('button', { class: 'video-menu', type: 'button', title: 'Vidéo de présentation du site (5 min)', onclick: ouvrirVideo }, h('span', { class: 'lecture' }, '▶'), h('small', {}, 'Vidéo')))),
+        h('a', { class: 'video-menu', href: '#/aide', title: 'Vidéos de présentation et tutoriel (page Aide)' }, h('span', { class: 'lecture' }, '▶'), h('small', {}, 'Vidéos')))),
     h('div', { class: 'promo-menu' }, h('label', {}, 'Promotion affichée'), choixPromotion(), h('span', { class: 'promo-courte', title: 'Promotion ' + (ctx.promo?.libelle || '') }, ctx.promo ? String(ctx.promo.annee_debut).slice(2) + '-' + String(ctx.promo.annee_debut + 2).slice(2) : '')),
     h('div', { class: 'zone-recherche' }, recherche), partout,
     h('div', { class: 'defile-menu' },
-      fixe({ href: '#/accueil', icone: '🏠', texte: 'Tableau de bord', actif: page === 'accueil' }),
+      fixe({ href: '#/accueil', icone: '🏠', texte: 'Ma page d’accueil', actif: page === 'accueil' }),
       fixe({ href: '#/semaine', icone: '🗓', texte: 'Ma semaine', actif: page === 'semaine' }),
       sections),
     h('div', { class: 'bas-menu' },
@@ -379,20 +379,25 @@ function menu(route) {
   return nav;
 }
 
-// vidéo de présentation du site (fichier video/presentation.mp4), dans une fenêtre par-dessus la page
-export function ouvrirVideo() {
+// vidéos de l'aide (video/decouverte.*, video/tutoriel.*), dans une fenêtre par-dessus la page ; chapitres cliquables
+export function ouvrirVideo(cle = 'decouverte') {
+  const v = VIDEOS.find((x) => x.cle === cle) || VIDEOS[0];
   document.querySelector('.fond-video')?.remove();
   // MP4 (H.264) pour la plupart des navigateurs ; WebM (VP9) si le MP4 ne peut pas être lu
-  const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto' },
-    h('source', { src: 'video/presentation.mp4', type: 'video/mp4' }), h('source', { src: 'video/presentation.webm', type: 'video/webm' }),
+  const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg' },
+    h('source', { src: v.src + '.mp4', type: 'video/mp4' }), h('source', { src: v.src + '.webm', type: 'video/webm' }),
     'Votre navigateur ne peut pas lire cette vidéo.');
-  const fermer = () => { video.pause(); fond.remove(); document.removeEventListener('keydown', touche); };
+  const fermer = () => { video.pause(); fond.remove(); document.removeEventListener('keydown', touche); window.removeEventListener('hashchange', fermer); };
   const touche = (e) => { if (e.key === 'Escape') fermer(); };
+  window.addEventListener('hashchange', fermer);
+  const chap = (v.chapitres || []).length ? h('ol', { class: 'chapitres-video' }, v.chapitres.map((c) => h('li', {}, h('button', { type: 'button', onclick: () => { video.currentTime = c.t; video.play(); } },
+    h('span', { class: 'temps' }, `${Math.floor(c.t / 60)}:${String(Math.floor(c.t % 60)).padStart(2, '0')}`), c.titre)))) : null;
+  if (chap) video.addEventListener('timeupdate', () => { let k = -1; v.chapitres.forEach((c, i) => { if (video.currentTime >= c.t - 0.3) k = i; }); chap.querySelectorAll('li').forEach((li, i) => li.classList.toggle('actif', i === k)); });
   const fond = h('div', { class: 'fond-video', onmousedown: (e) => { if (e.target === fond) fermer(); } },
-    h('div', { class: 'boite-video', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Vidéo de présentation' },
-      h('div', { class: 'tete-video' }, h('b', {}, '▶  Présentation du site Pilotage BTS SCBH'), h('span', { class: 'gris' }, 'environ 5 minutes · sous-titrée'),
+    h('div', { class: 'boite-video' + (chap ? ' avec-chapitres' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': v.titre },
+      h('div', { class: 'tete-video' }, h('b', {}, '▶  ' + v.titre), h('span', { class: 'gris' }, [v.duree, 'sous-titrée', 'données fictives'].filter(Boolean).join(' · ')),
         h('button', { class: 'fermer', type: 'button', 'aria-label': 'Fermer', onclick: fermer }, '✕')),
-      video));
+      h('div', { class: 'corps-video' }, video, chap)));
   document.addEventListener('keydown', touche);
   document.body.append(fond);
 }
@@ -506,9 +511,9 @@ const fixerProfondeur = (n) => { try { sessionStorage.setItem(CLE_PROF, String(M
 window.addEventListener('hashchange', () => { fixerProfondeur(profondeur() + (enRetour ? -1 : 1)); enRetour = false; });
 function boutonRetour() {
   const possible = profondeur() > 0;
-  return h('button', { class: 'retour-flottant ecran', type: 'button', title: possible ? 'Revenir à la page précédente' : 'Revenir au tableau de bord',
+  return h('button', { class: 'retour-flottant ecran', type: 'button', title: possible ? 'Revenir à la page précédente' : 'Revenir à « Ma page d’accueil »',
     onclick: () => { if (profondeur() > 0) { enRetour = true; history.back(); } else location.hash = '#/accueil'; } },
-  h('span', { class: 'fleche' }, '←'), possible ? 'Page précédente' : 'Tableau de bord');
+  h('span', { class: 'fleche' }, '←'), possible ? 'Page précédente' : 'Ma page d’accueil');
 }
 window.addEventListener('hashchange', afficher);
 window.addEventListener(SESSION_EXPIREE, () => { ctx.profil = null; ecranConnexion('Votre session a expiré : reconnectez-vous.'); });

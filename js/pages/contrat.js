@@ -46,6 +46,22 @@ export async function dessinerContrat(zone, opts) {
   const notesL = criteres.length ? await db.lire('notes', `critere_id=in.(${criteres.map((k) => k.id).join(',')})&order=critere_id,eleve_id`) : [];
   const notes = new Map(notesL.map((n) => [`${n.critere_id}:${n.eleve_id}`, n.valeur]));
   let voirRetires = false;
+  // QCM couplés à cette fiche (script 30) : null si les QCM ne sont pas installés
+  let qcmCouples = ctx.peutEcrire() ? await db.lire('qcm', `contrat_id=eq.${contrat.id}&order=titre`).catch(() => null) : null;
+  async function dialogueQcm() {
+    const miens = (await db.lire('qcm', 'order=titre').catch(() => [])).filter((x) => x.proprietaire === ctx.profil.id && x.contrat_id !== contrat.id);
+    const choix = h('select', { class: 'champ' }, h('option', { value: '' }, '— choisir un de mes QCM'), miens.map((x) => h('option', { value: x.id }, x.titre + (x.contrat_id ? ' (déjà couplé à une autre fiche)' : ''))));
+    const r = await fenetre('QCM couplé à cette fiche contrat', h('div', { class: 'formulaire' },
+      h('p', { class: 'aide large' }, 'Un QCM couplé pose une série de questions par critère d’évaluation de cette fiche. Ses résultats peuvent remplir automatiquement les notes de la fiche (0 à 5 par critère : part de bonnes réponses de la série).'),
+      qcmCouples.length ? h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Déjà couplés'), h('ul', {}, qcmCouples.map((x) => h('li', {}, h('a', { href: '#/qcm/' + x.id }, '📝 ' + x.titre), h('small', { class: 'gris' }, ` · ${(x.questions || []).length} question(s)`))))) : null,
+      miens.length ? h('label', { class: 'large' }, 'Coupler un QCM existant', choix) : null),
+    [{ texte: 'Fermer', valeur: null }, miens.length ? { texte: '🔗 Coupler', valeur: 'coupler', action: () => { if (!choix.value) throw new Error('Choisissez un QCM.'); return 'coupler'; } } : null,
+      { texte: '＋ Créer un QCM couplé', classe: 'principal', valeur: 'creer' }].filter(Boolean), { large: true });
+    if (r === 'creer') location.hash = '#/qcm/c-' + contrat.id;
+    if (r === 'coupler') {
+      try { await db.modifier('qcm', Number(choix.value), { contrat_id: contrat.id }); toast('QCM couplé : rattachez maintenant chaque question à un critère'); location.hash = '#/qcm/' + choix.value; } catch (e) { erreur(e); }
+    }
+  }
 
   const majContrat = (col) => async (v) => { await db.modifier('contrats', contrat.id, { [col]: v || (col === 'date_eval' ? null : '') }); contrat[col] = v; };
   const liste = (id, valeurs) => h('datalist', { id }, valeurs.map((v) => h('option', { value: v })));
@@ -123,6 +139,8 @@ export async function dessinerContrat(zone, opts) {
         libre && modif ? h('button', { class: 'btn petit', onclick: ajouterCompetences }, '＋ Compétences du référentiel') : null,
         libre && modif ? h('button', { class: 'btn petit', onclick: ajouterRubrique }, '＋ Rubrique libre') : null,
         modif ? boutonIA(() => configIA(groupes), 'btn petit') : null,
+        qcmCouples ? h('button', { class: 'btn petit' + (qcmCouples.length ? ' partage-actif' : ''), title: 'QCM dont les séries de questions évaluent les critères de cette fiche', onclick: dialogueQcm },
+          qcmCouples.length ? `📝 ${qcmCouples.length > 1 ? qcmCouples.length + ' QCM couplés' : 'QCM couplé'}` : '📝 QCM couplé') : null,
         criteres.some((k) => !k.actif) ? h('label', { class: 'interrupteur' }, h('input', { type: 'checkbox', checked: voirRetires, onchange: (e) => { voirRetires = e.target.checked; dessiner(); } }), 'voir les critères retirés') : null),
       eleves.length ? null : h('p', { class: 'aide' }, 'Aucun élève dans cette promotion : ajoutez-les dans la page Élèves.'),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'grille-notes' },
