@@ -22,7 +22,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   const P = ctx.promo, Y = P.annee_debut;
   const ref = await ctx.referentiel();
   let annee = Number(lire(CLE_AN, '0')) === 1 ? 1 : 0;
-  let vue = lire(CLE_VUE, 'tableau') === 'frise' ? 'frise' : 'tableau';
+  let vue = !eleve && lire(CLE_VUE, 'tableau') === 'frise' ? 'frise' : 'tableau';   // élève : tableau seulement
   let filtre = arg && ctx.matieres.some((m) => String(m.id) === String(arg)) ? String(arg) : lire(CLE_MAT, 'toutes');
   if (filtre !== 'toutes' && !ctx.matieres.some((m) => String(m.id) === filtre)) filtre = 'toutes';
   const calendrierModifiable = !eleve && ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
@@ -232,13 +232,13 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       h('div', {}, h('h1', {}, eleve ? '🗓  Calendrier de ma formation' : 'Progression'),
         h('p', { class: 'sous-titre' }, `Promotion ${P.libelle}  ·  ${annee === 0 ? '1re' : '2e'} année ${Y + annee}-${Y + annee + 1}`)),
       h('div', { class: 'actions-page' },
-        h('div', { class: 'bascule' }, [['tableau', '☷  Tableau'], ['frise', '▬  Frise']].map(([v, t]) => h('button', { class: 'btn' + (v === vue ? ' principal' : ''),
+        eleve ? null : h('div', { class: 'bascule' }, [['tableau', '☷  Tableau'], ['frise', '▬  Frise']].map(([v, t]) => h('button', { class: 'btn' + (v === vue ? ' principal' : ''),
           onclick: () => { vue = v; ecrire(CLE_VUE, v); garde.x = 0; garde.t = 0; dessiner(); } }, t))),
         h('div', { class: 'bascule' }, [0, 1].map((a) => h('button', { class: 'btn' + (a === annee ? ' principal' : ''),
           onclick: () => { annee = a; ecrire(CLE_AN, String(a)); garde.t = 0; garde.x = 0; dessiner(); } }, a === 0 ? '1re année' : '2e année'))),
         eleve ? null : boutonAnnuler(ctx, 'progression'),
-        h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
-        h('button', { class: 'btn', onclick: () => telechargerPDF(mats) }, '⬇  PDF A3'),
+        eleve ? null : h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer'),
+        eleve ? null : h('button', { class: 'btn', onclick: () => telechargerPDF(mats) }, '⬇  PDF A3'),
         h('select', { class: 'champ choix-mat', onchange: (e) => { filtre = e.target.value; ecrire(CLE_MAT, filtre); dessiner(); } },
           h('option', { value: 'toutes', selected: filtre === 'toutes' }, 'Toutes les matières'),
           ctx.matieres.map((m) => h('option', { value: m.id, selected: String(m.id) === filtre }, m.nom)))));
@@ -247,7 +247,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       VACANCES.map((v) => h('span', { class: 'leg vac-' + cls(v) }, v)),
       h('span', { class: 'leg app-presents' }, 'Apprentis présents'), h('span', { class: 'leg app-pfmp' }, 'Apprentis en PFMP'),
       EVENEMENTS.map((e) => h('span', { class: 'leg ev-' + cls(e) }, e)),
-      h('span', { class: 'aide' }, eleve ? 'Cliquez une séance pour ouvrir son détail : objectifs, compétences, savoirs, cours, travail à la maison.' : detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
+      h('span', { class: 'aide' }, eleve ? 'Cliquez une séance pour ouvrir son détail : objectifs, compétences, savoirs, cours, travail à la maison. Passez la souris sur un jour coloré (ou appuyez dessus) pour voir son évènement.' : detail ? 'Glisser une séance pour la déplacer (les suivantes se décalent) ; glisser une séance « à placer » dans une semaine ; cliquer une case pour la modifier.'
         : 'Glisser une séance pour la déplacer ; cliquer une case pour choisir la séance. Choisir une seule matière pour voir le détail et les séances à placer.'));
 
     const tete = h('tr', {}, h('th', { class: 'col-sem' }, 'Semaine'), h('th', { class: 'col-jours' }, 'Évènements du jour'),
@@ -275,6 +275,12 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
         h('td', { class: 'col-sem' }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, `${jj(lundi(w))} → ${jj(jourDe(w, 4))}`)),
         h('td', { class: 'col-jours' }, h('div', { class: 'jours' }, JOURS.map((l, k) => {
           const j = w * 7 + k, ev = jours.get(j) || '';
+          if (eleve) {   // lecture seule : l'évènement apparaît dans une bulle au survol (ou à l'appui sur téléphone)
+            const b = h('button', { class: 'jour lecture' + (k >= 5 ? ' we' : '') + (ev ? ' ev-' + cls(ev) + ' avec-ev' : ''), type: 'button', 'aria-label': ev ? `${jourLong(w, k)} : ${ev}` : jourLong(w, k) },
+              h('i', {}, l), h('span', {}, jourDe(w, k).getDate()));
+            if (ev) bulleJour(b, jourLong(w, k), ev);
+            return b;
+          }
           return h('button', { class: 'jour' + (k >= 5 ? ' we' : '') + (ev ? ' ev-' + cls(ev) : ''), type: 'button', title: ev ? `${jj(jourDe(w, k))} : ${ev}` : jj(jourDe(w, k)),
             onclick: () => choisirEvenement(w, k) }, h('i', {}, l), h('span', {}, jourDe(w, k).getDate()));
         }))),
@@ -331,6 +337,26 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       toast('PDF téléchargé');
     } catch (e) { erreur(e); }
   }
+
+  // ------------------------------------------------------------------------------------- bulle d'évènement (espace élève)
+  function jourLong(w, k) { return jourDe(w, k).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
+  function bulleJour(b, quand, ev) {
+    const montrer = () => {
+      let d = document.querySelector('.bulle-jour');
+      if (!d) { d = h('div', { class: 'bulle-jour', role: 'tooltip' }); document.body.append(d); }
+      vider(d, h('small', {}, quand), h('b', {}, ev));
+      d.hidden = false;
+      const r = b.getBoundingClientRect(), lw = d.offsetWidth, lh = d.offsetHeight;
+      const x = Math.max(8, Math.min(window.innerWidth - lw - 8, r.left + r.width / 2 - lw / 2));
+      const y = r.bottom + 6 + lh > window.innerHeight ? r.top - lh - 6 : r.bottom + 6;
+      d.style.left = x + 'px'; d.style.top = y + 'px';
+    };
+    const cacher = () => { const d = document.querySelector('.bulle-jour'); if (d) d.hidden = true; };
+    b.addEventListener('mouseenter', montrer); b.addEventListener('focus', montrer);
+    b.addEventListener('mouseleave', cacher); b.addEventListener('blur', cacher);
+    b.addEventListener('click', montrer);
+  }
+  if (eleve) { const c = () => { const d = document.querySelector('.bulle-jour'); if (d) d.hidden = true; }; window.addEventListener('scroll', c, { passive: true }); window.addEventListener('hashchange', c, { once: true }); }
 
   // ------------------------------------------------------------------------------------- vue « frise »
   // le temps de gauche à droite (une colonne par semaine), une bande par matière ; séances en blocs colorés
