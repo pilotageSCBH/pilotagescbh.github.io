@@ -383,6 +383,7 @@ function menu(route) {
 export function ouvrirVideo(cle = 'decouverte') {
   const v = VIDEOS.find((x) => x.cle === cle) || VIDEOS[0];
   document.querySelector('.fond-video')?.remove();
+  try { localStorage.setItem('pilotage-scbh-video-vue', '1'); } catch { /* sans stockage */ }
   // MP4 (H.264) : lu par tous les navigateurs actuels
   const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg' },
     h('source', { src: v.src + '.mp4', type: 'video/mp4' }),

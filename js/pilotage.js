@@ -53,12 +53,13 @@ export async function chargerSuivi(ctx) {
   const idsSeq = sequences.map((s) => s.id);
   const seancesL = idsSeq.length ? await db.lire('seances', `sequence_id=in.(${idsSeq.join(',')})&order=sequence_id,numero`) : [];
   const idsSe = seancesL.map((x) => x.id);
-  const [contrats1, contrats2, fiches, resultats, contrats3] = await Promise.all([
+  const [contrats1, contrats2, fiches, resultats, contrats3, realisees] = await Promise.all([
     idsSeq.length ? db.lire('contrats', `type=eq.sommatif&sequence_id=in.(${idsSeq.join(',')})`) : [],
     idsSe.length ? db.lire('contrats', `type=eq.formatif&seance_id=in.(${idsSe.join(',')})`) : [],
     idsSe.length ? db.lire('fiches_seance', `seance_id=in.(${idsSe.join(',')})&select=seance_id,phases,maison_avant,maison_apres`) : [],
     evaluations.length ? db.lire('resultats', `evaluation_id=in.(${evaluations.map((v) => v.id).join(',')})&select=evaluation_id`) : [],
-    db.lire('contrats', `promotion_id=eq.${P.id}`).catch(() => [])]);   // contrats hors séquence
+    db.lire('contrats', `promotion_id=eq.${P.id}`).catch(() => []),   // contrats hors séquence
+    db.lire('seances_realisees', `promotion_id=eq.${P.id}`).catch(() => null)]);   // script 33
   const contrats = [...contrats1, ...contrats2, ...contrats3];
   const criteres = contrats.length ? await db.lire('criteres', `contrat_id=in.(${contrats.map((c) => c.id).join(',')})&actif=is.true&select=id,contrat_id,groupe`) : [];
   const seqs = new Map(sequences.map((s) => [s.id, s]));
@@ -70,7 +71,30 @@ export async function chargerSuivi(ctx) {
     // une case à deux séances compte comme deux placements (copie avec la 2e séance)
     cases: casesL.concat(casesL.filter((c) => c.seance_id && c.seance2_id).map((c) => ({ ...c, seance_id: c.seance2_id, seance2_id: null, texte: '', note: '', deuxieme: true }))), fiches: new Map(fiches.map((f) => [f.seance_id, f])),
     noteesContrats: new Set((sommes || []).map((r) => r.contrat_id)), noteesEvals: new Set(resultats.map((r) => r.evaluation_id)),
+    faites: realisees ? new Map(realisees.map((r) => [r.seance_id, r])) : null,
   };
+}
+
+// séance faite / pas faite (progression réelle) ; faites : Map seance_id → ligne, mise à jour sur place
+export async function basculerFaite(P, x, faites) {
+  const f = faites.get(x.id);
+  if (f) { await db.supprimer('seances_realisees', f.id); faites.delete(x.id); return false; }
+  const [r] = await db.ajouter('seances_realisees', [{ promotion_id: P.id, seance_id: x.id }]);
+  faites.set(x.id, r); return true;
+}
+// retard : séances dont toutes les semaines prévues sont passées et qui ne sont pas cochées « faite »
+// (seulement pour les matières où l'on coche les séances faites : sinon tout paraîtrait en retard)
+export function retardsParMatiere(D, mats, w) {
+  if (!D.faites) return [];
+  const fin = new Map();
+  for (const c of D.cases) if (c.seance_id) fin.set(c.seance_id, Math.max(fin.get(c.seance_id) ?? -1, c.semaine));
+  return mats.map((m) => {
+    const miennes = [...D.seances.values()].filter((x) => x.mat?.id === m.id);
+    const suivie = miennes.some((x) => D.faites.has(x.id));
+    const enRetard = miennes.filter((x) => fin.has(x.id) && fin.get(x.id) < w && !D.faites.has(x.id)).sort((a, b) => fin.get(a.id) - fin.get(b.id));
+    const faites = miennes.filter((x) => D.faites.has(x.id)).length, prevues = miennes.filter((x) => fin.has(x.id) && fin.get(x.id) < w).length;
+    return { m, suivie, enRetard, faites, prevues };
+  });
 }
 
 // première semaine (et liste des semaines) où chaque séance est placée dans la progression

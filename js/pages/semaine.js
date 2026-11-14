@@ -1,7 +1,8 @@
 // « Ma semaine » : page personnelle de l'enseignant pour une semaine de la promotion : ses séances, le travail à la
 // maison à préparer ou à récupérer, les évaluations à venir, les notes à saisir et les alertes de ses matières.
-import { h, vider, heures, dateFr } from '../ui.js';
-import { chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineDe, lundi, jourDe, jj, semaineIso, aujourdhui, NB_SEM, SEM_AN, TYPES_EVAL } from '../pilotage.js';
+import { h, vider, heures, dateFr, erreur, toast } from '../ui.js';
+import { ouvrirCahier } from '../cahier.js';
+import { basculerFaite, chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineDe, lundi, jourDe, jj, semaineIso, aujourdhui, NB_SEM, SEM_AN, TYPES_EVAL } from '../pilotage.js';
 
 const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
 const resume = (t, n = 160) => { const s = String(t || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
@@ -76,7 +77,10 @@ export async function pageSemaine(zone, arg, ctx) {
             x?.objectif_inter ? h('p', {}, resume(x.objectif_inter, 220)) : null,
             c.note ? h('p', { class: 'note-sem' }, '🗒  ' + c.note) : null,
             x ? h('div', { class: 'liens' }, h('a', { href: lienFiche(x) }, '▶ Fiche de déroulement'), h('a', { href: `#/fiches/${x.seq.id}:formatif-${x.id}` }, '▶ Fiche contrat formatif'),
-              h('a', { href: '#/progression/' + m.id }, '▶ Progression')) : null))
+              h('a', { href: '#/progression/' + m.id }, '▶ Progression')) : null,
+            x ? h('div', { class: 'actions-seance-semaine' },
+              boutonFaite(x, m),
+              h('button', { class: 'btn petit', type: 'button', title: 'Texte prêt à coller dans le cahier de textes de Pronote', onclick: () => ouvrirCahier(x, m, D.fiches.get(x.id), ctx.codeMat(m), (k) => `${k} ${ref.sav[k]?.libelle_court || ''}`.trim()) }, '📋 Cahier de textes')) : null))
             : h('p', { class: 'vide' }, sem.vacances ? 'Pas de cours cette semaine.' : 'Aucune séance placée dans la progression cette semaine.')),
         notesASaisir()), h('div', { class: 'col-semaine' },
         // travail à la maison
@@ -100,6 +104,15 @@ export async function pageSemaine(zone, arg, ctx) {
               h('a', { href: e.lien }, h('b', {}, e.mat.nom), ' · ', e.titre), h('span', { class: 'type ' + e.type }, TYPES_EVAL[e.type]));
           })) : h('p', { class: 'vide petit' }, 'Aucune évaluation datée sur cette période.'),
           h('a', { class: 'lien-carte', href: '#/evaluations' }, '▶ Calendrier des évaluations de toutes les matières')))));
+    // progression réelle : la séance est-elle faite ? (enseignants de la matière)
+    function boutonFaite(x, m) {
+      if (!D.faites) return null;
+      const f = D.faites.get(x.id), peut = ctx.peutEcrire() && ctx.enseigne(m.id);
+      if (!peut) return f ? h('span', { class: 'etat-faite' }, '✔ faite le ' + dateFr(f.fait_le)) : null;
+      return h('button', { class: 'btn petit' + (f ? ' faite' : ''), type: 'button', title: f ? 'Cliquer pour annuler' : 'Indiquer que cette séance a été faite',
+        onclick: async () => { try { const ok = await basculerFaite(D.P, x, D.faites); toast(ok ? 'Séance marquée comme faite' : 'Séance de nouveau « à faire »'); dessiner(); } catch (e) { erreur(e); } } },
+      f ? '✔ Faite le ' + dateFr(f.fait_le) : '☐ Marquer comme faite');
+    }
     function notesASaisir() {
       return h('section', { class: 'bloc carte-semaine' + (aNoter.length ? ' a-faire' : '') },
         h('h2', {}, '✏️  Notes à saisir', aNoter.length ? h('span', { class: 'nb-alerte' }, aNoter.length) : null),

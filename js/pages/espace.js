@@ -350,7 +350,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
             aMoi(l) ? h('button', { class: 'btn', onclick: () => modifierLivre(l) }, '✎ Modifier') : null,
             h('button', { class: 'btn', onclick: () => envoyerPDF(documentPDF([l], { sommaire: true, savoirs: true, liens: true }, l.titre), 'pdf') }, '⬇ PDF'),
             !aMoi(l) ? h('button', { class: 'btn', onclick: () => copierLivre(l) }, '⧉ Copier dans mon espace') : null,
-            aMoi(l) ? h('button', { class: 'btn danger', onclick: () => supprimerLivre(l) }, '✖ Supprimer la fiche') : null)),
+            aMoi(l) ? h('button', { class: 'btn danger', onclick: () => supprimerLivre(l) }, '✖ Supprimer la fiche') : null),
+          aMoi(l) && avecEleves && estPublie('livre_id', l) ? blocConsultations(l) : null),
         h('div', { class: 'col-infos' },
           h('h2', { class: 'titre-livre' }, l.titre || 'Sans titre'),
           !aMoi(l) ? h('p', { class: 'info-partage' }, `👤 Partagé par ${nomCollegue(l.proprietaire)} · consultation seule`) : null,
@@ -365,6 +366,35 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           !A_COMPLETER[l.source] && !l.sommaire?.length ? h('p', { class: 'vide-sommaire' }, 'Sommaire non renseigné.', aMoi(l) ? [' ', h('button', { class: 'lien petit', type: 'button', onclick: () => modifierLivre(l, 'sommaire') }, 'Le saisir')] : null) : null,
           l.source === 'page' ? h('p', { class: 'note' }, 'Sommaire lu dans le texte du fichier.') : null,
           l.sommaire?.length ? h('ol', { class: 'sommaire-biblio complet' }, l.sommaire.map((e) => ligneSommaire(l, e))) : null)));
+  }
+
+  // qui, parmi les élèves des promotions qui voient ce cours, l'a ouvert (consultations enregistrées par l'espace élèves)
+  function blocConsultations(l) {
+    const el = h('section', { class: 'consultations-cours' }, h('h3', {}, '👁 Consultations des élèves'), h('p', { class: 'aide petit' }, 'Chargement…'));
+    (async () => {
+      try {
+        const promos = new Set(pubsDe('livre_id', l.id).map((p) => p.promotion_id));
+        const ht = publieHerite(l); if (ht) pubsDe('theme_id', ht.id).forEach((p) => promos.add(p.promotion_id));
+        autoDe(l).filter((a) => new Date(a.le) <= new Date()).forEach((a) => promos.add(a.promotion_id));
+        if (!promos.size) { vider(el, h('h3', {}, '👁 Consultations des élèves'), h('p', { class: 'aide petit' }, 'Pas encore visible des élèves.')); return; }
+        const [eleves, vues] = await Promise.all([db.lire('eleves', `promotion_id=in.(${[...promos].join(',')})&select=id,nom,prenom,promotion_id,arret&order=nom,prenom`),
+          db.lire('consultations_eleves', `livre_id=eq.${l.id}&quoi=eq.document&select=eleve_id,quand&order=quand.desc`)]);
+        const derniere = new Map(), nb = new Map();
+        for (const v of vues) { if (!derniere.has(v.eleve_id)) derniere.set(v.eleve_id, v.quand); nb.set(v.eleve_id, (nb.get(v.eleve_id) || 0) + 1); }
+        const nom = (e) => `${e.nom} ${e.prenom}`;
+        vider(el, h('h3', {}, '👁 Consultations des élèves'), [...promos].map((pid) => {
+          const L = eleves.filter((e) => e.promotion_id === pid && !e.arret), ouverts = L.filter((e) => derniere.has(e.id)), pas = L.filter((e) => !derniere.has(e.id));
+          return h('details', { class: 'consult-promo' },
+            h('summary', {}, h('b', {}, libPromo(pid)), ` : ${ouverts.length} / ${L.length} élève(s) l’ont ouvert`,
+              h('span', { class: 'jauge-consult' }, h('i', { style: { width: (L.length ? Math.round((ouverts.length / L.length) * 100) : 0) + '%' } }))),
+            h('div', { class: 'listes-consult' },
+              h('div', {}, h('h4', {}, `Ouvert (${ouverts.length})`), ouverts.length ? h('ul', {}, ouverts.map((e) => h('li', {}, nom(e), h('small', { class: 'gris' },
+                ` · ${new Date(derniere.get(e.id)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${nb.get(e.id) > 1 ? ` · ${nb.get(e.id)} fois` : ''}`)))) : h('p', { class: 'gris petit' }, '—')),
+              h('div', {}, h('h4', {}, `Pas encore ouvert (${pas.length})`), pas.length ? h('ul', {}, pas.map((e) => h('li', {}, nom(e)))) : h('p', { class: 'gris petit' }, '—'))));
+        }), h('p', { class: 'aide petit' }, 'Visible par les enseignants seulement. Une ouverture = « Ouvrir » ou « Télécharger » dans l’espace élèves.'));
+      } catch (e) { vider(el, h('h3', {}, '👁 Consultations des élèves'), h('p', { class: 'aide petit' }, 'Consultations indisponibles : ' + e.message)); }
+    })();
+    return el;
   }
 
   // ------------------------------------------------------------------ recherche (titres, auteurs, éditeurs, sommaires)

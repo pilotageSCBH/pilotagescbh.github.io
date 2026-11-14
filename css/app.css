@@ -2154,3 +2154,58 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .fiche-maison .texte-maison { white-space: pre-wrap; margin: 0; line-height: 1.45; }
 .infos-maison { margin: 0; }
 @media (max-width: 800px) { .grille-seance { grid-template-columns: 1fr; } }
+/* ---- cahier de textes (Pronote) */
+.cahier-textes .bloc-cahier { margin-top: 12px; }
+.tete-cahier { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.tete-cahier h3 { margin: 0; font-size: 15px; color: var(--fonce); }
+.texte-cahier { border-color: var(--ligne) !important; background: #FAFCFB !important; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; }
+/* ---- progression réelle */
+.actions-seance-semaine { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn.faite { background: #E6F4D7; border-color: #9CCB6B; color: #2F6B12; font-weight: 700; }
+.etat-faite { font-size: 12px; color: #2F6B12; font-weight: 700; align-self: center; }
+.marque-faite { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: #4E9A2F; color: #fff; font-size: 11px; font-weight: 800; margin-left: 5px; vertical-align: 1px; }
+.outils-seance { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 12px; background: #F3F8F7; border-radius: 8px; margin-top: 8px; }
+.liste-avancement { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.liste-avancement li { border-left: 5px solid var(--couleur); padding: 6px 10px; background: #FAFCFB; border-radius: 6px; display: grid; gap: 2px; }
+.tete-avancement { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tete-avancement span { font-size: 12.5px; color: #4E6461; }
+.liste-avancement .retard { color: #A15C00; }
+.liste-avancement .a-jour { color: #2F6B12; }
+/* ---- rappel de sauvegarde */
+.rappel-sauvegarde { display: flex; align-items: center; gap: 16px; background: #FFF6E0; border: 1px solid #F0D48A; border-radius: var(--rayon); padding: 14px 18px; margin: 0 0 18px; }
+.rappel-sauvegarde .gros { font-size: 30px; }
+.rappel-sauvegarde p { margin: 2px 0 0; font-size: 13px; color: #6B5414; }
+.rappel-sauvegarde > div { flex: 1; }
+@media (max-width: 700px) { .rappel-sauvegarde { flex-wrap: wrap; } }
+/* ---- premiers pas */
+.premiers-pas { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding: 16px 20px; border-top: 4px solid #A4C11E; }
+.jauge-pp { height: 8px; border-radius: 4px; background: #E7EFEE; overflow: hidden; margin: 6px 0 12px; }
+.jauge-pp i { display: block; height: 100%; background: linear-gradient(90deg, #1E8F86, #A4C11E); }
+.liste-pp { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 18px; }
+.liste-pp li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
+.liste-pp a { color: var(--texte); }
+.liste-pp li.fait a { color: #6B7C79; text-decoration: line-through; }
+.coche-pp { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #EEF5F4; flex: none; font-size: 13px; }
+.liste-pp li.fait .coche-pp { background: #4E9A2F; color: #fff; font-weight: 800; }
+/* ---- consultations d'un cours */
+.consultations-cours { margin-top: 16px; background: var(--carte); border-radius: 10px; box-shadow: var(--ombre); padding: 10px 12px; }
+.consultations-cours h3 { margin: 0 0 6px; font-size: 14px; }
+.consult-promo summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+.jauge-consult { display: block; height: 6px; border-radius: 3px; background: #E7EFEE; margin-top: 4px; overflow: hidden; }
+.jauge-consult i { display: block; height: 100%; background: var(--teal); }
+.listes-consult { display: grid; grid-template-columns: 1fr; gap: 6px; font-size: 12.5px; padding: 4px 0 6px; }
+.listes-consult h4 { margin: 4px 0 2px; font-size: 12.5px; color: var(--fonce); }
+.listes-consult ul { margin: 0; padding-left: 16px; }
+/* ---- espace élève : travail à faire et nouveautés */
+.a-faire-eleve ul { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px; }
+.a-faire-eleve li { display: flex; gap: 12px; align-items: baseline; background: var(--carte); border-radius: 8px; box-shadow: var(--ombre); padding: 8px 12px; border-left: 5px solid var(--couleur); }
+.a-faire-eleve li.urgent { background: #FFF6E0; }
+.a-faire-eleve a { color: var(--texte); text-decoration: none; }
+.a-faire-eleve a:hover { color: var(--teal); text-decoration: underline; }
+.date-afaire { font-weight: 800; color: var(--fonce); min-width: 120px; font-size: 13px; }
+.nouveautes-eleve { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(90deg, #EAF6E1, #F7FBEA); border: 1px solid #CFE3A4; border-radius: var(--rayon); padding: 12px 16px; margin: 0 0 16px; }
+.puces-nouveautes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 4px; }
+.puces-nouveautes a { color: var(--fonce); font-weight: 700; text-decoration: none; }
+.puces-nouveautes a:hover { text-decoration: underline; }
+.puces-nouveautes small { font-weight: 500; color: #4E6461; }
+@media (max-width: 640px) { .a-faire-eleve li { flex-direction: column; gap: 2px; } .nouveautes-eleve { flex-direction: column; align-items: flex-start; } }

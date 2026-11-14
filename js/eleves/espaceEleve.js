@@ -151,6 +151,7 @@ async function pageSemaine(zone, arg) {
       h('a', { class: 'btn' + (w <= 0 ? ' desactive' : ''), href: '#/semaine/' + Math.max(0, w - 1), title: 'Semaine précédente' }, '◀'),
       w !== wAuj ? h('a', { class: 'btn', href: '#/semaine/' + wAuj }, 'Cette semaine') : null,
       h('a', { class: 'btn' + (w >= NB_SEM - 1 ? ' desactive' : ''), href: '#/semaine/' + Math.min(NB_SEM - 1, w + 1), title: 'Semaine suivante' }, '▶')),
+    blocNouveautes(), blocAFaire(),
     h('div', { class: 'puces-semaine' },
       sem.vacances ? h('div', { class: 'puce-info vac' }, '🏖  ' + sem.vacances) : null,
       apprenti && sem.apprentis ? h('div', { class: 'puce-info ' + (sem.apprentis === 'PFMP' ? 'pfmp' : 'presents') }, sem.apprentis === 'PFMP' ? '🏭  Semaine en entreprise' : '🏫  Semaine au lycée') : null,
@@ -165,6 +166,56 @@ async function pageSemaine(zone, arg) {
         : h('p', { class: 'vide' }, sem.vacances ? 'Vacances : pas de séance.' : 'Aucune séance placée cette semaine dans la progression.')),
     h('section', {}, h('h2', { class: 'titre-section' }, 'Prochaines évaluations'), listeEvaluations()));
 }
+// ---- travail à faire : échéances des fiches de travail préparatoire et de travail à la maison (3 semaines à venir)
+const isoJour = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function travauxAFaire(jours = 21) {
+  const auj = isoJour(new Date()), lim = new Date(); lim.setDate(lim.getDate() + jours);
+  const l = [];
+  for (const x of D.seances.values()) for (const cle of ['avant', 'apres']) {
+    const o = x['maison_' + cle];
+    if (o?.echeance && o.echeance >= auj && o.echeance <= isoJour(lim)) l.push({ x, cle, o });
+  }
+  return l.sort((a, b) => a.o.echeance.localeCompare(b.o.echeance));
+}
+function blocAFaire() {
+  const l = travauxAFaire();
+  if (!l.length) return null;
+  const auj = isoJour(new Date()), dem = new Date(); dem.setDate(dem.getDate() + 1);
+  const quand = (d) => (d === auj ? 'aujourd’hui' : d === isoJour(dem) ? 'demain' : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' }));
+  const resumeT = (t) => { const v = String(t || '').replace(/\s+/g, ' ').trim(); return v.length > 110 ? v.slice(0, 109) + '…' : v; };
+  return h('section', { class: 'a-faire-eleve' }, h('h2', { class: 'titre-section' }, '🏠 Travail à faire'),
+    h('ul', {}, l.map(({ x, cle, o }) => h('li', { style: { '--couleur': x.mat?.couleur || 'var(--teal)' }, class: o.echeance <= isoJour(dem) ? 'urgent' : '' },
+      h('span', { class: 'date-afaire' }, quand(o.echeance)),
+      h('a', { href: '#/seance/' + x.id }, h('b', {}, etiquette(x)), ' · ', cle === 'avant' ? 'Travail préparatoire' : 'À rendre', ' — ', resumeT(o.consignes || o.objectif || x.titre))))));
+}
+
+// ---- nouveautés depuis la dernière visite (mémorisées sur cet appareil) : cours, QCM ouverts, travaux
+const cleVu = () => 'pilotage-scbh-eleve-vu-' + (sessionEleve()?.identifiant || '');
+function lireVu() { try { return JSON.parse(localStorage.getItem(cleVu()) || 'null'); } catch { return null; } }
+function ecrireVu(v) { try { localStorage.setItem(cleVu(), JSON.stringify(v)); } catch { /* sans stockage */ } }
+let qcmOuverts = null;
+function blocNouveautes() {
+  if (apercu) return null;
+  const el = h('div', {});
+  (async () => {
+    try { qcmOuverts = (await rpcEleve('eleve_qcm_liste')).filter((x) => new Date(x.ouverture) <= new Date() && new Date(x.fermeture) > new Date()); } catch { qcmOuverts = []; }
+    const actuel = { docs: [...D.docs.keys()], qcm: qcmOuverts.map((x) => x.session), travaux: travauxAFaire(60).map(({ x, cle }) => x.id + cle) };
+    const vu = lireVu();
+    if (!vu) { ecrireVu(actuel); return; }             // première visite sur cet appareil : rien à signaler
+    const nDocs = actuel.docs.filter((i) => !vu.docs.includes(i)), nQcm = qcmOuverts.filter((x) => !vu.qcm.includes(x.session)), nTrav = actuel.travaux.filter((i) => !vu.travaux.includes(i));
+    if (!nDocs.length && !nQcm.length && !nTrav.length) return;
+    const fermer = () => { ecrireVu({ docs: [...new Set([...vu.docs, ...actuel.docs])], qcm: [...new Set([...vu.qcm, ...actuel.qcm])], travaux: [...new Set([...vu.travaux, ...actuel.travaux])] }); el.remove(); };
+    vider(el, h('section', { class: 'nouveautes-eleve' },
+      h('div', {}, h('b', {}, '✨ Depuis votre dernière visite'),
+        h('div', { class: 'puces-nouveautes' },
+          nDocs.length ? h('a', { href: '#/documents', onclick: fermer }, `🎓 ${nDocs.length} nouveau${nDocs.length > 1 ? 'x' : ''} cours`, h('small', {}, ' : ' + nDocs.slice(0, 3).map((i) => D.docs.get(i)?.titre).filter(Boolean).join(', ') + (nDocs.length > 3 ? '…' : ''))) : null,
+          nQcm.length ? h('a', { href: '#/qcm', onclick: fermer }, `📝 ${nQcm.length} QCM ouvert${nQcm.length > 1 ? 's' : ''}`, h('small', {}, ' : ' + nQcm.slice(0, 3).map((x) => x.titre).join(', '))) : null,
+          nTrav.length ? h('a', { href: '#/semaine', onclick: fermer }, `🏠 ${nTrav.length} travail${nTrav.length > 1 ? 'x' : ''} à faire`) : null)),
+      h('button', { class: 'btn petit', type: 'button', onclick: fermer }, 'OK, vu')));
+  })();
+  return el;
+}
+
 function evaluations() {
   const l = [];
   for (const c of D.contrats || []) {

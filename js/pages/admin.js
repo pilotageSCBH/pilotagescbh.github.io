@@ -13,6 +13,16 @@ const nomRole = (r) => (ROLES.find((x) => x[0] === r) || ROLES[0])[1];
 const initiales = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+/).filter(Boolean).slice(0, 2).map((x) => x[0].toUpperCase()).join('');
 const ONGLETS = [['comptes', '👥  Comptes'], ['admins', '🛡  Administrateurs'], ['maintenance', '🛠  Maintenance'], ['connexions', '📊  Connexions'], ['reprise', '📋  Reprendre une promotion'], ['sauvegarde', '💾  Sauvegarde']];
 
+// sauvegarde complète téléchargée (administrateurs) ; notée dans le journal pour le rappel hebdomadaire (script 33)
+export async function telechargerSauvegarde() {
+  const d = await db.rpc('sauvegarde');
+  const n = Object.values(d.tables).reduce((a, t) => a + t.length, 0);
+  const t = new Date(), z = (n) => String(n).padStart(2, '0'), date = `${t.getFullYear()}-${z(t.getMonth() + 1)}-${z(t.getDate())}_${z(t.getHours())}h${z(t.getMinutes())}`;
+  telecharger(`sauvegarde_pilotage_scbh_${date}.json`, JSON.stringify(d), 'application/json');
+  await db.ajouter('sauvegardes_faites', [{ quand: new Date().toISOString() }]).catch(() => null);
+  return n;
+}
+
 export async function pageAdmin(zone, arg, ctx) {
   let onglet = ONGLETS.some(([k]) => k === arg) ? arg : 'comptes';
 
@@ -243,13 +253,6 @@ export async function pageAdmin(zone, arg, ctx) {
   }
 
   // ------------------------------------------------------------------------------------- sauvegarde et restauration
-  async function telechargerSauvegarde() {
-    const d = await db.rpc('sauvegarde');
-    const n = Object.values(d.tables).reduce((a, t) => a + t.length, 0);
-    const t = new Date(), z = (n) => String(n).padStart(2, '0'), date = `${t.getFullYear()}-${z(t.getMonth() + 1)}-${z(t.getDate())}_${z(t.getHours())}h${z(t.getMinutes())}`;
-    telecharger(`sauvegarde_pilotage_scbh_${date}.json`, JSON.stringify(d), 'application/json');
-    return n;
-  }
   function sauvegarde() {
     const fichier = h('input', { type: 'file', accept: '.json,application/json', class: 'champ' });
     const etat = h('p', { class: 'aide' });

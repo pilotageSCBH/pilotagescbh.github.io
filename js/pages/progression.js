@@ -3,7 +3,8 @@
 // Les séances se déplacent par glisser-déposer : les autres séances de la matière se décalent (semaines de cours seulement).
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { h, vider, toast, erreur, fenetre, confirmer, imprimer } from '../ui.js';
+import { h, vider, toast, erreur, fenetre, confirmer, imprimer, dateFr } from '../ui.js';
+import { ouvrirCahier } from '../cahier.js';
 
 const SEM_AN = 45;
 const VACANCES = ['Vacances', 'Epreuves', 'Stage'];
@@ -27,7 +28,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   const calendrierModifiable = !eleve && ctx.peutEcrire();                // tout compte qui peut modifier (pas « lecture seule »)
 
   // ------------------------------------------------------------------------------------- données
-  let semaines, jours, cases, seances, sequences, commentaires;
+  let semaines, jours, cases, seances, sequences, commentaires, faites = null;
   async function charger() {
     if (eleve) {
       const d = eleve.donnees;
@@ -44,7 +45,8 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       db.lire('progression_cases', `promotion_id=eq.${P.id}`), db.lire('sequences', `promotion_id=eq.${P.id}&order=matiere_id,numero`)]);
     const [se, co] = await Promise.all([
       sq.length ? db.lire('seances', `sequence_id=in.(${sq.map((x) => x.id).join(',')})&order=numero`) : [],
-      db.lire('commentaires', `promotion_id=eq.${P.id}&order=cree_le`).catch(() => [])]);
+      db.lire('commentaires', `promotion_id=eq.${P.id}&order=cree_le`).catch(() => []),
+      db.lire('seances_realisees', `promotion_id=eq.${P.id}`).then((l) => { faites = new Map(l.map((r) => [r.seance_id, r])); }).catch(() => { faites = null; })]);
     commentaires = new Map();
     for (const x of co) commentaires.set(x.seance_id, (commentaires.get(x.seance_id) || []).concat(x));
     semaines = new Map(s.map((x) => [x.semaine, x]));
@@ -514,6 +516,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       const pb = suite ? [] : problemes(se);
       if (pb.length) puce.append(h('span', { class: 'alerte-pre', title: 'Prérequis pas encore faits à cette date :\n' + pb.map((p) =>
         `${etiq(p.y)} ${p.y.titre || ''} — ${p.dy === null ? 'pas placée' : 'placée ' + libSemaine(p.dy)}`).join('\n') }, '⚠ antériorité'));
+      if (faites?.has(se.id) && !suite) puce.append(h('span', { class: 'marque-faite', title: 'Séance faite le ' + dateFr(faites.get(se.id).fait_le) }, '✔'));
       const nbc = (commentaires.get(se.id) || []).length;
       if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
       if (modif && !vac) puce.append(boutonRetrait(m, w, suite));
@@ -644,12 +647,35 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       } });
     } else boutons.push({ texte: 'Fermer', valeur: false });
     const com = c.seance_id && seances.has(c.seance_id) ? blocCommentaires(seances.get(c.seance_id)) : null;
+    const outils = c.seance_id && seances.has(c.seance_id) ? outilsSeance(m, seances.get(c.seance_id)) : null;
     await fenetre(`${m.nom} · ${libSemaine(w)}`, h('div', { class: 'formulaire etroit' },
       vac ? h('p', { class: 'aide' }, `Semaine « ${vac} » : pas de séance.`) : null,
       !modif ? h('p', { class: 'aide' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
       vac ? null : h('label', {}, 'Séance', choix), vac ? null : zone2, vac ? null : h('label', {}, 'ou texte libre', libre),
-      h('label', {}, 'Note', note), infos, com?.el), boutons, { large: true });
+      h('label', {}, 'Note', note), infos, outils, com?.el), boutons, { large: true });
     if (com?.change()) dessiner();
+  }
+
+  // séance faite (progression réelle) et texte du cahier de textes (Pronote)
+  function outilsSeance(m, x) {
+    const el = h('div', { class: 'outils-seance' });
+    const dessinerO = () => {
+      const f = faites?.get(x.id), peut = faites && ctx.peutEcrire() && ctx.enseigne(m.id);
+      const cb = h('input', { type: 'checkbox', checked: !!f, disabled: !peut, onchange: async () => {
+        try {
+          if (f) { await db.supprimer('seances_realisees', f.id); faites.delete(x.id); toast('Séance de nouveau « à faire »'); }
+          else { const [r] = await db.ajouter('seances_realisees', [{ promotion_id: P.id, seance_id: x.id }]); faites.set(x.id, r); toast('Séance marquée comme faite'); }
+          dessinerO(); dessiner();
+        } catch (e) { erreur(e); }
+      } });
+      vider(el, faites ? h('label', { class: 'interrupteur' }, cb, f ? `Séance ${num(x)} faite le ${dateFr(f.fait_le)}` : `Séance ${num(x)} faite`) : null,
+        h('button', { class: 'btn petit', type: 'button', onclick: async () => {
+          const fi = (await db.lire('fiches_seance', `seance_id=eq.${x.id}&select=maison_avant,maison_apres`).catch(() => []))[0];
+          ouvrirCahier(x, m, fi, ctx.codeMat(m), (k) => `${k} ${ref.sav[k]?.libelle_court || ''}`.trim());
+        } }, '📋 Cahier de textes (Pronote)'));
+    };
+    dessinerO();
+    return el;
   }
 
   // commentaires d'une séance : chaque enseignant peut en ajouter, visibles par tous ou par lui seul

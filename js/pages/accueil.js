@@ -1,15 +1,20 @@
 // Page d'accueil (page d’accueil) présentée comme l'accueil d'un site : bandeau de bienvenue, accès rapides,
 // « cette semaine » (évaluations, notes à saisir, alertes), la promotion en chiffres, les matières et un pied de page.
 import { db, identifiantDe, emailConnecte } from '../api.js';
-import { h, vider, heures } from '../ui.js';
+import { h, vider, heures, toast, erreur } from '../ui.js';
 import { choixPromotion } from '../app.js';
-import { chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineIso, lundi, aujourdhui, SEM_AN, NB_SEM, TYPES_EVAL } from '../pilotage.js';
+import { retardsParMatiere, chargerSuivi, listeEvaluations, calculerAlertes, mesMatieres, semaineActuelle, semaineIso, lundi, aujourdhui, SEM_AN, NB_SEM, TYPES_EVAL } from '../pilotage.js';
 
 const majuscule = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export async function pageAccueil(zone, _arg, ctx) {
   const P = ctx.promo;
-  const [D, tous, ref] = await Promise.all([chargerSuivi(ctx), db.lire('eleves', `promotion_id=eq.${P.id}`), ctx.referentiel()]);
+  const moi = ctx.profil?.id;
+  const [D, tous, ref, reglages, mesCours, mesPubs, derniereSauv] = await Promise.all([chargerSuivi(ctx), db.lire('eleves', `promotion_id=eq.${P.id}`), ctx.referentiel(),
+    moi ? db.lire('ressources_reglages', `proprietaire=eq.${moi}`).catch(() => []) : [],
+    moi ? db.lire('biblio_livres', `proprietaire=eq.${moi}&espace=eq.cours&select=id&limit=1`).catch(() => []) : [],
+    moi ? db.lire('publications_eleves', `proprietaire=eq.${moi}&select=id&limit=1`).catch(() => []) : [],
+    ctx.estAdmin() ? db.lire('sauvegardes_faites', 'order=quand.desc&limit=1').catch(() => null) : null]);
   const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
   const seances = [...D.seances.values()];
 
@@ -59,6 +64,53 @@ export async function pageAccueil(zone, _arg, ctx) {
     ['👥', 'Élèves', 'Liste, effectifs et fiches des élèves', '#/eleves'],
   ];
 
+  // ------------------------------------------------------------------ rappel de sauvegarde (administrateurs, script 33)
+  const joursDepuis = (d) => Math.floor((Date.now() - new Date(d)) / 86400000);
+  const blocSauvegarde = Array.isArray(derniereSauv) && (!derniereSauv.length || joursDepuis(derniereSauv[0].quand) >= 7)
+    ? h('section', { class: 'rappel-sauvegarde' },
+      h('span', { class: 'gros' }, '💾'),
+      h('div', {}, h('b', {}, derniereSauv.length ? `Dernière sauvegarde il y a ${joursDepuis(derniereSauv[0].quand)} jours` : 'Aucune sauvegarde enregistrée'),
+        h('p', {}, 'Une sauvegarde par semaine met les données de toute l’équipe à l’abri d’une erreur. Gardez le fichier en lieu sûr : il contient des données personnelles des élèves.')),
+      h('button', { class: 'btn principal', type: 'button', onclick: async (e) => {
+        e.target.disabled = true;
+        try { const { telechargerSauvegarde } = await import('./admin.js'); const n = await telechargerSauvegarde(); toast(`Sauvegarde téléchargée (${n} lignes)`); e.target.closest('.rappel-sauvegarde')?.remove(); }
+        catch (x) { erreur(x); e.target.disabled = false; }
+      } }, '⬇ Télécharger la sauvegarde')) : null;
+
+  // ------------------------------------------------------------------ avancement réel de mes séances (séances cochées « faites »)
+  const retards = dansFormation && perso ? retardsParMatiere(D, mats.filter((m) => ctx.enseigne(m.id)), w) : [];
+  const blocAvancement = D.faites && perso ? h('section', { class: 'bloc-accueil carte-accueil avancement' },
+    h('div', { class: 'carte-accueil-tete' }, h('h2', { class: 'titre-accueil' }, 'Avancement de mes séances'), h('a', { href: '#/semaine' }, 'Cocher dans Ma semaine →')),
+    retards.some((r) => r.suivie) ? h('ul', { class: 'liste-avancement' }, retards.map((r) => h('li', { style: { '--couleur': r.m.couleur } },
+      h('div', { class: 'tete-avancement' }, h('b', {}, r.m.nom), h('span', {}, `${r.faites} faite(s) · ${r.prevues} prévue(s) avant cette semaine`)),
+      !r.suivie ? h('small', { class: 'gris' }, 'Pas encore suivi : cochez « Marquer comme faite » sur vos séances.')
+        : r.enRetard.length ? h('small', { class: 'retard' }, `⏳ ${r.enRetard.length} séance(s) en retard : `, r.enRetard.slice(0, 4).map((x, i) => [i ? ', ' : '', h('a', { href: `#/fiches/${x.seq.id}:seance-${x.id}` }, `${ctx.codeMat(r.m)} ${x.seq.numero}.${x.numero}`)]), r.enRetard.length > 4 ? '…' : '')
+          : h('small', { class: 'a-jour' }, '✅ À jour par rapport à la progression'))))
+      : h('p', { class: 'aide' }, 'Dans « Ma semaine » ou dans la progression, cochez « Marquer comme faite » quand une séance a eu lieu : vous verrez ici l’écart entre le prévu et le réalisé, matière par matière.')) : null;
+
+  // ------------------------------------------------------------------ premiers pas (nouveau collègue) : se coche tout seul
+  const CLE_PP = 'pilotage-scbh-premiers-pas-masques-' + (moi || '');
+  let masque = false; try { masque = localStorage.getItem(CLE_PP) === '1'; } catch { /* sans stockage */ }
+  let videoVue = false; try { videoVue = !!localStorage.getItem('pilotage-scbh-video-vue'); } catch { /* sans stockage */ }
+  const mesIds = new Set(ctx.matieres.filter((m) => ctx.enseigne(m.id)).map((m) => m.id));
+  const etapes = [
+    ['▶', 'Regarder la vidéo « Découvrir le site en 3 minutes »', videoVue, '#/aide'],
+    ['☁', 'Indiquer le lien de partage Nuage de « Mes cours »', !!(reglages[0]?.lien_cours), '#/cours'],
+    ['🎓', 'Ajouter mes premiers cours', mesCours.length > 0, '#/cours'],
+    ['📘', 'Compléter mon séquençage (séquences et séances)', seances.some((x) => mesIds.has(x.mat?.id) && x.titre), monSeq ? '#/sequencage/' + monSeq.id : '#/synthese'],
+    ['🗓', 'Placer mes séances dans la progression', D.cases.some((c) => c.seance_id && mesIds.has(c.matiere_id)), '#/progression'],
+    ['✅', 'Préparer une fiche contrat', D.contrats.some((c) => mesIds.has(D.seances.get(c.seance_id)?.mat?.id ?? D.seqs.get(c.sequence_id)?.matiere_id ?? c.matiere_id)), '#/fiches/formatifs'],
+    ['👁', 'Partager un cours avec ma classe', mesPubs.length > 0 || D.cases.some((c) => c.seance_id && mesIds.has(c.matiere_id) && (D.seances.get(c.seance_id)?.cours_lies || []).length), '#/cours'],
+  ];
+  const faitesPP = etapes.filter((e) => e[2]).length;
+  const blocPremiersPas = ctx.peutEcrire() && mesIds.size && !masque && faitesPP < etapes.length ? h('section', { class: 'bloc-accueil premiers-pas' },
+    h('div', { class: 'carte-accueil-tete' }, h('h2', { class: 'titre-accueil' }, `🚀 Premiers pas · ${faitesPP} / ${etapes.length}`),
+      h('button', { class: 'lien petit', type: 'button', onclick: (e) => { try { localStorage.setItem(CLE_PP, '1'); } catch { /* sans stockage */ } e.target.closest('.premiers-pas')?.remove(); } }, 'Masquer')),
+    h('div', { class: 'jauge-pp' }, h('i', { style: { width: pc(faitesPP, etapes.length) + '%' } })),
+    h('ol', { class: 'liste-pp' }, etapes.map(([ic, t, ok, l]) => h('li', { class: ok ? 'fait' : '' },
+      h('span', { class: 'coche-pp' }, ok ? '✔' : ic), h('a', { href: l }, t)))),
+    h('p', { class: 'aide petit' }, 'Chaque étape se coche toute seule quand elle est faite. Besoin d’aide ? ', h('a', { href: '#/aide' }, 'Aide, vidéos et assistant'), '.')) : null;
+
   const jauge = (lib, val, total, lien, detail) => h('a', { class: 'chiffre-ligne', href: lien },
     h('div', { class: 'chiffre-tete' }, h('span', {}, lib), h('b', {}, `${val} / ${total}`), h('em', {}, `${pc(val, total)} %`)),
     h('div', { class: 'chiffre-jauge' }, h('i', { style: { width: pc(val, total) + '%' } })),
@@ -81,6 +133,7 @@ export async function pageAccueil(zone, _arg, ctx) {
         h('img', { src: 'img/logo.jpg', alt: 'BTS Systèmes constructifs bois et habitat' }),
         h('label', { class: 'hero-promo' }, h('span', {}, 'Promotion affichée'), choixPromotion('grand')))),
 
+    blocSauvegarde, blocPremiersPas,
     // ---------------------------------------------------------------- accès rapides
     h('section', { class: 'bloc-accueil' },
       h('h2', { class: 'titre-accueil' }, 'Accès rapides'),
@@ -116,6 +169,7 @@ export async function pageAccueil(zone, _arg, ctx) {
         jauge('Compétences transversales', transT, trans.length, '#/couverture/competences', 'C5 et C6'),
         jauge('Savoirs associés', savTraites, ref.savoirs.length, '#/couverture/savoirs'))),
 
+    blocAvancement,
     // ---------------------------------------------------------------- matières
     h('section', { class: 'bloc-accueil' },
       h('h2', { class: 'titre-accueil' }, 'Les matières professionnelles'),
