@@ -15,6 +15,7 @@ async function rpcEleve(fonction, args = {}) {
     case 'eleve_donnees': return db.rpc('apercu_eleve_donnees', { p });
     case 'eleve_qcm_liste': return db.rpc('apercu_qcm_liste', { p });
     case 'eleve_details_seances': return db.rpc('apercu_details_seances', { p });
+    case 'eleve_matieres_documents': return db.rpc('apercu_matieres_documents', { p });
     case 'eleve_qcm_ouvrir': return db.rpc('apercu_qcm_ouvrir', { q: args.session });
     case 'eleve_qcm_rendre': { const c = await db.rpc('apercu_qcm_rendre', { q: args.session, reponses: args.reponses }); corrigesApercu.set(args.session, c); return c; }
     case 'eleve_qcm_correction': { if (corrigesApercu.has(args.session)) return corrigesApercu.get(args.session); throw new Error('Aperçu : faites d’abord le QCM.'); }
@@ -46,7 +47,8 @@ const niveau = (n) => (n === null || n === undefined ? 'NE' : n < 2 ? 'NA' : n <
 
 async function donnees(force = false) {
   if (D && !force && Date.now() - charge < 120000) return D;
-  const [r, details] = await Promise.all([rpcEleve('eleve_donnees'), rpcEleve('eleve_details_seances').catch(() => [])]);   // détails : script 32
+  const [r, details, matDocs] = await Promise.all([rpcEleve('eleve_donnees'), rpcEleve('eleve_details_seances').catch(() => []),   // détails : script 32
+    rpcEleve('eleve_matieres_documents').catch(() => [])]);   // matières des auteurs : script 34
   const det = new Map((details || []).map((x) => [x.id, x]));
   r.seances = (r.seances || []).map((x) => ({ ...x, ...(det.get(x.id) || {}) }));
   const mats = new Map((r.matieres || []).map((m) => [m.id, m]));
@@ -54,8 +56,36 @@ async function donnees(force = false) {
   const seances = new Map((r.seances || []).map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: mats.get(seqs.get(x.sequence_id)?.matiere_id) }]));
   D = { ...r, P: (r.promotions || [])[0], mats, seqs, seances, docs: new Map((r.documents || []).map((d) => [d.id, d])),
     dossiers: new Map((r.dossiers || []).map((t) => [t.id, t])) };
+  D.matDoc = matieresDocuments(D, new Map((matDocs || []).map((x) => [x.id, x.matieres || []])));
   charge = Date.now();
   return D;
+}
+// matière(s) de chaque document : 1) les séances qui le mobilisent ; 2) à défaut, les autres documents de son dossier
+// (ou d'un dossier parent) ; 3) à défaut, la ou les matières de l'enseignant qui l'a publié. Rien → « Autres documents ».
+function matieresDocuments(D, deLAuteur) {
+  const parSeance = new Map();
+  for (const x of D.seances.values()) for (const c of x.cours_lies || []) if (x.mat && D.docs.has(c.id)) {
+    if (!parSeance.has(c.id)) parSeance.set(c.id, new Set());
+    parSeance.get(c.id).add(x.mat.id);
+  }
+  const parDossier = new Map();
+  for (const [id, s] of parSeance) {
+    const t = D.docs.get(id).theme_id; if (t == null) continue;
+    if (!parDossier.has(t)) parDossier.set(t, new Set());
+    for (const m of s) parDossier.get(t).add(m);
+  }
+  const duDossier = (t) => { let n = 0; while (t != null && n++ < 30) { if (parDossier.has(t)) return parDossier.get(t); t = D.dossiers.get(t)?.parent_id; } return null; };
+  const r = new Map();
+  for (const d of D.docs.values()) {
+    const s = parSeance.get(d.id) || duDossier(d.theme_id) || new Set((deLAuteur.get(d.id) || []).filter((m) => D.mats.has(m)));
+    r.set(d.id, [...s]);
+  }
+  return r;
+}
+// onglets par matière (comme « Ma formation ») ; cle 'autres' pour ce qui n'a pas de matière
+function ongletsMatieres(liste, actif, lien, compte) {
+  return h('nav', { class: 'onglets' }, liste.map((x) => h('a', { href: lien(x), class: x.cle === actif ? 'actif' : '', style: x.couleur ? { '--couleur': x.couleur } : null },
+    x.nom, compte && compte(x) ? h('span', { class: 'compte-onglet' }, String(compte(x))) : null)));
 }
 const codeMat = (m) => ({ Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' }[m?.abreviation] || (m?.abreviation || m?.nom || '?').slice(0, 2).toUpperCase());
 const etiquette = (x) => `${codeMat(x.mat)} ${x.seq?.numero}.${x.numero}`;
@@ -349,17 +379,25 @@ async function pageDocuments(zone, arg) {
   await donnees();
   const doc = /^\d+$/.test(arg || '') ? D.docs.get(Number(arg)) : null;
   if (doc) return ficheDocument(zone, doc);
+  // onglets : une matière par onglet (ordre de « Ma formation »), puis « Autres documents »
+  const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre)
+    .map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur, ids: new Set([...D.docs.keys()].filter((id) => (D.matDoc.get(id) || []).includes(m.id))) }))
+    .filter((g) => g.ids.size);
+  const sansMat = [...D.docs.keys()].filter((id) => !(D.matDoc.get(id) || []).length);
+  if (sansMat.length) groupes.push({ cle: 'autres', nom: groupes.length ? 'Autres documents' : 'Tous les documents', couleur: null, ids: new Set(sansMat) });
+  const voulu = /^m-/.test(arg || '') ? String(arg).slice(2) : null;
+  const g = groupes.find((x) => x.cle === voulu) || groupes[0];
   const chemin = (id) => { const l = []; let t = D.dossiers.get(id), n = 0; while (t && n++ < 30) { l.unshift(t.nom); t = D.dossiers.get(t.parent_id); } return l; };
-  const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher un document (titre, sommaire)…', 'aria-label': 'Rechercher un document' });
+  const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher un document dans toutes les matières (titre, sommaire)…', 'aria-label': 'Rechercher un document' });
   const liste = h('div', { class: 'arbre-docs' });
   // dossiers ouverts : mémorisés sur cet appareil (simple confort)
   const CLE = 'docs-ouverts';
   let ouverts; try { ouverts = new Set(JSON.parse(localStorage.getItem(CLE) || '[]')); } catch { ouverts = new Set(); }
   const memoriser = () => { try { localStorage.setItem(CLE, JSON.stringify([...ouverts])); } catch { /* stockage indisponible */ } };
   const tri = (x, y) => (x.ordre ?? 0) - (y.ordre ?? 0) || String(x.nom || x.titre || '').localeCompare(String(y.nom || y.titre || ''), 'fr', { numeric: true });
-  const dessiner = () => {
-    const t = sansAccent(champ.value).split(/\s+/).filter(Boolean);
-    const docs = [...D.docs.values()].filter((d) => !t.length || t.every((m) => sansAccent([d.titre, (GENRES[d.genre] || GENRES.cours)[1], chemin(d.theme_id).join(' '), (d.sommaire || []).map((e) => e.t).join(' ')].join(' ')).includes(m)));
+  const trouve = (d, t) => !t.length || t.every((m) => sansAccent([d.titre, (GENRES[d.genre] || GENRES.cours)[1], chemin(d.theme_id).join(' '), (d.sommaire || []).map((e) => e.t).join(' ')].join(' ')).includes(m));
+  // arborescence compacte d'une liste de documents (seuls les dossiers qui en contiennent apparaissent)
+  const arbre = (docs, t) => {
     const dossiers = [...D.dossiers.values()];
     const docsDe = (id) => docs.filter((d) => (D.dossiers.has(d.theme_id) ? d.theme_id : null) === id).sort(tri);
     const enfants = (id) => dossiers.filter((x) => (x.parent_id ?? null) === id && D.dossiers.has(x.id)).sort(tri);
@@ -373,15 +411,26 @@ async function pageDocuments(zone, arg) {
       return det;
     };
     const racines = enfants(null).map((x) => noeud(x, 0)).filter(Boolean), libres = docsDe(null);
-    vider(liste, docs.length ? [
-      racines.length ? h('div', { class: 'outils-arbre' },
-        h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier'),
-        h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier')) : null,
-      ...racines, libres.length ? h('div', { class: 'contenu-dossier racine' }, libres.map(ligneDocument)) : null]
-      : h('p', { class: 'vide' }, D.docs.size ? 'Aucun document ne correspond.' : 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
+    return [...racines, libres.length ? h('div', { class: 'contenu-dossier racine' }, libres.map(ligneDocument)) : null];
+  };
+  const outils = () => h('div', { class: 'outils-arbre' },
+    h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier'),
+    h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier'));
+  const nav = groupes.length ? ongletsMatieres(groupes, g?.cle, (x) => '#/documents/m-' + x.cle, (x) => x.ids.size) : null;
+  const dessiner = () => {
+    const t = sansAccent(champ.value).split(/\s+/).filter(Boolean);
+    if (!D.docs.size) return vider(liste, h('p', { class: 'vide' }, 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
+    if (nav) nav.hidden = t.length > 0;
+    if (!t.length) {   // l'onglet de la matière choisie
+      const docs = [...g.ids].map((id) => D.docs.get(id));
+      return vider(liste, D.dossiers.size ? outils() : null, arbre(docs, t));
+    }
+    // recherche : dans toutes les matières, résultats rangés par matière
+    const blocs = groupes.map((x) => { const docs = [...x.ids].map((id) => D.docs.get(id)).filter((d) => trouve(d, t)); return docs.length ? h('section', { class: 'matiere-docs', style: x.couleur ? { '--couleur': x.couleur } : null }, h('h2', { class: 'titre-matiere-docs' }, x.nom), arbre(docs, t)) : null; }).filter(Boolean);
+    vider(liste, blocs.length ? blocs : h('p', { class: 'vide' }, 'Aucun document ne correspond.'));
   };
   champ.addEventListener('input', dessiner);
-  vider(zone, entete('🎓  Mes cours', `${D.docs.size} document(s) publié(s) par vos enseignants`), h('div', { class: 'zone-recherche-eleve' }, champ), liste);
+  vider(zone, entete('🎓  Mes cours', `${D.docs.size} document(s) publié(s) par vos enseignants`), nav, h('div', { class: 'zone-recherche-eleve' }, champ), liste);
   dessiner();
 }
 // une ligne compacte de l'arborescence
@@ -514,9 +563,19 @@ async function pageQcmEleve(zone, arg) {
         x.faites ? h('a', { class: 'btn', href: '#/qcm/c-' + x.session }, 'Voir la correction') : null,
         e === 'ouvert' && !x.faites && reste <= 0 ? h('span', { class: 'gris' }, 'déjà fait') : null));
   };
-  const ouverts = l.filter((x) => etat(x) === 'ouvert'), avenir = l.filter((x) => etat(x) === 'avenir'), fermes = l.filter((x) => etat(x) === 'ferme');
+  // onglets par matière (comme « Ma formation »)
+  const cleDe = (x) => (D.mats.has(x.matiere_id) ? String(x.matiere_id) : 'autres');
+  const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre).map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur }))
+    .concat([{ cle: 'autres', nom: 'Autres QCM', couleur: null }]).filter((g) => l.some((x) => cleDe(x) === g.cle));
+  if (groupes.length === 1 && groupes[0].cle === 'autres') groupes[0].nom = 'Tous les QCM';
+  const aFaire = (g) => l.filter((x) => cleDe(x) === g.cle && etat(x) === 'ouvert' && x.tentatives - x.faites > 0).length;
+  const voulu = a.startsWith('m-') ? a.slice(2) : null;
+  const g = groupes.find((x) => x.cle === voulu) || groupes.find((x) => aFaire(x) > 0) || groupes[0];
+  const lg = g ? l.filter((x) => cleDe(x) === g.cle) : [];
+  const ouverts = lg.filter((x) => etat(x) === 'ouvert'), avenir = lg.filter((x) => etat(x) === 'avenir'), fermes = lg.filter((x) => etat(x) === 'ferme');
   vider(zone, entete('📝  Mes QCM', 'QCM proposés par vos enseignants'),
-    h('section', {}, h('h2', { class: 'titre-section' }, 'À faire maintenant'), ouverts.length ? ouverts.map(carte) : h('p', { class: 'vide' }, 'Aucun QCM ouvert pour l’instant.')),
+    groupes.length ? ongletsMatieres(groupes, g.cle, (x) => '#/qcm/m-' + x.cle, aFaire) : null,
+    h('section', {}, h('h2', { class: 'titre-section' }, 'À faire maintenant'), ouverts.length ? ouverts.map(carte) : h('p', { class: 'vide' }, l.length ? 'Aucun QCM ouvert dans cette matière pour l’instant.' : 'Aucun QCM ouvert pour l’instant.')),
     avenir.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Bientôt'), avenir.map(carte)) : null,
     fermes.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Terminés'), fermes.map(carte)) : null);
 }
