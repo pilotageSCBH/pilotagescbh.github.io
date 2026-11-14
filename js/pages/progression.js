@@ -112,10 +112,47 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   const contenu = (cle) => { if (cle.startsWith('s')) { const [a, b] = cle.slice(1).split('+'); return { seance_id: Number(a), seance2_id: b ? Number(b) : null, texte: '' }; }
     return { seance_id: null, seance2_id: null, texte: cle ? cle.slice(1) : '' }; };
   async function appliquer(m, T, avant, apres, message) {
-    const lignes = [];
-    T.forEach((w, i) => { if (avant[i] !== apres[i]) lignes.push({ semaine: w, ...contenu(apres[i]) }); });
-    try { await enregistrerCases(m, lignes); toast(message); } catch (e) { erreur(e); }
+    try {
+      const final = respecterVerrous(m, T, avant, apres);
+      const lignes = [];
+      T.forEach((w, i) => { if (avant[i] !== final[i]) lignes.push({ semaine: w, ...contenu(final[i]) }); });
+      await enregistrerCases(m, lignes);
+      toast(final.some((x, i) => x !== apres[i]) ? message + ' (les séances bloquées 🔒 n’ont pas bougé)' : message);
+    } catch (e) { erreur(e); }
     dessiner();
+  }
+  // séances bloquées 🔒 : elles gardent leurs semaines quoi qu'on fasse ; les autres séances s'écoulent autour d'elles, dans le même ordre
+  function respecterVerrous(m, T, avant, apres) {
+    const fixes = new Map();
+    T.forEach((w, i) => { if (avant[i] && bloquee(m, w)) fixes.set(i, avant[i]); });
+    if (!fixes.size) return apres;
+    // on retire de « apres » chaque semaine bloquée (l'occurrence de sa clé la plus proche de sa place d'origine)
+    const pris = new Set();
+    for (const [i, cle] of fixes) {
+      let best = -1;
+      apres.forEach((x, k) => { if (x === cle && !pris.has(k) && (best < 0 || Math.abs(k - i) < Math.abs(best - i))) best = k; });
+      if (best >= 0) pris.add(best);
+    }
+    const flux = apres.filter((_, k) => !pris.has(k));
+    const r = []; let j = 0;
+    for (let i = 0; i < T.length; i++) r.push(fixes.has(i) ? fixes.get(i) : (flux[j++] ?? ''));
+    if (flux.slice(j).some(Boolean)) throw new Error('Plus assez de semaines libres : les séances bloquées 🔒 empêchent ce décalage.');
+    return r;
+  }
+  const bloquee = (m, w) => !!caseDe(m, w)?.bloquee;
+  const erreurBloquee = () => new Error('Cette séance est bloquée 🔒 à sa date : débloquez-la d’abord (cliquez sa case).');
+  // semaines occupées par la séance (ou le texte) de la semaine w : toutes celles de la séance, ou le bloc consécutif du texte
+  function semainesDuBloc(m, w) {
+    const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i = T.indexOf(w), cle = v[i];
+    if (i < 0 || !cle) return [w];
+    if (cle.startsWith('s')) return T.filter((_, k) => v[k] === cle);
+    let a = i, b = i; while (a > 0 && v[a - 1] === cle) a--; while (b < v.length - 1 && v[b + 1] === cle) b++;
+    return T.slice(a, b + 1);
+  }
+  async function basculerBlocage(m, w, valeur) {
+    try { await enregistrerCases(m, semainesDuBloc(m, w).map((x) => ({ semaine: x, bloquee: valeur }))); }
+    catch (e) { throw /bloquee/.test(e.message) ? new Error('Exécutez d’abord le script SQL 35 dans Supabase pour pouvoir bloquer une séance.') : e; }
+    toast(valeur ? 'Séance bloquée 🔒 à sa date' : 'Séance débloquée');
   }
 
   // déplacer la séance (toutes ses semaines consécutives) de la semaine « de » pour qu'elle commence à la semaine « vers »
@@ -123,6 +160,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
     const T = semainesCours(), v = T.map((w) => cleDe(m, w));
     const i = T.indexOf(de), p = T.indexOf(vers);
     if (i < 0 || p < 0 || !v[i]) return;
+    if (bloquee(m, de)) return erreur(erreurBloquee());
     // semaine de suite glissée : elle seule se déplace, la séance de base reste en place
     if (estSuite(m, de)) {
       if (p === i) return;
@@ -165,6 +203,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   async function retirer(m, w, { suite = false, decaler = false } = {}) {
     const T = semainesCours(), v = T.map((x) => cleDe(m, x)), i = T.indexOf(w), cle = v[i];
     if (i < 0 || !cle) return;
+    if (bloquee(m, w)) return erreur(erreurBloquee());
     let idx;
     if (suite) idx = [i];
     else if (cle.startsWith('s')) idx = v.map((x, k) => (x === cle ? k : -1)).filter((k) => k >= 0);
@@ -175,6 +214,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   }
   // demande de confirmation (avec le choix de faire remonter les suivantes)
   async function demanderRetrait(m, w) {
+    if (bloquee(m, w)) { erreur(erreurBloquee()); return false; }
     const suite = estSuite(m, w), x = seanceDe(m, w), c = caseDe(m, w) || {};
     const remonter = h('input', { type: 'checkbox' });
     const quoi = suite ? `la semaine de suite (${libSemaine(w)}) de la séance ${x ? num(x) : '« ' + c.texte + ' »'}`
@@ -195,6 +235,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
     const T = semainesCours(), v = T.map((x) => cleDe(m, x));
     const i0 = estSuite(m, w) ? T.indexOf(w) : debutBloc(m, T, v, w);   // depuis une semaine de suite : la séance de base ne bouge pas
     if (i0 < 0 || !v[i0]) return;
+    if (bloquee(m, T[i0])) throw erreurBloquee();
     let apres;
     if (sens > 0) {
       if (v[v.length - 1]) throw new Error('La dernière semaine de cours de la formation est occupée : impossible de tout décaler.');
@@ -459,13 +500,14 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
           const pb = x && !suite ? problemes(x) : [];
           const nbc = x ? (commentaires.get(x.id) || []).length : 0;
           const n = p.fin - p.debut + 1;
-          const b = h('div', { class: 'frise-bloc' + (x ? (x.seq.numero % 2 ? '' : ' seq-paire') : ' libre') + (suite ? ' suite' : '') + (n === 1 ? ' court' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 2 },
-            draggable: modif ? 'true' : null,
+          const verrou = !eleve && bloquee(m, p.debut);
+          const b = h('div', { class: 'frise-bloc' + (x ? (x.seq.numero % 2 ? '' : ' seq-paire') : ' libre') + (suite ? ' suite' : '') + (n === 1 ? ' court' : '') + (verrou ? ' bloquee' : ''), style: { gridColumn: `${col(p.debut)} / ${col(p.fin) + 1}`, gridRow: 2 },
+            draggable: modif && !verrou ? 'true' : null,
             title: x ? `${num(x)} · ${x.titre || 'Séance sans titre'}\nSéquence ${x.seq.numero}${x.seq.intitule ? ' · ' + x.seq.intitule : ''}\n${libSemaine(p.debut)}${n > 1 ? ` → ${libSemaine(p.fin)} (${n} semaines)` : ''}`
               + (x.objectif_inter ? `\nObjectif : ${x.objectif_inter}` : '') + (c?.note ? `\nNote : ${c.note}` : '')
               + (pb.length ? '\n⚠ Prérequis pas encore faits : ' + pb.map((q) => etiq(q.y)).join(', ') : '')
               : `${c?.texte || ''}${c?.note ? '\nNote : ' + c.note : ''}` },
-            h('b', {}, x ? num(x) + (seance2De(m, p.debut) ? ' + ' + num(seance2De(m, p.debut)) : '') : '✎'), h('span', {}, x ? (suite ? '(suite)' : seance2De(m, p.debut) ? `${x.titre || ''} · ${seance2De(m, p.debut).titre || ''}` : x.titre || '') : c?.texte || ''),
+            h('b', {}, verrou ? '🔒 ' : '', x ? num(x) + (seance2De(m, p.debut) ? ' + ' + num(seance2De(m, p.debut)) : '') : '✎'), h('span', {}, x ? (suite ? '(suite)' : seance2De(m, p.debut) ? `${x.titre || ''} · ${seance2De(m, p.debut).titre || ''}` : x.titre || '') : c?.texte || ''),
             pb.length ? h('i', { class: 'frise-alerte', title: 'Antériorité non respectée' }, '⚠') : null,
             nbc ? h('i', { class: 'frise-com' }, '💬' + nbc) : null,
             c?.note ? h('i', { class: 'frise-note', title: c.note }, '✎') : null);
@@ -478,7 +520,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
           }
           b.addEventListener('pointerdown', viser);
           b.addEventListener('click', (e) => { if (b.classList.contains('glisse')) return; e.stopPropagation(); viser(e); ouvrirCase(m, sous); });
-          if (modif) {
+          if (modif && !verrou) {
             glisserDepuis(b, m, () => sous);
             const actions = h('span', { class: 'actions-bloc' });
             if (n > 1) actions.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Raccourcir : supprimer la dernière semaine (suite)',
@@ -526,26 +568,29 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
     const modif = ctx.enseigne(m.id);
     const c = caseDe(m, w), se = seanceDe(m, w), cle = cleDe(m, w);
     const td = h('td', { class: 'col-mat' + (vac ? ' hors-cours' : ''), style: { '--couleur': m.couleur } });
+    const verrou = !eleve && bloquee(m, w);
+    const bouge = modif && !vac && !verrou;   // une séance bloquée ne se glisse pas et ne se retire pas
     if (se) {
       const suite = enCours(w) && prec.get(m.id) === cle;
       const precSe = prec.get(m.id)?.startsWith('s') ? seances.get(parseInt(prec.get(m.id).slice(1), 10)) : null;
       if (!suite && (!precSe || precSe.seq.id !== se.seq.id)) td.append(h('div', { class: 'bande-seq' }, `Séquence ${se.seq.numero}`, se.seq.intitule ? ' · ' + se.seq.intitule : ''));
-      const puce = h('div', { class: 'puce' + (suite ? ' suite' : ''), draggable: modif && !vac ? 'true' : null,
+      const puce = h('div', { class: 'puce' + (suite ? ' suite' : '') + (verrou ? ' bloquee' : ''), draggable: bouge ? 'true' : null,
         title: se.objectifs_ops ? 'Objectifs opérationnels :\n' + se.objectifs_ops : (se.objectif_inter || '') },
+        verrou ? h('span', { class: 'cadenas', title: 'Séance bloquée à cette date : elle ne bouge pas quand on déplace ou décale les autres' }, '🔒') : null,
         h('b', {}, num(se)), ' ', suite ? h('span', { class: 'gris' }, '(suite)') : h('span', {}, se.titre || 'Séance sans titre'));
       if (detail && !suite) {
         if (se.objectif_inter) puce.append(h('div', { class: 'obj' }, se.objectif_inter));
         const codes = [...(se.competences || []), ...(se.savoirs || [])];
         if (codes.length) puce.append(h('div', { class: 'codes-prog' }, codes.map((x) => h('span', { title: ref.comp[x]?.libelle || ref.sav[x]?.libelle || '' }, x))));
       }
-      if (modif && !vac) glisserDepuis(puce, m, w);
+      if (bouge) glisserDepuis(puce, m, w);
       const pb = suite ? [] : problemes(se);
       if (pb.length) puce.append(h('span', { class: 'alerte-pre', title: 'Prérequis pas encore faits à cette date :\n' + pb.map((p) =>
         `${etiq(p.y)} ${p.y.titre || ''} — ${p.dy === null ? 'pas placée' : 'placée ' + libSemaine(p.dy)}`).join('\n') }, '⚠ antériorité'));
       if (faites?.has(se.id) && !suite) puce.append(h('span', { class: 'marque-faite', title: 'Séance faite le ' + dateFr(faites.get(se.id).fait_le) }, '✔'));
       const nbc = (commentaires.get(se.id) || []).length;
       if (nbc && !suite) puce.append(h('span', { class: 'bulle-com', title: `${nbc} commentaire(s) : cliquer pour les lire` }, '💬 ' + nbc));
-      if (modif && !vac) puce.append(boutonRetrait(m, w, suite));
+      if (bouge) puce.append(boutonRetrait(m, w, suite));
       td.append(puce);
       const se2 = seance2De(m, w);
       if (se2) {
@@ -553,13 +598,13 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
           h('b', {}, num(se2)), ' ', suite ? h('span', { class: 'gris' }, '(suite)') : h('span', {}, se2.titre || 'Séance sans titre'));
         if (detail && !suite && se2.objectif_inter) p2.append(h('div', { class: 'obj' }, se2.objectif_inter));
         if (eleve) p2.addEventListener('click', (e) => { e.stopPropagation(); eleve.ouvrir(se2.id); });
-        if (modif && !vac) p2.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Retirer cette 2e séance de la semaine',
+        if (bouge) p2.append(h('button', { class: 'retirer-puce', type: 'button', title: 'Retirer cette 2e séance de la semaine',
           onclick: async (e) => { e.stopPropagation(); try { await enregistrerCases(m, [{ semaine: w, seance2_id: null }]); toast('2e séance retirée'); dessiner(); } catch (er) { erreur(er); } } }, '✖'));
         td.append(p2);
       }
     } else if (c?.texte) {
-      const puce = h('div', { class: 'puce libre', draggable: modif && !vac ? 'true' : null }, c.texte);
-      if (modif && !vac) { glisserDepuis(puce, m, w); puce.append(boutonRetrait(m, w, estSuite(m, w))); }
+      const puce = h('div', { class: 'puce libre' + (verrou ? ' bloquee' : ''), draggable: bouge ? 'true' : null }, verrou ? h('span', { class: 'cadenas', title: 'Bloqué à cette date' }, '🔒') : null, c.texte);
+      if (bouge) { glisserDepuis(puce, m, w); puce.append(boutonRetrait(m, w, estSuite(m, w))); }
       td.append(puce);
     } else if (c?.seance_id) {
       td.append(h('div', { class: 'puce libre' }, 'Séance supprimée du séquençage'));
@@ -649,7 +694,21 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
     libre.addEventListener('input', () => { if (libre.value) { choix.value = ''; choix2.value = ''; majZone2(); montrer(); } });
     montrer();
     const boutons = [];
-    if (modif && !vac) {
+    const verrou = !!c.bloquee;
+    const cbVerrou = h('input', { type: 'checkbox', checked: verrou, disabled: !modif || !!vac });
+    const zoneVerrou = (c.seance_id || c.texte) && !vac ? h('div', { class: 'zone-verrou' + (verrou ? ' actif' : '') },
+      h('label', { class: 'interrupteur' }, cbVerrou, '🔒 Bloquer cette séance à cette date'),
+      h('p', { class: 'aide' }, verrou ? 'Elle ne bouge plus : quand vous déplacez, insérez ou décalez d’autres séances, elles passent avant ou après elle. Décochez pour pouvoir la modifier ou la déplacer.'
+        : 'Une séance bloquée garde sa ou ses semaines quoi qu’on fasse : les autres séances se décalent autour d’elle.')) : null;
+    if (verrou) { choix.disabled = true; choix2.disabled = true; libre.readOnly = true; }
+    if (modif && !vac && verrou) {
+      boutons.push({ texte: 'Annuler', valeur: false });
+      boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
+        if (note.value.trim() !== (c.note || '')) await enregistrerCases(m, [{ semaine: w, note: note.value.trim() }]);
+        if (!cbVerrou.checked) await basculerBlocage(m, w, false); else toast('Enregistré');
+        dessiner(); return true;
+      } });
+    } else if (modif && !vac) {
       if (c.seance_id || c.texte) boutons.push({ texte: estSuite(m, w) ? '✖  Supprimer cette suite' : '✖  Retirer de la progression', classe: 'gauche danger-texte',
         action: async () => (await demanderRetrait(m, w)) ? true : false });
       if (c.seance_id || c.texte) {
@@ -669,7 +728,8 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
         if (choix2.value && choix2.value === choix.value) throw new Error('Choisissez deux séances différentes.');
         const nv = choix.value ? { seance_id: Number(choix.value), seance2_id: choix2.value ? Number(choix2.value) : null, texte: '' } : { seance_id: null, seance2_id: null, texte: libre.value.trim() };
         await enregistrerCases(m, [{ semaine: w, ...nv, note: note.value.trim() }]);
-        toast('Enregistré'); dessiner(); return true;
+        if (cbVerrou.checked && (nv.seance_id || nv.texte)) await basculerBlocage(m, w, true); else toast('Enregistré');
+        dessiner(); return true;
       } });
     } else boutons.push({ texte: 'Fermer', valeur: false });
     const com = c.seance_id && seances.has(c.seance_id) ? blocCommentaires(seances.get(c.seance_id)) : null;
@@ -678,7 +738,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       vac ? h('p', { class: 'aide' }, `Semaine « ${vac} » : pas de séance.`) : null,
       !modif ? h('p', { class: 'aide' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
       vac ? null : h('label', {}, 'Séance', choix), vac ? null : zone2, vac ? null : h('label', {}, 'ou texte libre', libre),
-      h('label', {}, 'Note', note), infos, outils, com?.el), boutons, { large: true });
+      zoneVerrou, h('label', {}, 'Note', note), infos, outils, com?.el), boutons, { large: true });
     if (com?.change()) dessiner();
   }
 
