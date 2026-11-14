@@ -381,14 +381,13 @@ async function pageDocuments(zone, arg) {
   if (doc) return ficheDocument(zone, doc);
   // onglets : une matière par onglet (ordre de « Ma formation »), puis « Autres documents »
   const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre)
-    .map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur, ids: new Set([...D.docs.keys()].filter((id) => (D.matDoc.get(id) || []).includes(m.id))) }))
-    .filter((g) => g.ids.size);
+    .map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur, ids: new Set([...D.docs.keys()].filter((id) => (D.matDoc.get(id) || []).includes(m.id))) }));   // toutes les matières, même vides
   const sansMat = [...D.docs.keys()].filter((id) => !(D.matDoc.get(id) || []).length);
   if (sansMat.length) groupes.push({ cle: 'autres', nom: groupes.length ? 'Autres documents' : 'Tous les documents', couleur: null, ids: new Set(sansMat) });
   const voulu = /^m-/.test(arg || '') ? String(arg).slice(2) : null;
-  const g = groupes.find((x) => x.cle === voulu) || groupes[0];
+  const g = groupes.find((x) => x.cle === voulu) || groupes.find((x) => x.ids.size) || groupes[0];
   const chemin = (id) => { const l = []; let t = D.dossiers.get(id), n = 0; while (t && n++ < 30) { l.unshift(t.nom); t = D.dossiers.get(t.parent_id); } return l; };
-  const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher un document dans toutes les matières (titre, sommaire)…', 'aria-label': 'Rechercher un document' });
+  const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher dans toutes les matières…', 'aria-label': 'Rechercher un document' });
   const liste = h('div', { class: 'arbre-docs' });
   // dossiers ouverts : mémorisés sur cet appareil (simple confort)
   const CLE = 'docs-ouverts';
@@ -422,7 +421,8 @@ async function pageDocuments(zone, arg) {
     if (!D.docs.size) return vider(liste, h('p', { class: 'vide' }, 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
     if (nav) nav.hidden = t.length > 0;
     if (!t.length) {   // l'onglet de la matière choisie
-      const docs = [...g.ids].map((id) => D.docs.get(id));
+      const docs = g ? [...g.ids].map((id) => D.docs.get(id)) : [];
+      if (!docs.length) return vider(liste, h('p', { class: 'vide' }, `Aucun document publié en ${g?.nom || 'cette matière'} pour l’instant.`));
       return vider(liste, D.dossiers.size ? outils() : null, arbre(docs, t));
     }
     // recherche : dans toutes les matières, résultats rangés par matière
@@ -566,7 +566,7 @@ async function pageQcmEleve(zone, arg) {
   // onglets par matière (comme « Ma formation »)
   const cleDe = (x) => (D.mats.has(x.matiere_id) ? String(x.matiere_id) : 'autres');
   const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre).map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur }))
-    .concat([{ cle: 'autres', nom: 'Autres QCM', couleur: null }]).filter((g) => l.some((x) => cleDe(x) === g.cle));
+    .concat(l.some((x) => cleDe(x) === 'autres') ? [{ cle: 'autres', nom: 'Autres QCM', couleur: null }] : []);   // toutes les matières, même vides
   if (groupes.length === 1 && groupes[0].cle === 'autres') groupes[0].nom = 'Tous les QCM';
   const aFaire = (g) => l.filter((x) => cleDe(x) === g.cle && etat(x) === 'ouvert' && x.tentatives - x.faites > 0).length;
   const voulu = a.startsWith('m-') ? a.slice(2) : null;
@@ -575,7 +575,7 @@ async function pageQcmEleve(zone, arg) {
   const ouverts = lg.filter((x) => etat(x) === 'ouvert'), avenir = lg.filter((x) => etat(x) === 'avenir'), fermes = lg.filter((x) => etat(x) === 'ferme');
   vider(zone, entete('📝  Mes QCM', 'QCM proposés par vos enseignants'),
     groupes.length ? ongletsMatieres(groupes, g.cle, (x) => '#/qcm/m-' + x.cle, aFaire) : null,
-    h('section', {}, h('h2', { class: 'titre-section' }, 'À faire maintenant'), ouverts.length ? ouverts.map(carte) : h('p', { class: 'vide' }, l.length ? 'Aucun QCM ouvert dans cette matière pour l’instant.' : 'Aucun QCM ouvert pour l’instant.')),
+    h('section', {}, h('h2', { class: 'titre-section' }, 'À faire maintenant'), ouverts.length ? ouverts.map(carte) : h('p', { class: 'vide' }, l.length ? `Aucun QCM ouvert en ${g.nom} pour l’instant.` : 'Aucun QCM ouvert pour l’instant.')),
     avenir.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Bientôt'), avenir.map(carte)) : null,
     fermes.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Terminés'), fermes.map(carte)) : null);
 }
