@@ -848,6 +848,15 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%235F6F6C' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px center; }
 .champ.recherche-aide::placeholder { color: #6B7A77; opacity: 1; }
 .resultat-aide { margin: 8px 0 0 !important; font-weight: 700; min-height: 1em; }
+.propositions-aide { max-width: 680px; margin-top: 8px; background: #fff; color: var(--texte, #1F2D2B); border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.18); padding: 6px; display: flex; flex-direction: column; }
+.propositions-aide[hidden] { display: none; }
+.proposition-aide { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; text-align: left; background: none; border: 0; border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 14px; color: inherit; cursor: pointer; }
+.proposition-aide:hover, .proposition-aide:focus-visible { background: #E6F3F1; outline: none; }
+.proposition-aide span { font-weight: 600; }
+.proposition-aide small { color: #6B7A77; white-space: nowrap; flex-shrink: 0; }
+.propositions-aide .plus-aide { margin: 4px 12px 2px !important; font-size: 12.5px; color: #6B7A77; opacity: 1 !important; }
+@media (max-width: 640px) { .proposition-aide { flex-direction: column; gap: 0; } }
+@media print { .propositions-aide { display: none !important; } }
 .themes-aide { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .theme-aide { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-decoration: none; color: var(--texte);
   background: var(--carte); border-radius: 12px; padding: 10px 12px; box-shadow: var(--ombre); border: 2px solid transparent; transition: transform .12s, border-color .12s; }

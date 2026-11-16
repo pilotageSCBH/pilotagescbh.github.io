@@ -268,6 +268,7 @@ export async function pageAide(zone, arg) {
   const actif = SECTIONS.some(([k]) => k === arg) ? arg : null;
   const recherche = h('input', { class: 'champ recherche-aide', type: 'search', placeholder: 'Rechercher dans l’aide : code oublié, imprimer, coefficient, frise…' });
   const resultat = h('p', { class: 'resultat-aide' });
+  const propositions = h('div', { class: 'propositions-aide', hidden: true });
   const sections = SECTIONS.map(([k, t, items]) => {
     const fiches = items.map(([q, r]) => {
       const el = h('details', { class: 'question-aide', open: !!actif && k === actif }, h('summary', {}, q), h('p', {}, r));
@@ -288,11 +289,18 @@ export async function pageAide(zone, arg) {
       s.sec.hidden = vis === 0; n += vis;
     }
     resultat.textContent = q ? (n ? `${n} réponse(s) trouvée(s)` : 'Aucune réponse : essayez un autre mot.') : '';
+    // propositions (titres) juste sous le champ
+    const trouves = q ? sections.flatMap((s) => s.fiches.filter((f) => !f.hidden).map((f) => ({ f, t: SECTIONS.find(([k]) => k === s.k)[1] }))) : [];
+    vider(propositions, trouves.slice(0, 8).map(({ f, t }) => h('button', { type: 'button', class: 'proposition-aide', onclick: () => {
+      f.open = true; f.scrollIntoView({ behavior: 'smooth', block: 'center' }); f.classList.add('cible-aide'); setTimeout(() => f.classList.remove('cible-aide'), 2500);
+    } }, h('span', {}, f.querySelector('summary').textContent), h('small', {}, t))),
+      trouves.length > 8 ? h('p', { class: 'plus-aide' }, `… et ${trouves.length - 8} autre(s) plus bas dans la page`) : null);
+    propositions.hidden = !trouves.length;
   });
   vider(zone,
     h('section', { class: 'hero-aide' },
       h('div', {}, h('h1', {}, 'Aide'), h('p', {}, 'Tout ce qu’il faut pour prendre en main l’application : deux vidéos, un assistant qui répond à vos questions, et toutes les fiches par thème.')),
-      recherche, resultat),
+      recherche, resultat, propositions),
     blocVideos(),
     assistant(),
     h('nav', { class: 'themes-aide' }, SECTIONS.map(([k, t, items]) => h('a', { href: '#/aide/' + k, class: 'theme-aide' + (k === actif ? ' actif' : '') },
