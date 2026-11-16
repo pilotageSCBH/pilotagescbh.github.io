@@ -541,7 +541,7 @@ textarea.champ.petit-texte { font-size: 12px; margin-top: 3px; }
 .infos-seance .pre-ok { color: #2E6B0E; } .infos-seance .pre-ko { color: var(--rouge); font-weight: 700; }
 
 /* ------------------------------------------------------------------ cellules automatiques (calculées ou reprises) : grisées */
-:root { --auto: #EFF1F0; --auto-fonce: #E1E5E3; }
+:root { --auto: #EBEEED; --auto-fonce: #DFE4E2; }
 /* fiches : informations et rubriques reprises du séquençage */
 .grille-infos .val, .grille-infos .valeur { background: var(--auto); align-self: stretch; display: flex; align-items: center; }
 .rubrique > p, .rubrique > .codes-fiche, .rubrique > .gris { background: var(--auto) !important; }
@@ -2317,3 +2317,20 @@ table.validation td.manuel { background-image: linear-gradient(225deg, #1F6FB2 0
 .choix-niveau button:hover { opacity: .85; }
 .choix-niveau button.choisi { opacity: 1; border-color: currentColor; box-shadow: 0 0 0 3px rgba(0,0,0,.08); }
 .choix-niveau button small { color: inherit; }
+
+/* =====================================================================  cases à remplir / cases automatiques
+   À remplir : fond crème, bord pointillé doré. Automatique : gris (var(--auto)), sans bord de saisie. */
+:root { --saisie: #FFF9E3; --saisie-bord: #D9C27A; }
+main .champ:not(.lecture):not([readonly]):not(:disabled):not([type=search]):not(.entete-page *):not(.actions-page *):not(.zone-recherche-biblio *):not(.zone-recherche-eleve *) {
+  background-color: var(--saisie) !important; border: 1px dashed var(--saisie-bord) !important; }
+main .champ:not(.lecture):not([readonly]):not(:disabled):not([type=search]):not(.entete-page *):not(.actions-page *):hover {
+  border-style: solid !important; border-color: #C4A646 !important; }
+main .champ:not(.lecture):not([readonly]):not(:disabled):not([type=search]):not(.entete-page *):not(.actions-page *):focus {
+  background-color: #fff !important; border: 1px solid var(--teal) !important; box-shadow: 0 0 0 3px rgba(30,143,134,.15); }
+main .champ::placeholder { color: #A39565; }
+.legende-saisie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0 !important; font-size: 12px; color: #5E6E6B; }
+.legende-saisie .ech { display: inline-block; width: 26px; height: 14px; border-radius: 4px; }
+.legende-saisie .ech + .ech, .legende-saisie .ech.auto { margin-left: 10px; }
+.legende-saisie .ech.saisie { background: var(--saisie); border: 1px dashed var(--saisie-bord); }
+.legende-saisie .ech.auto { background: var(--auto-fonce); border: 1px solid #D3D9D7; }
+@media print { main .champ { background: transparent !important; border: 0 !important; } .legende-saisie { display: none !important; } }

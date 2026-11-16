@@ -470,10 +470,25 @@ async function afficher() {
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
     if (n === rendu && !(r[0] === 'accueil' && profondeur() === 0)) zone.append(boutonRetour());
+    if (n === rendu) suivreLegendeSaisie(zone);
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
       h('button', { class: 'btn', onclick: afficher }, 'Réessayer')));
   }
+}
+// légende « à remplir / calculé automatiquement » sous le titre des pages où l'on saisit quelque chose
+const CHAMP_SAISIE = '.champ:not(.lecture):not([readonly]):not(:disabled):not([type=search])';
+function poserLegendeSaisie(zone) {
+  const tete = zone.querySelector('.entete-page > div:first-child');
+  if (!tete || tete.querySelector('.legende-saisie')) return;
+  const champs = [...zone.querySelectorAll(CHAMP_SAISIE)].filter((c) => !c.closest('.entete-page, .actions-page, .fond-fenetre'));
+  if (!champs.length) return;
+  tete.append(h('p', { class: 'legende-saisie ecran' }, h('span', { class: 'ech saisie' }), 'à remplir', h('span', { class: 'ech auto' }), 'calculé ou repris automatiquement'));
+}
+function suivreLegendeSaisie(zone) {
+  poserLegendeSaisie(zone);
+  let t = null;
+  new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => poserLegendeSaisie(zone), 120); }).observe(zone, { childList: true });
 }
 export const rafraichirMenu = () => {
   const ancien = app.querySelector('nav.menu');
