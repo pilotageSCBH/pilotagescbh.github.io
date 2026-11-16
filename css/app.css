@@ -2334,3 +2334,12 @@ main .champ::placeholder { color: #A39565; }
 .legende-saisie .ech.saisie { background: var(--saisie); border: 1px dashed var(--saisie-bord); }
 .legende-saisie .ech.auto { background: var(--auto-fonce); border: 1px solid #D3D9D7; }
 @media print { main .champ { background: transparent !important; border: 0 !important; } .legende-saisie { display: none !important; } }
+
+/* Mes cours / Mes ressources diverses : documents triables par glisser-déposer */
+.livre-biblio.triable { position: relative; cursor: grab; padding-left: 30px; }
+.livre-biblio.triable:active { cursor: grabbing; }
+.poignee-livre { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: #A7B3B1; font-size: 18px; line-height: 1; user-select: none; }
+.livre-biblio.triable:hover .poignee-livre { color: var(--teal); }
+.livre-biblio.glisse { opacity: .4; }
+.livre-biblio.avant { box-shadow: 0 -4px 0 0 #E8B04A, var(--ombre); }
+.livre-biblio.apres { box-shadow: 0 4px 0 0 #E8B04A, var(--ombre); }

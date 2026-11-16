@@ -133,8 +133,12 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const aMoi = (x) => x.proprietaire === moi;
   const sousThemes = (id, proprio = null) => [...T.values()].filter((t) => (t.parent_id ?? null) === id && (proprio === null || t.proprietaire === proprio)).sort((a, b) => a.ordre - b.ordre || compareTitres(a.nom, b.nom));
   const rang = Object.keys(GENRES);
-  const livresDe = (id, proprio) => [...L.values()].filter((l) => (l.theme_id ?? null) === id && (id !== null || l.proprietaire === proprio))
-    .sort((a, b) => (E.genres ? rang.indexOf(a.genre || 'cours') - rang.indexOf(b.genre || 'cours') : 0) || a.ordre - b.ordre || compareTitres(a.titre, b.titre));
+  // ordre des documents : par type (cours, exercices…) ; un dossier trié à la main (glisser-déposer : ordre < 1000) garde l'ordre choisi
+  const livresDe = (id, proprio) => {
+    const l = [...L.values()].filter((x) => (x.theme_id ?? null) === id && (id !== null || x.proprietaire === proprio));
+    const main = l.some((x) => x.ordre < 1000);
+    return l.sort((a, b) => (main ? a.ordre - b.ordre : 0) || (E.genres ? rang.indexOf(a.genre || 'cours') - rang.indexOf(b.genre || 'cours') : 0) || a.ordre - b.ordre || compareTitres(a.titre, b.titre));
+  };
   const descendants = (id) => { const o = []; const p = [id]; while (p.length) { const x = p.pop(); for (const t of sousThemes(x)) { o.push(t); p.push(t.id); } } return o; };
   const total = (id) => [id, ...descendants(id).map((t) => t.id)].reduce((s, x) => s + livresDe(x).length, 0);
   const chemin = (t) => { const l = []; let p = t; let n = 0; while (p && n++ < 50) { l.unshift(p); p = p.parent_id ? T.get(p.parent_id) : null; } return l; };
@@ -225,6 +229,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('button', { type: 'button', title: `Partager le ${E.theme}`, onclick: (e) => { e.preventDefault(); partagerUn('theme_id', t); } }, '👥'),
         h('button', { type: 'button', title: `Supprimer le ${E.theme}`, onclick: (e) => { e.preventDefault(); supprimerTheme(t); } }, '✖')) : null);
     if (modif) glisserTuile(el, t);
+    deposerDansDossier(el, t);
     return el;
   }
   function tuiles(liste, parent) {
@@ -333,7 +338,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('a', { class: 'btn petit', href: lienL(l) }, '☰ Sommaire'), boutonOuvrir(l))),
       corps);
   }
-  const listeLivres = (liste, opts) => h('div', { class: 'livres-biblio' }, liste.map((l) => carteLivre(l, opts)));
+  const listeLivres = (liste, opts) => h('div', { class: 'livres-biblio' }, liste.map((l) => { const c = carteLivre(l, opts); if (!opts && !recherche.trim()) glisserLivre(c, l); return c; }));
   function ligneSommaire(l, e, termes = []) {
     const u = urlLivre(l, e.p);
     const corps = [h('span', {}, surligner(e.t, termes)), e.p ? h('span', { class: 'pg' }, 'p. ' + e.p) : null];
@@ -488,6 +493,53 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       e.preventDefault(); el.classList.remove('cible'); if (!glisse || glisse === t) return;
       const f = sousThemes(t.parent_id ?? null, moi).filter((x) => x !== glisse); f.splice(f.indexOf(t), 0, glisse);
       try { for (const [i, x] of f.entries()) if (x.ordre !== i + 1) { await db.modifier('biblio_themes', x.id, { ordre: i + 1 }); x.ordre = i + 1; } } catch (er) { erreur(er); }
+      dessiner();
+    });
+  }
+
+  // glisser-déposer des documents (Mes cours, Mes ressources diverses) : changer leur ordre dans un dossier,
+  // ou les déposer sur la tuile d'un dossier pour les y ranger. L'ordre choisi est aussi celui de l'espace élève.
+  let glisseL = null;
+  const triable = (l) => E.genres && aMoi(l) && vue === 'mes';
+  function glisserLivre(el, l) {
+    if (!triable(l)) return;
+    el.draggable = true; el.classList.add('triable');
+    el.querySelectorAll('a, img').forEach((x) => { x.draggable = false; });
+    el.title = 'Glisser pour changer l’ordre, ou déposer sur un dossier pour l’y ranger';
+    el.prepend(h('span', { class: 'poignee-livre', 'aria-hidden': 'true' }, '⠿'));
+    el.addEventListener('dragstart', (e) => { glisseL = l; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(l.id)); } catch { /* rien */ } setTimeout(() => el.classList.add('glisse'), 0); });
+    el.addEventListener('dragend', () => { glisseL = null; el.classList.remove('glisse'); document.querySelectorAll('.livre-biblio.avant, .livre-biblio.apres').forEach((x) => x.classList.remove('avant', 'apres')); });
+    const cote = (e) => { const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 ? 'avant' : 'apres'; };
+    el.addEventListener('dragover', (e) => {
+      if (!glisseL || glisseL === l || (glisseL.theme_id ?? null) !== (l.theme_id ?? null)) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      const c = cote(e); el.classList.toggle('avant', c === 'avant'); el.classList.toggle('apres', c === 'apres');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('avant', 'apres'));
+    el.addEventListener('drop', async (e) => {
+      if (!glisseL || glisseL === l) return;
+      e.preventDefault(); const c = cote(e); el.classList.remove('avant', 'apres');
+      const d = glisseL, f = livresDe(l.theme_id ?? null, moi).filter((x) => x !== d && aMoi(x));
+      f.splice(f.indexOf(l) + (c === 'apres' ? 1 : 0), 0, d);
+      await renumeroter(f);
+    });
+  }
+  async function renumeroter(f) {
+    try {
+      for (const [i, x] of f.entries()) if (x.ordre !== i + 1) { await db.modifier('biblio_livres', x.id, { ordre: i + 1 }); x.ordre = i + 1; }
+      toast('Ordre enregistré');
+    } catch (er) { erreur(er); }
+    dessiner();
+  }
+  function deposerDansDossier(el, t) {
+    if (!E.genres || !aMoi(t) || vue !== 'mes') return;
+    el.addEventListener('dragover', (e) => { if (glisseL && (glisseL.theme_id ?? null) !== t.id) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('cible'); } });
+    el.addEventListener('dragleave', () => el.classList.remove('cible'));
+    el.addEventListener('drop', async (e) => {
+      if (!glisseL || (glisseL.theme_id ?? null) === t.id) return;
+      e.preventDefault(); el.classList.remove('cible');
+      const d = glisseL, fin = Math.max(0, ...livresDe(t.id).map((x) => x.ordre)) + 1;
+      try { await db.modifier('biblio_livres', d.id, { theme_id: t.id, ordre: fin }); d.theme_id = t.id; d.ordre = fin; toast(`Rangé dans « ${t.nom} »`); } catch (er) { erreur(er); }
       dessiner();
     });
   }
