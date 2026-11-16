@@ -10,7 +10,7 @@ import { boutonIA, champs, codesDans, listeSavoirs, aEcrire, resume } from '../i
 import {
   sansAccent, compareTitres, pluriel, chargerReglages, reglagesDe, adresseFichier, adresseDossier, accueilNuage, dialogueReglages,
   chargerCollegues, nomCollegue, lirePdf, ouvrirPdf, signetsPdf, textePages, sommaireDepuisTexte, imagePage, reduireImage,
-  choisirDossier, cheminRelatif, ignore, grainDeBois, couleurTranche, dialoguePartage, progression, nuageListe, nuageFichier, analyserLien,
+  ignore, grainDeBois, couleurTranche, dialoguePartage, progression, nuageListe, nuageFichier, analyserLien,
 } from '../ressources.js';
 
 // ------------------------------------------------------------------------------------------- types de documents (Mes cours)
@@ -193,7 +193,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('p', { class: 'sous-titre' }, `${pluriel(mesLivres.length, E.fiche, E.fiches)} · ${pluriel([...T.values()].filter(aMoi).length, E.theme, E.themes)}${sesLivres.length ? ` · ${sesLivres.length} partagé(s) avec moi` : ''} · fichiers sur votre Nuage`)),
         h('div', { class: 'actions-page' },
           h('button', { class: 'btn principal', onclick: () => ajouterLivres(themeCourant && aMoi(themeCourant) ? themeCourant.id : null) }, '＋  ' + E.ajouter),
-          h('button', { class: 'btn', title: `Relire votre dossier « ${E.nomDossierNuage} » (synchronisé avec Nuage) : nouveaux fichiers, nouveaux dossiers, fichiers disparus`, onclick: () => mettreAJour() }, '↻  Mettre à jour depuis mon dossier'),
+          h('button', { class: 'btn', title: `Relire votre dossier « ${E.nomDossierNuage} » sur Nuage : nouveaux fichiers, fichiers déplacés, dossiers et fichiers disparus`, onclick: () => mettreAJour() }, '↻  Mettre à jour depuis mon dossier'),
           h('button', { class: 'btn', onclick: () => partagerLot() }, '👥  Partager'),
           avecEleves ? h('button', { class: 'btn', title: 'Cocher sur le site les documents et dossiers visibles des élèves d’une promotion', onclick: () => choisirPourEleves() }, '👁  Choisir pour les élèves') : null,
           h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'),
@@ -244,7 +244,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     if (!racines.length && !nonClasses.length) return h('div', { class: 'carte-detail accueil-cours' },
       h('h2', {}, `${E.icone} Votre espace « ${E.titre.replace(/^\S+\s+/, '')} » est vide`),
       h('ul', { class: 'conseils-cours' },
-        h('li', {}, h('b', {}, 'Depuis Nuage : '), `rangez vos fichiers sur Nuage dans un dossier « ${E.nomDossierNuage} » avec un sous-dossier par ${E.theme}, puis « ↻ Mettre à jour depuis mon dossier » (le dossier synchronisé sur votre ordinateur) : le site crée les ${E.themes} et les fiches.`),
+        h('li', {}, h('b', {}, 'Depuis Nuage : '), `rangez vos fichiers sur Nuage dans un dossier « ${E.nomDossierNuage} » avec un sous-dossier par ${E.theme}, puis « ↻ Mettre à jour depuis mon dossier » : le site lit votre dossier sur Nuage et crée les ${E.themes} et les fiches.`),
         h('li', {}, h('b', {}, 'Ou à la main : '), `« ✎ Gérer » → « ＋ Nouveau ${E.theme} », puis « ＋ ${E.ajouter} ».`)));
     return h('div', {}, modif ? h('p', { class: 'aide' }, `Mode gestion : glissez une tuile pour changer sa place ; ✎ modifie un ${E.theme} (nom, dossier Nuage, image).`) : null,
       tuiles(racines, null),
@@ -518,11 +518,11 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const parent = selectTheme(t.parent_id, { racine: `Accueil (${E.theme} principal)`, exclure: t.id });
     let image = t.image;
     const apercu = h('div', { class: 'apercu-tuile', style: { backgroundImage: image ? `url("${image}")` : grainDeBois(t.nom) } });
-    const fichier = h('input', { type: 'file', accept: 'image/*', onchange: async () => { try { image = await reduireImage(fichier.files[0], 520, 0.72); apercu.style.backgroundImage = `url("${image}")`; } catch (e) { erreur(e); } } });
     const ok = await fenetre(`Modifier le ${E.theme}`, h('div', { class: 'formulaire' },
       h('label', {}, 'Nom de la tuile', nom), h('label', {}, 'Ranger dans', parent),
       h('label', { class: 'large' }, 'Dossier sur Nuage (depuis le dossier partagé)', dossier),
-      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Image de la tuile'), apercu, fichier,
+      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Image de la tuile'), apercu,
+        h('p', { class: 'aide' }, 'Pour une image : déposez un fichier nommé « illustration.jpg » (ou .png) dans ce dossier sur Nuage, puis « ↻ Mettre à jour depuis mon dossier ».'),
         h('button', { class: 'lien petit', type: 'button', onclick: () => { image = ''; apercu.style.backgroundImage = grainDeBois(nom.value); } }, 'Revenir au veinage bois'))),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
@@ -623,9 +623,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const couv = h('div', { class: 'apercu-couv' }, couverture(l, 'couv-moyenne'));
     const majCouv = () => vider(couv, couverture({ ...l, vignette, titre: titre.value }, 'couv-moyenne'));
     const propositions = h('div', { class: 'propositions-isbn' });
-    // fichier choisi sur l'ordinateur (PDF : couverture et sommaire ; Word : sommaire)
+    // fichier lu sur Nuage (PDF : couverture et sommaire ; Word : sommaire) ; rien n'est gardé sur le site
     let pdfLocal = null;
-    const choixPdf = h('input', { type: 'file', accept: 'application/pdf,.pdf,.docx', onchange: async () => { if (choixPdf.files[0]) await lireFichier(choixPdf.files[0]).catch(erreur); } });
     async function lireFichier(f) {
       {
         if (/\.docx$/i.test(f.name)) {
@@ -638,7 +637,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const pageCouv = h('input', { class: 'champ court', type: 'number', min: 1, value: 1 });
     const debut = h('input', { class: 'champ court', type: 'number', min: 1, placeholder: 'de' }), fin = h('input', { class: 'champ court', type: 'number', min: 1, placeholder: 'à' });
     const decalage = h('input', { class: 'champ court', type: 'number', value: 0, title: 'Page du PDF − page imprimée (ex. 2 si la page imprimée 1 est la 3e page du PDF)' });
-    const exigerPdf = () => { if (!pdfLocal) throw new Error('Lisez d’abord le fichier PDF (sur Nuage ou sur votre ordinateur).'); };
+    const exigerPdf = () => { if (!pdfLocal) throw new Error('Lisez d’abord le fichier PDF sur Nuage (« ☁ Lire le fichier sur Nuage »).'); };
     const attente = fenetre(`Modifier « ${l.titre || E.fiche} »`, h('div', { class: 'modif-livre' },
       h('div', { class: 'formulaire' },
         h('label', { class: 'large' }, 'Titre', titre), null,
@@ -648,18 +647,16 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         h('label', {}, 'Ranger dans', theme), h('label', {}, 'Fichier sur Nuage (chemin)', cheminF), h('label', { class: 'large' }, 'Lien direct', lien),
         h('label', { class: 'large' }, 'Notes', notes)),
       h('fieldset', { class: 'groupe-docs' }, h('legend', {}, 'Lire le fichier (couverture et sommaire)'),
-        h('p', { class: 'aide' }, 'Facultatif : un PDF pour refaire la couverture ou lire le sommaire, un Word (.docx) pour reprendre ses titres. Le fichier est seulement lu, rien n’est modifié.'),
+        h('p', { class: 'aide' }, 'Facultatif : le PDF (sur Nuage) pour refaire la couverture ou lire le sommaire, le Word (.docx) pour reprendre ses titres. Le fichier est seulement lu sur Nuage, rien n’est modifié ni gardé sur le site.'),
         h('div', { class: 'boutons-detail' },
           l.chemin && analyserLien(reglagesDe(l.proprietaire)[E.lien]) ? h('button', { class: 'btn petit principal', type: 'button', onclick: async (ev) => {
             const b = ev.currentTarget; b.disabled = true; const avant = b.textContent; b.textContent = 'Lecture sur Nuage…';
             try { await lireFichier(await nuageFichier(reglagesDe(l.proprietaire)[E.lien], cheminF.value.trim() || l.chemin)); } catch (e) { erreur(e); }
             b.disabled = false; b.textContent = avant;
-          } }, '☁ Lire le fichier sur Nuage') : null,
-          h('span', {}, 'ou sur cet ordinateur :'), choixPdf)),
+          } }, '☁ Lire le fichier sur Nuage') : h('span', { class: 'aide' }, `Pour lire le fichier, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans « ⚙ Réglages Nuage ».`))),
       h('div', { class: 'deux-colonnes-partage' },
         h('div', {}, h('p', { class: 'sous-titre-choix' }, 'Couverture'), couv,
           h('div', { class: 'boutons-detail' }, h('span', {}, 'Page du PDF'), pageCouv, h('button', { class: 'btn petit', type: 'button', onclick: async () => { try { exigerPdf(); vignette = await imagePage(pdfLocal, Number(pageCouv.value) || 1); majCouv(); } catch (e) { erreur(e); } } }, 'Utiliser cette page')),
-          h('label', { class: 'lib-form' }, 'Ou une image (photo, scan) ', h('input', { type: 'file', accept: 'image/*', onchange: async (e) => { try { vignette = await reduireImage(e.target.files[0], 260, 0.75); majCouv(); } catch (x) { erreur(x); } } })),
           vignette ? h('button', { class: 'lien petit', type: 'button', onclick: () => { vignette = ''; majCouv(); } }, 'Sans couverture') : null),
         h('div', {}, h('p', { class: 'sous-titre-choix' }, 'Sommaire'), h('p', { class: 'aide' }, 'Une ligne par titre, « … page » à la fin ; deux espaces devant pour un sous-titre.'), som,
           h('div', { class: 'boutons-detail' },
@@ -705,10 +702,15 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const ordre = ref.savoirs.map((s) => s.code), v = [...choix].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
     try { await db.modifier('biblio_livres', l.id, { savoirs: v }); l.savoirs = v; dessiner(); } catch (e) { erreur(e); }
   }
-  // ajouter des fiches : fichiers choisis sur l'ordinateur → fiches (PDF : pages, signets, couverture ; Word : titres, savoirs)
+  // ajouter des fiches : uniquement des fichiers de Nuage (aucun fichier n'est envoyé ni gardé sur le site)
   async function ajouterLivres(themeId) {
     const lienN = reglage[E.lien], avecNuage = !!analyserLien(lienN);
-    const fichiers = h('input', { type: 'file', multiple: true });
+    if (!avecNuage) {
+      const choix = await fenetre(E.ajouter, h('p', {}, `Les ${E.fiches} se créent uniquement à partir des fichiers de votre Nuage : collez d’abord le lien de partage de votre dossier « ${E.nomDossierNuage} » dans « ⚙ Réglages Nuage ».`),
+        [{ texte: 'Annuler', valeur: null }, { texte: '⚙ Réglages Nuage', classe: 'principal', valeur: 'reglages' }]);
+      if (choix === 'reglages') reglagesPuisMaj();
+      return;
+    }
     const theme = selectTheme(themeId);
     const lire = h('input', { type: 'checkbox', checked: true });
     // choix dans Nuage : fichiers du dossier du thème (et de ses sous-dossiers) qui n'ont pas encore de fiche
@@ -728,24 +730,21 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       try { listeN = await nuageListe(lienN); dessinerN(); } catch (e) { vider(zoneN, h('p', { class: 'erreur-ia' }, e.message)); }
     };
     theme.addEventListener('change', dessinerN);
-    if (avecNuage) setTimeout(chargerN, 50);
+    setTimeout(chargerN, 50);
     const ok = await fenetre(E.ajouter, h('div', { class: 'formulaire' },
       h('label', {}, `Ranger dans le ${E.theme}`, theme),
       h('label', { class: 'case' }, lire, ' Lire les PDF et les Word (sommaire, couverture)'),
-      avecNuage ? h('div', { class: 'large' }, h('p', { class: 'sous-titre-choix' }, `☁ Dans mon Nuage (fichiers du ${E.theme} choisi qui n’ont pas encore de fiche)`), zoneN,
+      h('div', { class: 'large' }, h('p', { class: 'sous-titre-choix' }, `☁ Dans mon Nuage (fichiers du ${E.theme} choisi qui n’ont pas encore de fiche)`), zoneN,
         h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: () => { visiblesN.forEach((x) => choisisN.add(x.c)); dessinerN(); } }, 'Tout cocher'),
-          h('a', { class: 'btn petit', href: accueilNuage(lienN), target: '_blank', rel: 'noopener' }, '📂 Ouvrir mon Nuage'))) :
-        h('p', { class: 'aide large' }, `Pour choisir les fichiers directement dans votre Nuage, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans « ⚙ Réglages Nuage ».`),
-      h('label', { class: 'large' }, avecNuage ? '💻 Ou sur cet ordinateur' : 'Fichiers (tous types)', fichiers),
-      h('p', { class: 'aide large' }, 'Le site crée une fiche par fichier et lit les PDF (pages, sommaire, couverture) et les Word (titres) ; rien n’est modifié sur votre Nuage.')),
-    [{ texte: 'Annuler', valeur: false }, { texte: '＋ Créer les fiches', classe: 'principal', action: () => { if (!fichiers.files.length && !choisisN.size) throw new Error('Choisissez au moins un fichier.'); return true; } }], { large: true });
+          h('a', { class: 'btn petit', href: accueilNuage(lienN), target: '_blank', rel: 'noopener' }, '📂 Ouvrir mon Nuage'))),
+      h('p', { class: 'aide large' }, 'Un fichier à ajouter ? Déposez-le d’abord dans votre dossier sur Nuage. Le site crée une fiche par fichier choisi et lit les PDF (pages, sommaire, couverture) et les Word (titres) ; les fichiers restent sur Nuage, rien n’est gardé sur le site ni modifié sur Nuage.')),
+    [{ texte: 'Annuler', valeur: false }, { texte: '＋ Créer les fiches', classe: 'principal', action: () => { if (!choisisN.size) throw new Error('Cochez au moins un fichier de Nuage.'); return true; } }], { large: true });
     if (!ok) return;
     const t = theme.value ? T.get(Number(theme.value)) : null;
     const tailles = new Map((listeN || []).map((x) => [x.c, x.taille]));
     const parDossier = new Map([...T.values()].filter(aMoi).map((x) => [x.dossier.normalize('NFC'), x]));
     await creerFiches([
       ...[...choisisN].map((c) => ({ chemin: c, taille: tailles.get(c), charger: () => nuageFichier(lienN, c), themeId: parDossier.get(c.split('/').slice(0, -1).join('/'))?.id ?? t?.id ?? null })),
-      ...[...fichiers.files].map((f) => ({ f, chemin: ((t?.dossier ? t.dossier + '/' : '') + f.name).normalize('NFC'), themeId: t?.id ?? null })),
     ], lire.checked);
   }
   async function creerFiches(liste, lireFichiers) {
@@ -772,15 +771,15 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   }
 
   // ------------------------------------------------------------------ mise à jour depuis le dossier synchronisé
-  // le contenu du dossier « Mes cours » / « Bibliothèque » : directement sur Nuage (relais), sinon un dossier de l'ordinateur
+  // le contenu du dossier « Mes cours » / « Bibliothèque » : lu directement sur Nuage (relais) ; jamais depuis l'ordinateur
   async function lireDossierNuage() {
     const lienN = reglage[E.lien];
     if (!analyserLien(lienN)) {
       const choix = await fenetre('Mettre à jour depuis mon dossier', h('div', {},
         h('p', {}, `Pour que le site lise directement votre dossier « ${E.nomDossierNuage} » sur Nuage, collez d’abord son lien de partage dans « ⚙ Réglages Nuage ».`)),
-      [{ texte: 'Annuler', valeur: null }, { texte: '💻 Choisir un dossier sur cet ordinateur', valeur: 'local' }, { texte: '⚙ Réglages Nuage', classe: 'principal', valeur: 'reglages' }]);
-      if (choix === 'reglages') dialogueReglages(ctx, recharger);
-      return choix === 'local' ? lireDossierLocal() : null;
+      [{ texte: 'Annuler', valeur: null }, { texte: '⚙ Réglages Nuage', classe: 'principal', valeur: 'reglages' }]);
+      if (choix === 'reglages') reglagesPuisMaj();
+      return null;
     }
     const pr = progression(`Lecture de votre dossier « ${E.nomDossierNuage} » sur Nuage…`);
     try {
@@ -792,20 +791,12 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     } catch (e) {
       pr.fin();
       const choix = await fenetre('Lecture de Nuage impossible', h('div', {}, h('p', { class: 'erreur-ia' }, e.message),
-        h('p', { class: 'aide' }, 'Le relais « nuage » doit être installé une fois dans Supabase par l’administrateur (voir l’aide, « Mes ressources »). En attendant, vous pouvez choisir un dossier sur cet ordinateur.')),
-      [{ texte: 'Annuler', valeur: null }, { texte: '💻 Choisir un dossier sur cet ordinateur', classe: 'principal', valeur: 'local' }]);
-      return choix === 'local' ? lireDossierLocal() : null;
+        h('p', { class: 'aide' }, 'Vérifiez le lien de partage dans « ⚙ Réglages Nuage » (« ☁ Tester la lecture de mes dossiers »). Le relais « nuage » doit aussi être installé une fois dans Supabase par l’administrateur (voir l’aide, « Mes ressources »).')),
+      [{ texte: 'Fermer', valeur: null }]);
+      return choix ? null : null;
     }
   }
-  async function lireDossierLocal() {
-    toast(`Choisissez votre dossier « ${E.nomDossierNuage} »`);
-    const tous = await choisirDossier();
-    if (!tous.length) return null;
-    // dossier « Livres » choisi directement : les chemins enregistrés commencent par « Livres/ »
-    const racineChoisie = String(tous[0].webkitRelativePath || '').split('/')[0];
-    const prefixe = racineChoisie === 'Livres' && mesFiches().some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
-    return tous.map((f) => ({ c: prefixe + cheminRelatif(f), f, taille: f.size, charger: async () => f }));
-  }
+
   // réglages Nuage : si le lien de ce dossier change, on propose de remettre le site en accord avec le nouveau dossier
   async function reglagesPuisMaj() {
     const avant = String(reglage[E.lien] || '').trim();
