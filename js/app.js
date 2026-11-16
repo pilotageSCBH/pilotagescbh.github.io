@@ -257,7 +257,7 @@ function modeFiches(arg) {
   return o === 'sommatif' ? 'sommatif' : 'preparation';
 }
 // menu de gauche : rubriques repliables (état mémorisé), recherche, mode réduit (icônes seules), badges
-const CLE_MENU_FERME = 'pilotage-scbh-menu-replie', CLE_MENU_REDUIT = 'pilotage-scbh-menu-reduit';
+const CLE_MENU_REDUIT = 'pilotage-scbh-menu-reduit';
 const lireL = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const ecrireL = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sans stockage */ } };
 const sansAccent = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -266,7 +266,6 @@ const initialesMenu = (t) => String(t || '?').replace(/@.*/, '').split(/[\s.\-]+
 function menu(route) {
   const [page, arg] = route;
   const reduit = lireL(CLE_MENU_REDUIT, 'non') === 'oui';
-  let fermees = new Set(JSON.parse(lireL(CLE_MENU_FERME, '["referentiel"]') || '[]'));
   const lien = ({ href, icone, texte, actif, badge = null, titre = '', pastille = null, marque = null }) =>
     h('a', { href, class: 'lien-menu' + (actif ? ' actif' : '') + (pastille ? ' matiere' : ''), title: titre || texte, 'data-texte': sansAccent(texte),
       style: pastille ? { '--pastille': pastille } : {} },
@@ -284,10 +283,10 @@ function menu(route) {
     { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
       { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
       { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
-    { cle: 'evaluer', titre: 'Mes documents pédagogiques', icone: '📂', items: [
-      { sous: 'Documents de préparation' },
-      { href: '#/fiches/preparation', icone: '📋', texte: 'Fiches de préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
-      { href: '#/fiches/deroulement', icone: '📝', texte: 'Fiches de déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
+    { cle: 'evaluer', titre: 'Documents pédagogiques', icone: '📂', items: [
+      { sous: 'Fiches de préparation' },
+      { href: '#/fiches/preparation', icone: '📋', texte: 'Préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
+      { href: '#/fiches/deroulement', icone: '📝', texte: 'Déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
       { sous: 'Documents d’évaluation' },
       { href: '#/fiches/formatifs', icone: '✅', texte: 'Fiches contrats formatifs', actif: page === 'fiches' && modeFiches(arg) === 'formatifs' },
       { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' },
@@ -317,14 +316,15 @@ function menu(route) {
   const sections = S.map((sec) => {
     const active = sec.items.some((x) => x.actif);
     const nbLiens = sec.items.filter((x) => !x.sous).length;
-    const ouverte = active || !fermees.has(sec.cle);
+    const ouverte = active;   // accordéon : seule la rubrique de la page affichée est ouverte
     const corps = h('div', { class: 'corps-rubrique' }, sec.items.map((x) => (x.sous ? h('div', { class: 'sous-rubrique-menu' }, x.sous) : lien(x))));
     const el = h('div', { class: 'rubrique-menu' + (ouverte ? ' ouverte' : '') + (active ? ' active' : '') },
       h('button', { class: 'titre-menu', type: 'button', title: sec.titre, 'aria-expanded': String(ouverte), onclick: () => {
         const o = !el.classList.contains('ouverte');
+        // une seule rubrique ouverte à la fois : les autres se replient
+        if (o) el.parentElement?.querySelectorAll('.rubrique-menu.ouverte').forEach((r) => { if (r !== el) { r.classList.remove('ouverte'); r.querySelector('.titre-menu')?.setAttribute('aria-expanded', 'false'); } });
         el.classList.toggle('ouverte', o); el.querySelector('.titre-menu').setAttribute('aria-expanded', String(o));
-        o ? fermees.delete(sec.cle) : fermees.add(sec.cle);
-        ecrireL(CLE_MENU_FERME, JSON.stringify([...fermees]));
+        if (o) requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
       } }, h('span', { class: 'ico' }, sec.icone), h('span', { class: 'txt' }, sec.titre), h('span', { class: 'nb' }, nbLiens), h('span', { class: 'chevron' }, '▾')),
       corps);
     return el;
