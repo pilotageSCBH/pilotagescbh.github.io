@@ -124,6 +124,7 @@ function menu(page, retourConnexion) {
       lien('#/progression', '🗓', 'Calendrier de ma formation', 'progression'),
       lien('#/formation', '🧱', 'Ma formation', 'formation'),
       lien('#/documents', '🎓', 'Mes cours', 'documents'),
+      lien('#/divers', '🗂', 'Mes ressources diverses', 'divers'),
       lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
       lien('#/resultats', '🏆', 'Mes résultats', 'resultats'),
       lien('#/compte', '👤', 'Mon compte', 'compte')),
@@ -155,12 +156,12 @@ function ecranCode(app, retourConnexion) {
 }
 
 // ------------------------------------------------------------------------------------------- pages
-const PAGES = { semaine: pageSemaine, progression: pageCalendrier, seance: pageSeance, formation: pageFormation, documents: pageDocuments, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
+const PAGES = { semaine: pageSemaine, progression: pageCalendrier, seance: pageSeance, formation: pageFormation, documents: pageDocuments, divers: pageDivers, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
 const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, titre), sous ? h('p', { class: 'sous-titre' }, sous) : null),
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
 // documents mobilisés dans une séance (publiés)
-const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie', href: '#/documents/' + d.id }, (GENRES[d.genre] || GENRES.cours)[0] + ' ' + d.titre); });
+const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie', href: baseDoc(d) + '/' + d.id }, (GENRES[d.genre] || GENRES.cours)[0] + ' ' + d.titre); });
 
 // ---- ma semaine : séances prévues et prochaines évaluations
 async function pageSemaine(zone, arg) {
@@ -375,14 +376,19 @@ async function ouvrirMaison(x, cle) {
 }
 
 // ---- mes documents : documents publiés par les enseignants
-async function pageDocuments(zone, arg) {
+// « Mes cours » (Mes cours et bibliothèque des enseignants) et « Mes ressources diverses » : même page, filtrée par espace
+function baseDoc(d) { return d?.espace === 'divers' ? '#/divers' : '#/documents'; }
+function pageDivers(zone, arg) { return pageDocuments(zone, arg, true); }
+async function pageDocuments(zone, arg, divers = false) {
   await donnees();
   const doc = /^\d+$/.test(arg || '') ? D.docs.get(Number(arg)) : null;
   if (doc) return ficheDocument(zone, doc);
+  const base = divers ? '#/divers' : '#/documents', titre = divers ? '🗂  Mes ressources diverses' : '🎓  Mes cours';
+  const ici = new Map([...D.docs].filter(([, d]) => (d.espace === 'divers') === divers));
   // onglets : une matière par onglet (ordre de « Ma formation »), puis « Autres documents »
   const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre)
-    .map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur, ids: new Set([...D.docs.keys()].filter((id) => (D.matDoc.get(id) || []).includes(m.id))) }));   // toutes les matières, même vides
-  const sansMat = [...D.docs.keys()].filter((id) => !(D.matDoc.get(id) || []).length);
+    .map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur, ids: new Set([...ici.keys()].filter((id) => (D.matDoc.get(id) || []).includes(m.id))) }));   // toutes les matières, même vides
+  const sansMat = [...ici.keys()].filter((id) => !(D.matDoc.get(id) || []).length);
   if (sansMat.length) groupes.push({ cle: 'autres', nom: groupes.length ? 'Autres documents' : 'Tous les documents', couleur: null, ids: new Set(sansMat) });
   const voulu = /^m-/.test(arg || '') ? String(arg).slice(2) : null;
   const g = groupes.find((x) => x.cle === voulu) || groupes.find((x) => x.ids.size) || groupes[0];
@@ -390,7 +396,7 @@ async function pageDocuments(zone, arg) {
   const champ = h('input', { class: 'recherche-biblio recherche-eleve', type: 'search', placeholder: 'Rechercher dans toutes les matières…', 'aria-label': 'Rechercher un document' });
   const liste = h('div', { class: 'arbre-docs' });
   // dossiers ouverts : mémorisés sur cet appareil (simple confort)
-  const CLE = 'docs-ouverts';
+  const CLE = divers ? 'divers-ouverts' : 'docs-ouverts';
   let ouverts; try { ouverts = new Set(JSON.parse(localStorage.getItem(CLE) || '[]')); } catch { ouverts = new Set(); }
   const memoriser = () => { try { localStorage.setItem(CLE, JSON.stringify([...ouverts])); } catch { /* stockage indisponible */ } };
   const tri = (x, y) => (x.ordre ?? 0) - (y.ordre ?? 0) || String(x.nom || x.titre || '').localeCompare(String(y.nom || y.titre || ''), 'fr', { numeric: true });
@@ -415,22 +421,22 @@ async function pageDocuments(zone, arg) {
   const outils = () => h('div', { class: 'outils-arbre' },
     h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier'),
     h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier'));
-  const nav = groupes.length ? ongletsMatieres(groupes, g?.cle, (x) => '#/documents/m-' + x.cle, (x) => x.ids.size) : null;
+  const nav = groupes.length ? ongletsMatieres(groupes, g?.cle, (x) => base + '/m-' + x.cle, (x) => x.ids.size) : null;
   const dessiner = () => {
     const t = sansAccent(champ.value).split(/\s+/).filter(Boolean);
-    if (!D.docs.size) return vider(liste, h('p', { class: 'vide' }, 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
+    if (!ici.size) return vider(liste, h('p', { class: 'vide' }, divers ? 'Aucune ressource diverse publiée pour l’instant.' : 'Aucun document publié pour l’instant : vos enseignants les ajouteront au fil de la formation.'));
     if (nav) nav.hidden = t.length > 0;
     if (!t.length) {   // l'onglet de la matière choisie
-      const docs = g ? [...g.ids].map((id) => D.docs.get(id)) : [];
+      const docs = g ? [...g.ids].map((id) => ici.get(id)) : [];
       if (!docs.length) return vider(liste, h('p', { class: 'vide' }, `Aucun document publié en ${g?.nom || 'cette matière'} pour l’instant.`));
       return vider(liste, D.dossiers.size ? outils() : null, arbre(docs, t));
     }
     // recherche : dans toutes les matières, résultats rangés par matière
-    const blocs = groupes.map((x) => { const docs = [...x.ids].map((id) => D.docs.get(id)).filter((d) => trouve(d, t)); return docs.length ? h('section', { class: 'matiere-docs', style: x.couleur ? { '--couleur': x.couleur } : null }, h('h2', { class: 'titre-matiere-docs' }, x.nom), arbre(docs, t)) : null; }).filter(Boolean);
+    const blocs = groupes.map((x) => { const docs = [...x.ids].map((id) => ici.get(id)).filter((d) => trouve(d, t)); return docs.length ? h('section', { class: 'matiere-docs', style: x.couleur ? { '--couleur': x.couleur } : null }, h('h2', { class: 'titre-matiere-docs' }, x.nom), arbre(docs, t)) : null; }).filter(Boolean);
     vider(liste, blocs.length ? blocs : h('p', { class: 'vide' }, 'Aucun document ne correspond.'));
   };
   champ.addEventListener('input', dessiner);
-  vider(zone, entete('🎓  Mes cours', `${D.docs.size} document(s) publié(s) par vos enseignants`), nav, h('div', { class: 'zone-recherche-eleve' }, champ), liste);
+  vider(zone, entete(titre, `${ici.size} document(s) publié(s) par vos enseignants`), nav, h('div', { class: 'zone-recherche-eleve' }, champ), liste);
   dessiner();
 }
 // une ligne compacte de l'arborescence
@@ -438,7 +444,7 @@ function ligneDocument(d) {
   const g = GENRES[d.genre] || GENRES.cours;
   return h('div', { class: 'ligne-doc' },
     h('span', { class: 'icone-doc', title: g[1] }, g[0]),
-    h('a', { class: 'titre-doc', href: '#/documents/' + d.id }, d.titre || 'Document'),
+    h('a', { class: 'titre-doc', href: baseDoc(d) + '/' + d.id }, d.titre || 'Document'),
     h('span', { class: 'details-doc' }, g[1] + (d.auteur ? ' · ' + d.auteur : '')),
     h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn mini') : null));
 }
@@ -466,7 +472,7 @@ function boutonsFichier(d, classe) {
 function ficheDocument(zone, d) {
   const lignes = d.sommaire || [];
   const seances = [...D.seances.values()].filter((x) => (x.cours_lies || []).some((c) => c.id === d.id));
-  vider(zone, h('nav', { class: 'ariane-biblio' }, h('a', { href: '#/documents' }, 'Mes cours'), ' › ', h('b', {}, d.titre)),
+  vider(zone, h('nav', { class: 'ariane-biblio' }, h('a', { href: baseDoc(d) }, d.espace === 'divers' ? 'Mes ressources diverses' : 'Mes cours'), ' › ', h('b', {}, d.titre)),
     h('div', { class: 'grille-fiche-livre' },
       h('div', { class: 'col-couv' }, tranche(d, 'couv-grande'), h('div', { class: 'boutons-fiche' }, d.fichier ? boutonsFichier(d, 'btn') : h('p', { class: 'aide' }, 'Pas de fichier associé.'))),
       h('div', { class: 'col-infos' }, h('h2', { class: 'titre-livre' }, d.titre),

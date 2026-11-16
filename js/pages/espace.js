@@ -903,7 +903,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const choixPromo = h('select', { class: 'champ', onchange: () => { pid = Number(choixPromo.value); initial(); dessinerArbre(); } }, promos.map((p) => h('option', { value: p.id, selected: p.id === pid }, 'Promotion ' + p.libelle)));
     initial(); dessinerArbre();
     const ok = await fenetre(`👁 ${E.Fiches} visibles des élèves`, h('div', { class: 'fenetre-choix-eleves' },
-      h('p', { class: 'aide' }, `Cochez les ${E.fiches} et les ${E.themes} que les élèves de la promotion voient dans leur espace (« Mes cours »). Ceux marqués 📌 sont mobilisés dans une séance du séquençage : ils sont visibles automatiquement, sans date. Un ${E.theme} coché rend visible tout son contenu, y compris ce qui y sera ajouté plus tard. Rien n’est modifié sur votre Nuage.`),
+      h('p', { class: 'aide' }, `Cochez les ${E.fiches} et les ${E.themes} que les élèves de la promotion voient dans leur espace (« ${E.titre.replace(/^\S+\s+/, '')} »). Ceux marqués 📌 sont mobilisés dans une séance du séquençage : ils sont visibles automatiquement, sans date. Un ${E.theme} coché rend visible tout son contenu, y compris ce qui y sera ajouté plus tard. Rien n’est modifié sur votre Nuage.`),
       h('div', { class: 'tete-choix-eleves' }, h('label', {}, 'Promotion ', choixPromo), compte),
       h('div', {}, h('div', { class: 'boutons-detail' },
         h('button', { class: 'btn petit', type: 'button', onclick: () => { sousThemes(null, moi).forEach((t) => coches.add('t' + t.id)); livresDe(null, moi).forEach((l) => coches.add('l' + l.id)); dessinerArbre(); } }, 'Tout cocher'),
