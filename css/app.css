@@ -2290,3 +2290,30 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .choix-voix { font: inherit; font-size: 12.5px; padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; max-width: 210px; }
 .choix-voix option { color: #1F2D2B; background: #fff; }
 @media (max-width: 700px) { .tete-video { flex-wrap: wrap; } .tete-video .gris { flex-basis: 100%; order: 3; } .choix-voix { max-width: 140px; } }
+
+/* PAP (plan d'accompagnement personnalisé) */
+.badge-pap { display: inline-grid; place-items: center; height: 18px; padding: 0 6px; border-radius: 9px; background: #1F6FB2; color: #fff; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .03em; vertical-align: middle; cursor: help; }
+.badge-pap.long { height: auto; padding: 3px 10px; font-size: 12.5px; border-radius: 12px; }
+.badge-pap:focus-visible { outline: 3px solid #9CC6EA; outline-offset: 1px; }
+.bulle-pap { position: fixed; z-index: 1000; max-width: 340px; background: #fff; color: var(--texte, #1F2D2B); border: 1px solid #C9DCEB; border-left: 5px solid #1F6FB2;
+  border-radius: 10px; padding: 9px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px; line-height: 1.4; pointer-events: none; }
+.bulle-pap b { display: block; color: #1F6FB2; margin-bottom: 4px; font-size: 12.5px; }
+.bulle-pap ul { margin: 0; padding-left: 18px; }
+.bulle-pap p { margin: 0; color: #6B7A77; }
+.tuile.pap strong { color: #1F6FB2; }
+@media print { .badge-pap { background: none; color: #000; border: 1px solid #000; } }
+
+/* validation : compétence évaluée directement (sans fiche contrat) */
+table.validation td.cliquable { cursor: pointer; }
+table.validation td.cliquable:hover { outline: 2px solid var(--fonce); outline-offset: -2px; }
+table.validation td.manuel { background-image: linear-gradient(225deg, #1F6FB2 0 7px, transparent 7px); }
+.choix-niveau { display: flex; gap: 8px; flex-wrap: wrap; }
+.choix-niveau button { flex: 1; min-width: 110px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 2px solid #D5DEDC;
+  background: #fff; cursor: pointer; font: inherit; }
+.choix-niveau button b { font-size: 17px; }
+.choix-niveau button small { font-size: 11.5px; color: #5E6E6B; }
+.choix-niveau button { opacity: .55; border-color: transparent; }
+.choix-niveau button:hover { opacity: .85; }
+.choix-niveau button.choisi { opacity: 1; border-color: currentColor; box-shadow: 0 0 0 3px rgba(0,0,0,.08); }
+.choix-niveau button small { color: inherit; }

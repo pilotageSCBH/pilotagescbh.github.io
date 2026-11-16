@@ -2,9 +2,9 @@
 // de toutes les matières de la promotion. Si une compétence est évaluée plusieurs fois, la meilleure note est retenue
 // (à égalité, la plus récente) ; la case indique le niveau, la date et la matière.
 import { db } from '../api.js';
-import { h, vider, imprimer } from '../ui.js';
+import { h, vider, imprimer, fenetre, toast, erreur, dateFr } from '../ui.js';
 import { moyenne, niveau, arrondi } from './contrat.js';
-import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant } from '../redoublants.js';
+import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, badgePap, chargerManuelles, ajouterManuelles } from '../redoublants.js';
 
 const CODES_MAT = { Projet: 'PR', Analyse: 'AD', Orga: 'OR', Labo: 'LA', 'Étude': 'EA', Atelier: 'AT' };
 
@@ -32,6 +32,12 @@ export async function pageValidation(zone, _arg, ctx) {
       if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(cle, { n, date: c.date_eval, mat: m ? codeMat(m) : '' });
     }
   }
+  // compétences évaluées directement, sans fiche contrat (ex. en entreprise)
+  const manuelles = await chargerManuelles(ctx.promo.id);
+  for (const e of eleves) {
+    const b = new Map([...best].filter(([k]) => k.startsWith(e.id + ':')).map(([k, v]) => [k.split(':')[1], v]));
+    for (const [code, v] of ajouterManuelles(b, manuelles, e.id)) best.set(`${e.id}:${code}`, v);
+  }
   // redoublants : compétences validées dans leur promotion d'origine (si meilleures)
   const anterieurs = await acquisAnterieurs(ctx, eleves);
   for (const [eid, m] of anterieurs) {
@@ -53,6 +59,7 @@ export async function pageValidation(zone, _arg, ctx) {
       h('div', { class: 'actions-page' }, h('button', { class: 'btn', onclick: () => imprimer('A3 landscape') }, '🖶  Imprimer (A3 paysage)'))),
     h('p', { class: 'aide ecran' }, 'Meilleure évaluation obtenue dans les contrats sommatifs de toutes les matières (à égalité, la plus récente). Dans chaque case : niveau, date et matière ('
       + ctx.matieres.map((m) => `${codeMat(m)} ${m.nom}`).join(' · ') + ').'
+      + (manuelles ? (ctx.peutEcrire() ? ' Cliquez une case pour évaluer la compétence directement, sans fiche contrat (par exemple en entreprise) : la case est marquée d’un coin et de « ENT ».' : ' « ENT » : compétence évaluée directement, par exemple en entreprise.') : '')
       + (nbRed ? ' Élèves redoublants (R) : les compétences validées dans leur promotion d’origine sont reprises si elles sont meilleures (case hachurée, mention « N-1 »).' : '')),
     h('div', { class: 'tableau-validation' }, h('table', { class: 'validation' },
       h('thead', {},
@@ -68,15 +75,47 @@ export async function pageValidation(zone, _arg, ctx) {
           const b = best.get(`${e.id}:${c.code}`);
           const nv = niveau(b ? b.n : null);
           if (b) cpt[nv.code]++;
-          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : '') + (b?.anterieur ? ' anterieur' : ''),
-            title: b ? `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)${b.anterieur ? ` · obtenu dans la promotion ${b.promo}` : ''}` : `${c.code} : non évaluée` },
+          const modif = manuelles && ctx.peutEcrire();
+          return h('td', { class: 'niv-' + nv.code.toLowerCase() + (c.code === premiereTransCode ? ' debut-trans' : '') + (b?.anterieur ? ' anterieur' : '') + (b?.manuel ? ' manuel' : '') + (modif ? ' cliquable' : ''),
+            title: (b ? (b.manuel ? `${c.code} : ${nv.lib} · évaluée directement (${b.manuel.lieu || 'sans fiche contrat'})${b.manuel.commentaire ? ' · ' + b.manuel.commentaire : ''}`
+              : `${c.code} : ${nv.lib} (${arrondi(b.n)} / 5)${b.anterieur ? ` · obtenu dans la promotion ${b.promo}` : ''}`) : `${c.code} : non évaluée`) + (modif ? '\nCliquer pour évaluer directement (ex. en entreprise)' : ''),
+            onclick: modif ? () => evaluerDirectement(e, c) : null },
             h('b', {}, nv.code), b ? h('small', {}, jj(b.date)) : null, b ? h('small', {}, b.anterieur ? 'N-1' : b.mat) : null);
         });
-        return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx)), cells,
+        return h('tr', {}, h('td', { class: 'nom' }, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx), ' ', badgePap(e)), cells,
           h('td', { class: 'total' }, cpt.A), h('td', { class: 'total' }, cpt.EVA), h('td', { class: 'total' }, cpt.NA));
       })))),
     eleves.length ? null : h('p', { class: 'vide' }, 'Aucun élève dans cette promotion.'),
     eleves.length ? graphiques() : null);
+
+  // évaluation directe d'une compétence (sans fiche contrat), par exemple en entreprise
+  async function evaluerDirectement(e, c) {
+    const m = (manuelles || []).find((x) => x.eleve_id === e.id && x.competence === c.code);
+    const b = best.get(`${e.id}:${c.code}`);
+    let choix = m?.niveau || '';
+    const boutonsNiv = h('div', { class: 'choix-niveau' }, [['A', 'Acquis'], ['EVA', 'En voie d’acquisition'], ['NA', 'Non acquis']].map(([k, l]) =>
+      h('button', { type: 'button', class: 'niv-' + k.toLowerCase() + (choix === k ? ' choisi' : ''), 'data-niv': k,
+        onclick: (ev) => { choix = k; boutonsNiv.querySelectorAll('button').forEach((x) => x.classList.toggle('choisi', x.dataset.niv === k)); } }, h('b', {}, k), h('small', {}, l))));
+    const date = h('input', { class: 'champ', type: 'date', value: m?.date_eval || new Date().toISOString().slice(0, 10) });
+    const lieu = h('input', { class: 'champ', value: m?.lieu || 'Entreprise', list: 'lieux-eval', maxlength: 120 });
+    const com = h('textarea', { class: 'champ', rows: 3, maxlength: 2000, placeholder: 'ex. observé lors de la visite en entreprise du 12/03 (tuteur : M. X)' }, m?.commentaire || '');
+    const actuel = b && !b.manuel ? `Meilleur niveau actuel : ${niveau(b.n).code} (${b.anterieur ? 'promotion ' + b.promo : 'fiche contrat ' + b.mat}${b.date ? ', ' + dateFr(b.date) : ''}). Le meilleur des deux niveaux est retenu.` : null;
+    const boutons = [{ texte: 'Annuler', valeur: false }];
+    if (m) boutons.unshift({ texte: 'Supprimer cette évaluation', classe: 'danger gauche', action: async () => { await db.supprimer('competences_manuelles', m.id); toast('Évaluation supprimée'); return 'maj'; } });
+    boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
+      if (!choix) throw new Error('Choisissez un niveau : A, EVA ou NA.');
+      await db.enregistrer('competences_manuelles', [{ promotion_id: ctx.promo.id, eleve_id: e.id, competence: c.code, niveau: choix, date_eval: date.value || null,
+        lieu: lieu.value.trim() || 'Entreprise', commentaire: com.value.trim() }], 'eleve_id,competence');
+      toast('Compétence évaluée'); return 'maj';
+    } });
+    const r = await fenetre(`${c.code} · ${e.nom} ${e.prenom}`, h('div', { class: 'formulaire evaluer-direct' },
+      h('p', { class: 'aide large' }, h('b', {}, c.libelle), h('br'), 'Évaluation directe, sans fiche contrat : par exemple une compétence observée en entreprise ou en stage.'),
+      actuel ? h('p', { class: 'info-partage large' }, actuel) : null,
+      h('div', { class: 'large', style: { gridColumn: '1 / -1' } }, h('span', { class: 'lib-form' }, 'Niveau'), boutonsNiv),
+      h('label', {}, 'Date', date), h('label', {}, 'Lieu', lieu, h('datalist', { id: 'lieux-eval' }, ['Entreprise', 'Stage', 'PFMP', 'Chantier', 'Atelier'].map((x) => h('option', { value: x })))),
+      h('label', { class: 'large' }, 'Commentaire (visible des enseignants seulement)', com)), boutons, { large: true });
+    if (r === 'maj') { try { await ctx.recharger(); } catch (x) { erreur(x); } }
+  }
 
   // graphiques : seules les compétences réellement évaluées comptent dans les répartitions (les non évaluées sont à part)
   function graphiques() {

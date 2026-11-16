@@ -16,6 +16,7 @@ async function rpcEleve(fonction, args = {}) {
     case 'eleve_qcm_liste': return db.rpc('apercu_qcm_liste', { p });
     case 'eleve_details_seances': return db.rpc('apercu_details_seances', { p });
     case 'eleve_matieres_documents': return db.rpc('apercu_matieres_documents', { p });
+    case 'eleve_competences_manuelles': return db.rpc('apercu_competences_manuelles', { p });
     case 'eleve_qcm_ouvrir': return db.rpc('apercu_qcm_ouvrir', { q: args.session });
     case 'eleve_qcm_rendre': { const c = await db.rpc('apercu_qcm_rendre', { q: args.session, reponses: args.reponses }); corrigesApercu.set(args.session, c); return c; }
     case 'eleve_qcm_correction': { if (corrigesApercu.has(args.session)) return corrigesApercu.get(args.session); throw new Error('Aperçu : faites d’abord le QCM.'); }
@@ -503,6 +504,9 @@ async function pageResultats(zone) {
   // livret : meilleur niveau obtenu pour chaque compétence (contrats sommatifs)
   const ordre = ['NE', 'NA', 'EVA', 'A'], livret = new Map();
   for (const x of sommatifs) for (const g of x.groupes) { const n = niveau(g.m); if (!livret.has(g.g) || ordre.indexOf(n) > ordre.indexOf(livret.get(g.g))) livret.set(g.g, n); }
+  // compétences évaluées directement par un enseignant (ex. en entreprise), sans fiche contrat
+  const directes = await rpcEleve('eleve_competences_manuelles').catch(() => []);
+  for (const m of directes || []) if (ordre.includes(m.niveau) && (!livret.has(m.competence) || ordre.indexOf(m.niveau) > ordre.indexOf(livret.get(m.competence)))) livret.set(m.competence, m.niveau);
   const apprec = (D.appreciations || []).filter((a) => (a.texte || '').trim() && D.mats.get(a.matiere_id));
   vider(zone, entete('🏆  Mes résultats', `${D.eleve.prenom} ${D.eleve.nom} · promotion ${D.P.libelle}`),
     h('section', {}, h('h2', { class: 'titre-section' }, 'Compétences (meilleur niveau obtenu)'),

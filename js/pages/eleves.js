@@ -3,7 +3,7 @@ import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { anneau, barresH, carteGraph } from '../graphiques.js';
 import { h, vider, toast, erreur, fenetre, confirmer, dateFr, imprimer } from '../ui.js';
-import { badgeRedoublant, libPromo } from '../redoublants.js';
+import { badgeRedoublant, badgePap, libPromo } from '../redoublants.js';
 import { pageAcces } from './acces.js';
 import { apercuEleve } from '../app.js';
 
@@ -15,7 +15,10 @@ const CHAMPS = [
   ['projet', 'Projet post-BTS'], ['arret', 'Arrêt de la formation (date ou motif ; vide = en formation)'],
   ['redoublant', 'Redoublant(e)', 'case'], ['date_arrivee', 'Arrivé(e) dans la promotion le (vide = dès le début)', 'date'],
   ['devenir', 'Suite du parcours (ex. redouble avec la promotion suivante)'],
+  ['pap', 'Bénéficie d’un PAP (plan d’accompagnement personnalisé)', 'case'],
+  ['pap_amenagements', 'Aménagements du PAP (un par ligne) : visibles des enseignants au survol du symbole PAP, jamais des élèves', 'zone'],
 ];
+let avecPap = false;   // colonnes du PAP présentes (script SQL 38)
 
 export async function pageEleves(zone, _arg, ctx) {
   if (_arg === 'acces') return pageAcces(zone, ctx);
@@ -23,6 +26,7 @@ export async function pageEleves(zone, _arg, ctx) {
 
   async function dessiner() {
     const eleves = await db.lire('eleves', `promotion_id=eq.${ctx.promo.id}&order=nom,prenom`);
+    avecPap = eleves.length ? eleves.some((x) => 'pap' in x) : await db.lire('eleves', 'limit=1').then((l) => !l.length || 'pap' in l[0]).catch(() => false);
     eleves.sort((a, b) => (!!a.arret - !!b.arret) || a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
     const actifs = eleves.filter((e) => !e.arret);
     const app = actifs.filter((e) => e.statut === 'Apprenti').length;
@@ -45,13 +49,14 @@ export async function pageEleves(zone, _arg, ctx) {
         h('div', { class: 'tuile' }, h('strong', {}, app), h('span', {}, 'apprentis')),
         h('div', { class: 'tuile' }, h('strong', {}, actifs.length - app), h('span', {}, 'scolaires')),
         red ? h('div', { class: 'tuile redoublants' }, h('strong', {}, red), h('span', {}, 'redoublant(s)')) : null,
+        actifs.some((e) => e.pap) ? h('div', { class: 'tuile pap' }, h('strong', {}, actifs.filter((e) => e.pap).length), h('span', {}, 'avec un PAP')) : null,
         eleves.length > actifs.length ? h('div', { class: 'tuile' }, h('strong', {}, eleves.length - actifs.length), h('span', {}, 'arrêts')) : null),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'liste' },
         h('thead', {}, h('tr', {}, ['N°', 'NOM Prénom', 'Né(e) le', 'Statut', 'Contact', 'Origine', 'Entreprise', 'Parcours', 'Arrêt'].map((t) => h('th', {}, t)))),
         h('tbody', {}, eleves.map((e) => h('tr', { class: (e.arret ? 'arret ' : '') + (admin ? 'cliquable' : ''), onclick: admin ? () => formulaire(e) : null,
           title: admin ? 'Cliquer pour modifier' : null },
           h('td', { class: 'num' }, e.arret ? '' : ++n),
-          h('td', {}, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx),
+          h('td', {}, h('b', {}, e.nom), ' ', e.prenom, ' ', badgeRedoublant(e, ctx), ' ', badgePap(e),
             e.redoublant ? h('div', { class: 'petit gris' }, [e.origine_promotion_id ? `vient de la promotion ${libPromo(ctx, e.origine_promotion_id)}` : 'redoublant(e)',
               e.date_arrivee ? ` · arrivé(e) le ${dateFr(e.date_arrivee)}` : ''].join('')) : null,
             e.devenir || suites.some((x) => x.origine_eleve_id === e.id) ? h('div', { class: 'petit suite-parcours' }, '→ ' + (e.devenir || 'redouble dans une autre promotion')) : null),
@@ -81,8 +86,9 @@ export async function pageEleves(zone, _arg, ctx) {
 
   async function formulaire(e) {
     const val = {};
-    const champs = CHAMPS.map(([k, lab, t]) => {
+    const champs = CHAMPS.filter(([k]) => avecPap || !k.startsWith('pap')).map(([k, lab, t]) => {
       let el;
+      if (t === 'zone') { el = h('textarea', { class: 'champ', rows: 4, placeholder: 'ex. tiers-temps aux évaluations\nsujets agrandis (police 14)\nusage de l’ordinateur' }, e?.[k] ?? ''); val[k] = el; return h('label', { class: 'large' }, lab, el); }
       if (Array.isArray(t)) el = h('select', { class: 'champ' }, t.map((o) => h('option', { selected: (e?.[k] || 'Scolaire') === o }, o)));
       else if (t === 'case') { el = h('input', { type: 'checkbox', checked: !!e?.[k] }); val[k] = el; return h('label', { class: 'case-form' }, el, ' ', lab); }
       else el = h('input', { class: 'champ', type: t || 'text', value: e?.[k] ?? '' });
@@ -96,6 +102,7 @@ export async function pageEleves(zone, _arg, ctx) {
     } });
     boutons.push({ texte: 'Enregistrer', classe: 'principal', action: async () => {
       const d = Object.fromEntries(Object.entries(val).map(([k, el]) => [k, el.type === 'checkbox' ? el.checked : el.value.trim()]));
+      if ('pap' in d && !d.pap && !d.pap_amenagements) d.pap_amenagements = '';
       d.date_arrivee = d.date_arrivee || null;
       d.nom = d.nom.toUpperCase();
       if (!d.nom && !d.prenom) throw new Error('Saisissez au moins le nom ou le prénom.');

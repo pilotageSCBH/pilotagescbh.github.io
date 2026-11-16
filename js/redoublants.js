@@ -76,3 +76,43 @@ export function fusionnerAcquis(best, anterieurs) {
   for (const [code, b] of anterieurs) { const x = best.get(code); if (!x || b.n > x.n) best.set(code, b); }
   return best;
 }
+
+// PAP (plan d'accompagnement personnalisé) : symbole à côté du nom ; les aménagements s'affichent au survol (ou au toucher)
+export function badgePap(e, long = false) {
+  if (!e?.pap) return null;
+  const lignes = String(e.pap_amenagements || '').split('\n').map((x) => x.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean);
+  let bulle = null;
+  const fermer = () => { bulle?.remove(); bulle = null; window.removeEventListener('scroll', fermer, true); };
+  const ouvrir = () => {
+    fermer();
+    bulle = h('div', { class: 'bulle-pap', role: 'tooltip' }, h('b', {}, '♿ PAP · aménagements'),
+      lignes.length ? h('ul', {}, lignes.map((x) => h('li', {}, x))) : h('p', {}, 'Aménagements non renseignés.'));
+    document.body.append(bulle);
+    const r = b.getBoundingClientRect(), w = bulle.offsetWidth, hb = bulle.offsetHeight;
+    const x = Math.max(8, Math.min(r.left, innerWidth - w - 8)), y = r.bottom + 6 + hb > innerHeight ? Math.max(8, r.top - hb - 6) : r.bottom + 6;
+    Object.assign(bulle.style, { left: x + 'px', top: y + 'px' });
+    window.addEventListener('scroll', fermer, true);
+  };
+  const b = h('span', { class: 'badge-pap' + (long ? ' long' : ''), tabindex: 0, 'aria-label': 'PAP : ' + (lignes.join(' ; ') || 'aménagements non renseignés'),
+    onmouseenter: ouvrir, onmouseleave: fermer, onfocus: ouvrir, onblur: fermer,
+    onclick: (ev) => { ev.stopPropagation(); bulle ? fermer() : ouvrir(); } }, long ? '♿ PAP' : 'PAP');
+  window.addEventListener('hashchange', fermer, { once: true });
+  return b;
+}
+
+// compétences évaluées sans fiche contrat (ex. en entreprise) : niveau choisi directement dans la validation (script SQL 38)
+export const NOTE_MANUELLE = { A: 5, EVA: 3, NA: 1 };
+export const abregeLieu = (l) => (/entreprise/i.test(l || '') ? 'ENT' : String(l || 'Autre').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'MAN');
+export async function chargerManuelles(promoId) {
+  try { return await db.lire('competences_manuelles', `promotion_id=eq.${promoId}`); } catch { return null; }   // null : script 38 pas encore exécuté
+}
+// ajoute à « best » (Map code → { n, date, … }) les évaluations manuelles d'un élève, si elles sont meilleures (à égalité, la plus récente)
+export function ajouterManuelles(best, manuelles, eleveId, cle = (code) => code) {
+  for (const m of manuelles || []) {
+    if (m.eleve_id !== eleveId) continue;
+    const n = NOTE_MANUELLE[m.niveau]; if (n === undefined) continue;
+    const k = cle(m.competence), b = best.get(k);
+    if (!b || n > b.n || (n === b.n && (m.date_eval || '') > (b.date || ''))) best.set(k, { n, date: m.date_eval, mat: abregeLieu(m.lieu), matNom: m.lieu || 'Évaluation directe', manuel: m });
+  }
+  return best;
+}

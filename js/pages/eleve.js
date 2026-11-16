@@ -6,7 +6,7 @@ import { h, vider, toast, erreur, champ, dateFr } from '../ui.js';
 import { moyenne, niveau } from './contrat.js';
 import { barresH, courbe, anneau, carteGraph } from '../graphiques.js';
 import { telecharger, nomFichier } from '../echange.js';
-import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, libPromo, concerne } from '../redoublants.js';
+import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, badgePap, libPromo, concerne, chargerManuelles, ajouterManuelles } from '../redoublants.js';
 
 const CLE_PER = 'pilotage-scbh-eleve-periode';
 const lire = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -43,6 +43,7 @@ export async function pageEleve(zone, arg, ctx) {
   const appreciations = new Map(ap.map((a) => [`${a.eleve_id}:${a.matiere_id}`, a.texte]));
   // redoublants : acquis de la promotion d'origine ; élèves de cette promotion partis redoubler ailleurs
   const anterieurs = await acquisAnterieurs(ctx, eleves);
+  const manuelles = await chargerManuelles(P.id);   // compétences évaluées sans fiche contrat (ex. en entreprise)
   const suites = await db.lire('eleves', `origine_eleve_id=in.(${eleves.map((e) => e.id).join(',')})&select=id,origine_eleve_id,promotion_id`).catch(() => []);
   const ouvrirAilleurs = (promotionId, eleveId) => {
     const p = ctx.promotions.find((x) => x.id === promotionId); if (!p) return;
@@ -74,7 +75,7 @@ export async function pageEleve(zone, arg, ctx) {
         if (!b || n > b.n || (n === b.n && (c.date_eval || '') > (b.date || ''))) best.set(code, { n, date: c.date_eval, mat: mat ? ctx.codeMat(mat) : '', matNom: mat?.nom || '' });
       }
     }
-    return fusionnerAcquis(best, anterieurs.get(e.id));
+    return fusionnerAcquis(ajouterManuelles(best, manuelles, e.id), anterieurs.get(e.id));
   };
   const niveauDe = (best, code) => { const b = best.get(code); return b ? niveau(b.n).code : 'NE'; };
   const categories = [['Compétences cœur de métier', 'C1 à C4', ref.competences.filter((c) => !ctx.transversale(c.code))],
@@ -110,7 +111,7 @@ export async function pageEleve(zone, arg, ctx) {
       h('section', { class: 'profil-carte eleve' },
         h('span', { class: 'avatar grand' }, (e.prenom[0] || '') + (e.nom[0] || '')),
         h('div', { class: 'profil-infos' }, h('h2', {}, `${e.nom} ${e.prenom}`),
-          h('div', { class: 'profil-badges' }, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut), badgeRedoublant(e, ctx, true),
+          h('div', { class: 'profil-badges' }, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut), badgeRedoublant(e, ctx, true), badgePap(e, true),
             e.entreprise ? h('span', { class: 'role-pill' }, '🏭  ' + e.entreprise) : null, e.naissance ? h('span', { class: 'role-pill' }, 'né(e) le ' + dateFr(e.naissance)) : null),
           e.etudes ? h('p', { class: 'gris' }, `Parcours : ${e.etudes}${e.etablissement ? ' · ' + e.etablissement : ''}`) : null,
           e.redoublant ? h('div', { class: 'bandeau-redoublant' },
@@ -154,7 +155,7 @@ export async function pageEleve(zone, arg, ctx) {
           : h('p', { class: 'vide' }, 'Aucune note pour cette période.')),
       // livret de compétences
       h('section', { class: 'bloc livret' }, h('h2', {}, '🎓  Livret de compétences'),
-        h('p', { class: 'aide' }, 'Meilleur niveau obtenu dans les contrats sommatifs de toutes les matières (toute la formation), avec la date et la matière de l’évaluation.'),
+        h('p', { class: 'aide' }, 'Meilleur niveau obtenu dans les contrats sommatifs de toutes les matières (toute la formation), avec la date et la matière de l’évaluation ; « ENT » : évaluée directement, par exemple en entreprise (Validation des compétences).'),
         categories.map(([t, codes, cs]) => h('div', { class: 'categorie-livret' + (codes.startsWith('C5') ? ' transversale' : '') },
           h('h3', {}, `${t} (${codes})`),
           [...new Set(cs.map((c) => c.famille))].map((f) => h('div', { class: 'famille-livret' },
