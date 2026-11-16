@@ -795,7 +795,17 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     (lus.dossiers || []).forEach(ajouterD);
     const dossiers = [...new Set([...nouveaux.map((x) => x.c), ...deplaces.map((d) => d.x.c)].map(dirDe).filter(Boolean))];
     const aCreer = [...new Set(dossiers.flatMap((d) => d.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))].filter((d) => d !== 'Livres' && !parDossier.has(d)).sort();
-    const dossiersPartis = fichiers.length ? mesT.filter((t) => t.dossier && !presentsD.has(nfc(t.dossier))) : [];
+    // dossiers qui ne correspondent plus à rien sur Nuage : leur chemin (ou, s'ils n'ont pas de chemin enregistré,
+    // celui formé par leurs noms) n'existe pas dans le dossier lu, et ils ne contiendront plus aucun fichier présent sur Nuage
+    const cheminEff = (t) => nfc(t.dossier) || chemin(t).map((x) => x.nom).join('/');
+    const themeFinal = new Map(mesFiches().map((l) => [l, l.theme_id ?? null]));
+    for (const { l, x } of deplaces) themeFinal.set(l, parDossier.get(dirDe(x.c))?.id ?? -1);   // -1 : dossier qui va être créé
+    const contientPresent = (t) => { const ids = new Set([t.id, ...descendants(t.id).map((x) => x.id)]);
+      return mesFiches().some((l) => ids.has(themeFinal.get(l)) && (presents.has(nfc(l.chemin)) || !l.chemin) && !disparus.includes(l)); };
+    const sansNumero = (c) => c.split('/').map((x) => x.replace(/^\d+\s*-\s*/, '').toLowerCase()).join('/');
+    const presentsNoms = new Set([...presentsD].map(sansNumero));
+    const surNuage = (t) => (t.dossier ? presentsD.has(nfc(t.dossier)) : presentsNoms.has(sansNumero(cheminEff(t))));
+    const dossiersPartis = fichiers.length ? mesT.filter((t) => !surNuage(t) && !contientPresent(t)) : [];
     // tuiles déjà créées : image « illustration.* » ajoutée depuis dans le dossier Nuage
     const illus = mesT.filter((t) => !t.image && images.has(nfc(t.dossier)));
     // prudence : un dossier vide ou presque tout « introuvable » fait penser à un mauvais lien
