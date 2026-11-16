@@ -386,8 +386,8 @@ export function ouvrirVideo(cle = 'decouverte') {
   document.querySelector('.fond-video')?.remove();
   try { localStorage.setItem('pilotage-scbh-video-vue', '1'); } catch { /* sans stockage */ }
   // MP4 (H.264) : lu par tous les navigateurs actuels
-  const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg' },
-    h('source', { src: v.src + '.mp4', type: 'video/mp4' }),
+  const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg?v=' + (v.ver || 1) },
+    h('source', { src: v.src + '.mp4?v=' + (v.ver || 1), type: 'video/mp4' }),
     'Votre navigateur ne peut pas lire cette vidéo.');
   const fermer = () => { video.pause(); voix?.arreter(); fond.remove(); document.removeEventListener('keydown', touche); window.removeEventListener('hashchange', fermer); };
   const touche = (e) => { if (e.key === 'Escape') fermer(); };

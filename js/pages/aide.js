@@ -256,13 +256,13 @@ function assistant() {
 
 // ------------------------------------------------------------------------------------------- vidéos
 export const VIDEOS = [
-  { cle: 'decouverte', titre: 'Découvrir le site en 3 minutes', sous: 'les principales fonctionnalités', duree: '2 min 45', src: 'video/decouverte' },
-  { cle: 'tutoriel', titre: 'Apprendre à travailler avec le site', sous: 'tutoriel complet, chapitre par chapitre', duree: '7 min 20', src: 'video/tutoriel',
-    chapitres: [{t: 6.0, titre: "Premiers pas"}, {t: 46.0, titre: "Séquençages"}, {t: 90.0, titre: "Progression"}, {t: 131.0, titre: "Documents pédagogiques"}, {t: 181.0, titre: "Évaluer et suivre"}, {t: 228.0, titre: "Les élèves"}, {t: 251.0, titre: "Mes ressources"}, {t: 312.0, titre: "Les QCM"}, {t: 366.0, titre: "L’espace élèves"}, {t: 399.0, titre: "Administration"}, {t: 421.0, titre: "L’aide"}] },
+  { cle: 'decouverte', titre: 'Découvrir le site en 3 minutes', sous: 'les principales fonctionnalités', duree: '2 min 55', src: 'video/decouverte', ver: '202611161146' },
+  { cle: 'tutoriel', titre: 'Apprendre à travailler avec le site', sous: 'tutoriel complet, chapitre par chapitre', duree: '8 min 16', src: 'video/tutoriel', ver: '202611161146',
+    chapitres: [{t: 7.0, titre: "Premiers pas"}, {t: 50.0, titre: "Séquençages"}, {t: 94.0, titre: "Progression"}, {t: 154.0, titre: "Documents pédagogiques"}, {t: 205.0, titre: "Évaluer et suivre"}, {t: 254.0, titre: "Les élèves"}, {t: 277.0, titre: "Mes ressources"}, {t: 347.0, titre: "Les QCM"}, {t: 401.0, titre: "L’espace élèves"}, {t: 443.0, titre: "Administration"}, {t: 466.0, titre: "L’aide"}] },
 ];
 function blocVideos() {
   return h('section', { class: 'videos-aide' }, VIDEOS.map((v) => h('button', { class: 'carte-video', type: 'button', onclick: () => import('../app.js').then((m) => m.ouvrirVideo(v.cle)) },
-    h('span', { class: 'vignette-video', style: { backgroundImage: `url(${v.src}.jpg)` } }, h('span', { class: 'lecture' }, '▶')),
+    h('span', { class: 'vignette-video', style: { backgroundImage: `url(${v.src}.jpg?v=${v.ver || 1})` } }, h('span', { class: 'lecture' }, '▶')),
     h('span', { class: 'texte-video' }, h('b', {}, v.titre), h('small', {}, v.sous + (v.duree ? ' · ' + v.duree : ''))))));
 }
 
