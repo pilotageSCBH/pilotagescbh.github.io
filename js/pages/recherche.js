@@ -108,14 +108,14 @@ export async function pageRecherche(zone, arg, ctx) {
       const [themes, livres] = await Promise.all([db.lire('biblio_themes', 'order=ordre,id'), db.lire('biblio_livres', 'order=ordre,id'), chargerCollegues()]);
       const T = new Map(themes.map((t) => [t.id, t]));
       const chemin = (id) => { const l = []; let t = T.get(id), n = 0; while (t && n++ < 30) { l.unshift(t.nom); t = T.get(t.parent_id); } return l.join(' › '); };
-      for (const [espace, titre, icone, base] of [['biblio', 'Ma bibliothèque', '📖', '#/biblio'], ['cours', 'Mes cours', '🎓', '#/cours']]) {
+      for (const [espace, titre, icone, base] of [['biblio', 'Ma bibliothèque', '📖', '#/biblio'], ['cours', 'Mes cours', '🎓', '#/cours'], ['divers', 'Mes ressources diverses', '🗂', '#/divers']]) {
         const items = [];
         for (const t of themes.filter((t) => t.espace === espace && trouve(t.nom))) items.push({ titre: '📁 ' + t.nom, contexte: chemin(t.parent_id) || (t.proprietaire === ctx.profil.id ? 'Accueil' : 'Partagé par ' + nomCollegue(t.proprietaire)), hash: `${base}/t-${t.id}` });
         for (const l of livres.filter((l) => l.espace === espace)) {
           const som = (l.sommaire || []).map((e) => e.t);
-          if (!trouve(l.titre, l.auteur, l.editeur, l.notes, l.savoirs, som, espace === 'cours' ? (GENRES[l.genre] || GENRES.cours)[1] : '')) continue;
+          if (!trouve(l.titre, l.auteur, l.editeur, l.notes, l.savoirs, som, espace !== 'biblio' ? (GENRES[l.genre] || GENRES.cours)[1] : '')) continue;
           const ligne = (l.sommaire || []).find((e) => trouve(e.t)) || (l.sommaire || []).find((e) => termes.some((m) => sansAccent(e.t).includes(m)));
-          items.push({ titre: (espace === 'cours' ? (GENRES[l.genre] || GENRES.cours)[0] : '📕') + ' ' + (l.titre || 'Sans titre'),
+          items.push({ titre: (espace !== 'biblio' ? (GENRES[l.genre] || GENRES.cours)[0] : '📕') + ' ' + (l.titre || 'Sans titre'),
             contexte: [chemin(l.theme_id) || 'Non classé', l.proprietaire !== ctx.profil.id ? 'partagé par ' + nomCollegue(l.proprietaire) : ''].filter(Boolean).join(' · '),
             extrait: ligne ? extrait(ligne.t + (ligne.p ? ` (p. ${ligne.p})` : '')) : extrait(l.titre, l.auteur, l.notes, som), hash: `${base}/l-${l.id}` });
         }

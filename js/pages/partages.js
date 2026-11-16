@@ -17,14 +17,14 @@ export async function pagePartages(zone, arg, ctx) {
     if (!th.length && !li.length) return null;
     return h('div', {}, h('h3', {}, titre), h('ul', { class: 'liste-contenu' },
       th.map((t) => h('li', {}, h('a', { class: 'lien', href: base + '/t-' + t.id }, '📁 ', h('b', {}, t.nom)))),
-      li.map((l) => h('li', {}, h('a', { class: 'lien', href: base + '/l-' + l.id }, (espace === 'cours' ? (GENRES[l.genre] || GENRES.cours)[0] : '📕') + ' ', h('b', {}, l.titre),
-        h('small', {}, espace === 'cours' ? ' · ' + (GENRES[l.genre] || GENRES.cours)[1] : [l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => ' · ' + x).join('')))))));
+      li.map((l) => h('li', {}, h('a', { class: 'lien', href: base + '/l-' + l.id }, (espace !== 'biblio' ? (GENRES[l.genre] || GENRES.cours)[0] : '📕') + ' ', h('b', {}, l.titre),
+        h('small', {}, espace !== 'biblio' ? ' · ' + (GENRES[l.genre] || GENRES.cours)[1] : [l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => ' · ' + x).join('')))))));
   };
   const blocs = autres.map((u) => {
-    const nbL = livres.filter((l) => l.proprietaire === u && l.espace !== 'cours').length, nbC = livres.filter((l) => l.proprietaire === u && l.espace === 'cours').length;
+    const nbL = livres.filter((l) => l.proprietaire === u && l.espace === 'biblio').length, nbC = livres.filter((l) => l.proprietaire === u && l.espace !== 'biblio').length;
     return h('section', { class: 'carte-detail partage-collegue' },
       h('h2', {}, '👤 ', nomCollegue(u), h('small', { class: 'gris' }, `  ·  ${nbL} ouvrage(s) · ${nbC} document(s)`)),
-      bloc(u, 'biblio', '📖 Bibliothèque', '#/biblio'), bloc(u, 'cours', '🎓 Cours', '#/cours'));
+      bloc(u, 'biblio', '📖 Bibliothèque', '#/biblio'), bloc(u, 'cours', '🎓 Cours', '#/cours'), bloc(u, 'divers', '🗂 Ressources diverses', '#/divers'));
   });
   vider(zone,
     h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '👥  Partagés avec moi'),

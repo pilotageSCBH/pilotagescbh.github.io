@@ -84,8 +84,14 @@ export const ESPACES = {
   cours: { cle: 'cours', base: '#/cours', titre: '🎓  Mes cours', icone: '🎓', lien: 'lien_cours', nomDossierNuage: 'Mes cours',
     theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📘',
     exempleTheme: 'S1 - Déroulement d’une affaire', exempleDossier: 'Organisation/S1 - Déroulement d’une affaire', exempleChemin: 'Organisation/S1 - Déroulement d’une affaire/A01 - L’entreprise.pdf',
-    recherche: 'Rechercher dans les titres, types et sommaires : contreventement, métré, évaluation, S11-1…', genres: true },
+    recherche: 'Rechercher dans les titres, types et sommaires : contreventement, métré, évaluation, S11-1…', genres: true, eleves: true },
+  divers: { cle: 'divers', base: '#/divers', titre: '🗂  Mes ressources diverses', icone: '🗂', lien: 'lien_divers', nomDossierNuage: 'Mes ressources diverses',
+    theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📘',
+    exempleTheme: 'Visites de chantier', exempleDossier: 'Organisation/Visites de chantier', exempleChemin: 'Organisation/Visites de chantier/Fiche visite.pdf',
+    recherche: 'Rechercher dans les titres, types et sommaires : visite, vidéo, fiche technique, S11-1…', genres: true, eleves: true, script: '36_ressources_diverses.sql' },
 };
+// espace d'un document (Mes cours par défaut) : pour les liens vers sa fiche
+export const baseEspace = (espace) => (ESPACES[espace] || ESPACES.cours).base;
 
 const A_COMPLETER = { scan: 'PDF scanné', aucun: 'Sommaire introuvable', protege: 'PDF protégé', erreur: 'PDF illisible' };
 const caches = {};           // par espace : { themes, livres, partages, t }
@@ -109,7 +115,7 @@ export function pageEspace(E) {
     try { [C] = await Promise.all([charger(E), chargerReglages(), chargerCollegues()]); }
     catch (e) {
       vider(zone, h('header', { class: 'entete-page' }, h('h1', {}, E.titre)), h('div', { class: 'erreur-page' }, h('h2', {}, 'Espace pas encore installé'),
-        h('p', {}, ctx.estAdmin() ? 'Exécutez les scripts « 25_bibliotheque.sql » puis « 26_mes_cours.sql » dans Supabase (SQL Editor → New query → Run), puis rechargez la page.' : 'L’administrateur doit d’abord terminer l’installation de cet espace.'), h('p', { class: 'aide' }, e.message)));
+        h('p', {}, ctx.estAdmin() ? (E.script ? `Exécutez le script « ${E.script} » dans Supabase (SQL Editor → New query → Run), puis rechargez la page.` : null) || 'Exécutez les scripts « 25_bibliotheque.sql » puis « 26_mes_cours.sql » dans Supabase (SQL Editor → New query → Run), puis rechargez la page.' : 'L’administrateur doit d’abord terminer l’installation de cet espace.'), h('p', { class: 'aide' }, e.message)));
       return;
     }
     await afficher(E, C, zone, arg, ctx, moi);
@@ -148,7 +154,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
   // publication pour les élèves : un document, ou un dossier entier (et tout ce qu'il contient) ; Mes cours : aussi
   // publication automatique des cours mobilisés du séquençage (lundi de la semaine prévue dans la progression, 6 h)
-  const avecEleves = E.cle === 'cours' && Array.isArray(C.publications);   // la bibliothèque n'est jamais partagée avec les élèves
+  const avecEleves = !!E.eleves && Array.isArray(C.publications);   // la bibliothèque n'est jamais partagée avec les élèves
   const autoDe = (l) => (C.auto || []).filter((a) => a.livre_id === l.id);
   const libPromo = (id) => 'promotion ' + (ctx.promotions.find((p) => p.id === id)?.libelle || '');
   const quandAuto = (a) => { const d = new Date(a.le); return (d <= new Date() ? 'depuis le ' : 'le ') + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d <= new Date() ? '' : ' à 6 h'); };

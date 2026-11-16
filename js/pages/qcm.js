@@ -167,7 +167,7 @@ function boutonH5P(apres) {
 // ------------------------------------------------------------------------------------------- création
 async function creer(ctx, { livre_id = null, contrat_id = null, h5p = false }, liste = []) {
   let docs = [];
-  try { docs = (await db.lire('biblio_livres', 'espace=eq.cours&order=titre')).filter((l) => l.proprietaire === ctx.profil.id); } catch { /* Mes cours absent */ }
+  try { docs = (await db.lire('biblio_livres', 'espace=in.(cours,divers)&order=titre')).filter((l) => l.proprietaire === ctx.profil.id); } catch { /* Mes cours absent */ }
   const seqs = ctx.promo ? await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`) : [];
   const seances = seqs.length ? await db.lire('seances', `sequence_id=in.(${seqs.map((s) => s.id).join(',')})&order=sequence_id,numero`) : [];
   const contrats = await contratsPromo(ctx, ctx.promo?.id).catch(() => []);

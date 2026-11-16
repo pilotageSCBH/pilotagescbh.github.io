@@ -17,7 +17,7 @@ export async function chargerReglages(force = false) {
   reglages = new Map(l.map((r) => [r.proprietaire, r]));
   return reglages;
 }
-export const reglagesDe = (uid) => reglages?.get(uid) || { lien_bibliotheque: '', lien_cours: '', format_liens: 'dav' };
+export const reglagesDe = (uid) => reglages?.get(uid) || { lien_bibliotheque: '', lien_cours: '', lien_divers: '', format_liens: 'dav' };
 
 // lien de partage Nuage (Nextcloud) : https://serveur/index.php/s/JETON → { origine, jeton }
 export function analyserLien(lien) {
@@ -48,20 +48,22 @@ export async function dialogueReglages(ctx, apres) {
   const r = { ...reglagesDe(ctx.profil.id) };
   const lb = h('input', { class: 'champ', type: 'url', value: r.lien_bibliotheque, placeholder: 'https://…/index.php/s/…' });
   const lc = h('input', { class: 'champ', type: 'url', value: r.lien_cours, placeholder: 'https://…/index.php/s/…' });
+  const ld = h('input', { class: 'champ', type: 'url', value: r.lien_divers || '', placeholder: 'https://…/index.php/s/…' });
   const fmt = h('select', { class: 'champ' }, h('option', { value: 'dav', selected: r.format_liens !== 'telechargement' }, 'Ouverture directe dans le navigateur (recommandé)'),
     h('option', { value: 'telechargement', selected: r.format_liens === 'telechargement' }, 'Téléchargement du fichier'));
   // publication automatique des cours du séquençage (script 30)
   const auto = 'partage_auto' in r || !reglages?.has(ctx.profil.id) ? h('input', { type: 'checkbox', checked: r.partage_auto !== false }) : null;
   const etat = (inp) => { const z = h('small', { class: 'etat-lien' }); const maj = () => { const v = inp.value.trim(); z.textContent = !v ? '' : analyserLien(v) ? '✔ lien de partage reconnu' : '✖ ce n’est pas un lien de partage Nuage (…/s/…)'; z.className = 'etat-lien ' + (!v ? '' : analyserLien(v) ? 'ok' : 'ko'); }; inp.addEventListener('input', maj); maj(); return z; };
   const ok = await fenetre('⚙  Mes réglages Nuage', h('div', { class: 'reglages-nuage' },
-    h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule, sans mot de passe) sur le dossier de votre bibliothèque, et un autre sur votre dossier « Mes cours », puis collez-les ici : le site lit alors directement vos dossiers (« ↻ Mettre à jour ») et ouvre chaque fichier à partir de son chemin.'),
+    h('p', { class: 'aide' }, 'Vos fichiers restent sur votre Nuage. Dans Nuage, créez UN lien de partage (lecture seule, sans mot de passe) sur le dossier de votre bibliothèque, un autre sur votre dossier « Mes cours » et, si vous l’utilisez, un autre sur « Mes ressources diverses », puis collez-les ici : le site lit alors directement vos dossiers (« ↻ Mettre à jour ») et ouvre chaque fichier à partir de son chemin.'),
     h('label', {}, h('b', {}, '📖 Lien de partage de ma bibliothèque'), lb, etat(lb),
       h('small', { class: 'gris' }, 'Le dossier qui contient vos dossiers de thèmes.')),
     h('label', {}, h('b', {}, '🎓 Lien de partage de « Mes cours »'), lc, etat(lc)),
+    h('label', {}, h('b', {}, '🗂 Lien de partage de « Mes ressources diverses »'), ld, etat(ld)),
     h('div', { class: 'boutons-detail' }, h('button', { class: 'btn petit', type: 'button', onclick: async (ev) => {
       const b = ev.currentTarget, z = b.nextSibling; b.disabled = true; z.textContent = 'Lecture…'; z.className = 'etat-lien';
       const res = [];
-      for (const [nom, i] of [['Bibliothèque', lb], ['Mes cours', lc]]) {
+      for (const [nom, i] of [['Bibliothèque', lb], ['Mes cours', lc], ['Ressources diverses', ld]]) {
         if (!analyserLien(i.value)) continue;
         try { const l = await nuageListe(i.value, { force: true }); res.push(`✔ ${nom} : ${l.filter((x) => !x.dossier).length} fichier(s), ${l.filter((x) => x.dossier).length} dossier(s)`); }
         catch (e) { res.push(`✖ ${nom} : ${e.message}`); }
@@ -74,19 +76,20 @@ export async function dialogueReglages(ctx, apres) {
       h('small', { class: 'gris' }, 'Si un fichier ne s’ouvre pas, essayez l’autre réglage (bouton « Tester » dans la bibliothèque).')),
     h('p', { class: 'aide' }, '🔒 Partage en lecture seule. Vos collègues ne verront que les documents que vous partagez avec eux dans le site ; pour ouvrir les fichiers, ils utilisent ces liens.')),
   [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', action: () => {
-    for (const i of [lb, lc]) if (i.value.trim() && !analyserLien(i.value)) throw new Error('Lien non reconnu : copiez le lien de partage de Nuage (il contient « /s/ »).');
+    for (const i of [lb, lc, ld]) if (i.value.trim() && !analyserLien(i.value)) throw new Error('Lien non reconnu : copiez le lien de partage de Nuage (il contient « /s/ »).');
     return true;
   } }]);
   if (!ok) return;
   try {
     const v = { proprietaire: ctx.profil.id, lien_bibliotheque: lb.value.trim(), lien_cours: lc.value.trim(), format_liens: fmt.value };
+    if ('lien_divers' in (reglages.get(ctx.profil.id) || {}) || ld.value.trim()) v.lien_divers = ld.value.trim();
     if (auto && 'partage_auto' in r) v.partage_auto = auto.checked;
     else if (auto && !auto.checked) v.partage_auto = false;
     await db.enregistrer('ressources_reglages', [v], 'proprietaire');
     reglages.set(ctx.profil.id, v);
     toast('Réglages Nuage enregistrés');
     apres?.();
-  } catch (e) { erreur(e); }
+  } catch (e) { erreur(/lien_divers/.test(e.message) ? new Error('Pour enregistrer le lien de « Mes ressources diverses », l’administrateur doit d’abord exécuter le script SQL 36.') : e); }
 }
 
 // ------------------------------------------------------------------------------------------- collègues

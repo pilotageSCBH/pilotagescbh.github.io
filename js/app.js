@@ -23,7 +23,7 @@ import { pageEleve } from './pages/eleve.js';
 import { pageSemaine } from './pages/semaine.js';
 import { pageEvaluations } from './pages/evaluations.js';
 import { pageAlertes } from './pages/alertes.js';
-import { pageCours } from './pages/cours.js';
+import { pageCours, pageDivers } from './pages/cours.js';
 import { pageBibliotheque } from './pages/bibliotheque.js';
 import { pagePartages } from './pages/partages.js';
 import { pageRecherche, allerALaCible } from './pages/recherche.js';
@@ -90,7 +90,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, divers: pageDivers, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -295,6 +295,7 @@ function menu(route) {
     ...(ctx.peutEcrire() ? [{ cle: 'ressources', titre: 'Mes ressources', icone: '📚', items: [
       { href: '#/biblio', icone: '📖', texte: 'Ma bibliothèque', actif: page === 'biblio' && arg !== 'partages' },
       { href: '#/cours', icone: '🎓', texte: 'Mes cours', actif: page === 'cours' && arg !== 'partages' },
+      { href: '#/divers', icone: '🗂', texte: 'Mes ressources diverses', actif: page === 'divers' && arg !== 'partages' },
       { href: '#/qcm', icone: '📝', texte: 'Mes QCM', actif: page === 'qcm' },
       { href: '#/partages', icone: '👥', texte: 'Partagés avec moi', actif: page === 'partages' || arg === 'partages' }] }] : []),
     { cle: 'resultats', titre: 'Résultats', icone: '🏆', items: [

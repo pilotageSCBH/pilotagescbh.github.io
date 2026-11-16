@@ -27,8 +27,8 @@ async function fichierDocument(d) {
   if (!apercu) return fichierEleve(d.id);
   if (d.lien) { window.open(d.lien, '_blank', 'noopener'); return null; }
   const g = (await db.lire('ressources_reglages', `proprietaire=eq.${d.proprietaire}`))[0];
-  const lien = d.espace === 'biblio' ? g?.lien_bibliotheque : g?.lien_cours;
-  if (!lien) throw new Error(`L’auteur du document n’a pas renseigné le lien de partage de « ${d.espace === 'biblio' ? 'Ma bibliothèque' : 'Mes cours'} ».`);
+  const lien = d.espace === 'biblio' ? g?.lien_bibliotheque : d.espace === 'divers' ? g?.lien_divers : g?.lien_cours;
+  if (!lien) throw new Error(`L’auteur du document n’a pas renseigné le lien de partage de « ${d.espace === 'biblio' ? 'Ma bibliothèque' : d.espace === 'divers' ? 'Mes ressources diverses' : 'Mes cours'} ».`);
   return nuageFichier(lien, d.chemin);
 }
 import { h, vider, toast, erreur, fenetre } from '../ui.js';

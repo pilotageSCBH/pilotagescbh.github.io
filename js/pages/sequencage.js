@@ -1,7 +1,7 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { iconeDoc, GENRES } from './cours.js';
+import { iconeDoc, GENRES, baseEspace } from './cours.js';
 import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
@@ -150,7 +150,7 @@ export async function pageSequencage(zone, id, ctx) {
     const td = h('td', { class: 'cell-cours' });
     const dessinerC = () => vider(td,
       (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('div', { class: 'ligne-cours-lie' },
-        h('a', { class: 'cours-lie', href: '#/cours/' + c.id, title: (GENRES[c.genre] || GENRES.cours)[1] + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
+        h('a', { class: 'cours-lie', href: baseEspace(c.espace) + '/l-' + c.id, title: (GENRES[c.genre] || GENRES.cours)[1] + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
         /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
       champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
       modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
@@ -161,10 +161,10 @@ export async function pageSequencage(zone, id, ctx) {
     let rows, collegues = [];
     try {
       let themes, livres;
-      [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', 'espace=eq.cours&order=ordre,id'), db.lire('biblio_livres', 'espace=eq.cours&order=ordre,id'), db.rpc('collegues').catch(() => [])]);
+      [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', 'espace=in.(cours,divers)&order=ordre,id'), db.lire('biblio_livres', 'espace=in.(cours,divers)&order=ordre,id'), db.rpc('collegues').catch(() => [])]);
       // dossiers et documents de « Mes cours » sous une forme commune (les dossiers ont un identifiant « d… »)
-      rows = [...themes.map((t) => ({ id: 'd' + t.id, type: 'dossier', parent_id: t.parent_id ? 'd' + t.parent_id : null, titre: t.nom, proprietaire: t.proprietaire, ordre: t.ordre })),
-        ...livres.map((l) => ({ id: l.id, type: 'cours', parent_id: l.theme_id ? 'd' + l.theme_id : null, titre: l.titre, proprietaire: l.proprietaire, ordre: 1e6 + l.ordre, savoirs: l.savoirs || [], lien: l.lien || '', genre: l.genre || 'cours' }))];
+      rows = [...themes.map((t) => ({ id: 'd' + t.id, type: 'dossier', parent_id: t.parent_id ? 'd' + t.parent_id : null, titre: t.nom, proprietaire: t.proprietaire, ordre: t.ordre, espace: t.espace })),
+        ...livres.map((l) => ({ id: l.id, type: 'cours', parent_id: l.theme_id ? 'd' + l.theme_id : null, titre: l.titre, proprietaire: l.proprietaire, ordre: 1e6 + l.ordre, savoirs: l.savoirs || [], lien: l.lien || '', genre: l.genre || 'cours', espace: l.espace }))];
     } catch { erreur(new Error('« Mes cours » n’est pas encore installé : l’administrateur doit exécuter le script SQL 26.')); return; }
     const R = new Map(rows.map((r) => [r.id, r]));
     const anciens = x.cours_lies || [];
@@ -177,7 +177,9 @@ export async function pageSequencage(zone, id, ctx) {
     const parcourir = (parent, proprio) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio)
       .forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, proprio); });
     const proprios = [moi, ...new Set(rows.filter((r) => r.proprietaire !== moi).map((r) => r.proprietaire))];
-    for (const u of proprios) { parcourir(null, u); rows.filter((r) => r.proprietaire === u && r.parent_id && !R.has(r.parent_id)).forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, u); }); }
+    const ESP = ['cours', 'divers'], parcourirE = (parent, proprio, esp) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio && (parent !== null || (r.espace || 'cours') === esp))
+      .forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, proprio); });
+    for (const u of proprios) for (const esp of ESP) { parcourirE(null, u, esp); rows.filter((r) => r.proprietaire === u && (r.espace || 'cours') === esp && r.parent_id && !R.has(r.parent_id)).forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, u); }); }
     const disparus = anciens.filter((c) => !R.has(c.id));
     const rech = h('input', { class: 'champ', placeholder: 'Rechercher un cours (titre, savoir)…' });
     const corps = h('div', { class: 'liste-choix' });
@@ -188,18 +190,19 @@ export async function pageSequencage(zone, id, ctx) {
       const ok = (r) => !q.length || q.every((m) => sans(r.titre + ' ' + (r.savoirs || []).join(' ') + ' ' + chemin(r)).includes(m));
       vider(corps, ordre.filter(ok).flatMap((r) => {
         const out = [];
-        const g = (r.proprietaire === moi ? 'Mes cours' : 'Partagés par ' + nomDe(r.proprietaire)) + (chemin(r) ? ' · ' + chemin(r) : '');
+        const nomE = r.espace === 'divers' ? 'Ressources diverses' : 'Cours';
+        const g = (r.proprietaire === moi ? (r.espace === 'divers' ? 'Mes ressources diverses' : 'Mes cours') : nomE + ' partagés par ' + nomDe(r.proprietaire)) + (chemin(r) ? ' · ' + chemin(r) : '');
         if (g !== grp) { grp = g; out.push(h('div', { class: 'groupe' }, g)); }
         out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.id), onchange: (e) => (e.target.checked ? choix.add(r.id) : choix.delete(r.id)) }),
           iconeDoc(r) + ' ', h('b', {}, r.titre || 'Document sans titre'), h('small', { class: 'gris' }, ' · ' + (GENRES[r.genre] || GENRES.cours)[1]), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
         return out;
       }), disparus.length ? [h('div', { class: 'groupe' }, 'Cours plus disponibles (supprimés ou plus partagés)'),
         disparus.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(c.id), onchange: (e) => (e.target.checked ? choix.add(c.id) : choix.delete(c.id)) }), '📘 ', h('b', {}, c.titre)))] : null,
-      !ordre.length ? h('p', { class: 'vide' }, 'Aucun document renseigné : ajoutez vos cours, exercices, évaluations… dans « Mes ressources → Mes cours ».') : null);
+      !ordre.length ? h('p', { class: 'vide' }, 'Aucun document renseigné : ajoutez vos cours, exercices, évaluations… dans « Mes ressources → Mes cours » ou « Mes ressources diverses ».') : null);
     };
     rech.addEventListener('input', remplir); remplir();
     const ok = await fenetre(`Cours mobilisés · séance ${x.titre || ''}`, h('div', {},
-      h('p', { class: 'aide' }, 'Cochez les documents de « Mes cours » (cours, exercices, TD/TP, évaluations… : les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
+      h('p', { class: 'aide' }, 'Cochez les documents de « Mes cours » ou de « Mes ressources diverses » (cours, exercices, TD/TP, évaluations… : les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
       rech, corps), [{ texte: 'Annuler', valeur: false }, { texte: 'Valider', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
     const savDe = (id) => R.get(id)?.savoirs || anciens.find((c) => c.id === id)?.savoirs || [];
@@ -213,7 +216,7 @@ export async function pageSequencage(zone, id, ctx) {
       const savoirs = r ? (r.savoirs || []) : (a?.savoirs || []);
       const ajoutes = savoirs.filter((c) => auto.has(c) && sav.includes(c));
       for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
-      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || ''), genre: r ? (r.genre || 'cours') : (a?.genre || 'cours') };
+      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || ''), genre: r ? (r.genre || 'cours') : (a?.genre || 'cours'), espace: r ? (r.espace || 'cours') : (a?.espace || 'cours') };
     });
     const rang = ref.savoirs.map((y) => y.code);
     sav.sort((a, b) => rang.indexOf(a) - rang.indexOf(b));
