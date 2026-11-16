@@ -2245,3 +2245,14 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .zone-verrou { border: 1px solid var(--ligne); border-radius: 8px; padding: 8px 12px; margin: 4px 0 10px; background: #fff; }
 .zone-verrou.actif { border-color: #c9a227; background: #fff8e1; }
 .zone-verrou .aide { margin: 4px 0 0; }
+
+/* choix des documents visibles des élèves */
+.fenetre-choix-eleves { display: flex; flex-direction: column; gap: 10px; }
+.tete-choix-eleves { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.tete-choix-eleves label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.tete-choix-eleves select.champ { width: auto; }
+.choix-eleves { max-height: 52vh; overflow: auto; width: 100%; box-sizing: border-box; }
+.choix-eleves .option { display: flex; flex-direction: row; align-items: baseline; gap: 6px; text-align: left; flex-wrap: wrap; }
+.choix-eleves .option.herite { opacity: .8; }
+.choix-eleves .marque-auto { color: #8A5A00; font-weight: 600; }
+.compte-eleves { margin: 0; font-weight: 700; color: var(--fonce, #14524C); }

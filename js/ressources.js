@@ -70,8 +70,8 @@ export async function dialogueReglages(ctx, apres) {
       }
       z.textContent = res.join('  ·  ') || 'Collez d’abord un lien de partage.'; z.className = 'etat-lien ' + (res.some((x) => x.startsWith('✖')) ? 'ko' : 'ok'); b.disabled = false;
     } }, '☁ Tester la lecture de mes dossiers'), h('small', { class: 'etat-lien' })),
-    auto ? h('label', { class: 'case' }, auto, ' ', h('span', {}, h('b', {}, '📅 Publier automatiquement aux élèves les cours mobilisés de mes séances'),
-      h('small', { class: 'gris' }, ' (le lundi de la semaine prévue dans la progression, à 6 h ; un cours déjà publié le reste même si la progression change)'))) : null,
+    auto ? h('label', { class: 'case' }, auto, ' ', h('span', {}, h('b', {}, '📌 Rendre visibles aux élèves les documents cochés dans mes séquençages'),
+      h('small', { class: 'gris' }, ' (dès qu’ils sont cochés comme cours mobilisés d’une séance, sans attendre la date de la séance ; décochés, ils ne sont plus visibles, sauf si vous les avez aussi choisis avec « 👁 Choisir pour les élèves »)'))) : null,
     h('label', {}, h('b', {}, 'Ouverture des fichiers'), fmt,
       h('small', { class: 'gris' }, 'Si un fichier ne s’ouvre pas, essayez l’autre réglage (bouton « Tester » dans la bibliothèque).')),
     h('p', { class: 'aide' }, '🔒 Partage en lecture seule. Vos collègues ne verront que les documents que vous partagez avec eux dans le site ; pour ouvrir les fichiers, ils utilisent ces liens.')),

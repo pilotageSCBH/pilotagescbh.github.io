@@ -157,7 +157,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const avecEleves = !!E.eleves && Array.isArray(C.publications);   // la bibliothèque n'est jamais partagée avec les élèves
   const autoDe = (l) => (C.auto || []).filter((a) => a.livre_id === l.id);
   const libPromo = (id) => 'promotion ' + (ctx.promotions.find((p) => p.id === id)?.libelle || '');
-  const quandAuto = (a) => { const d = new Date(a.le); return (d <= new Date() ? 'depuis le ' : 'le ') + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (d <= new Date() ? '' : ' à 6 h'); };
+  const quandAuto = (a) => (new Date(a.le) <= new Date() ? 'visible dès maintenant' : 'visible le ' + new Date(a.le).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }));
   const pubsDe = (cle, id) => (C.publications || []).filter((p) => p[cle] === id);
   const publieHerite = (l) => { let t = l.theme_id ? T.get(l.theme_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return t; t = t.parent_id ? T.get(t.parent_id) : null; } return null; };
   const estPublie = (cle, x) => pubsDe(cle, x.id).length > 0 || (cle === 'livre_id' && autoDe(x).some((a) => new Date(a.le) <= new Date())) || (cle === 'livre_id' ? !!publieHerite(x) : (() => { let t = x.parent_id ? T.get(x.parent_id) : null, n = 0; while (t && n++ < 50) { if (pubsDe('theme_id', t.id).length) return true; t = t.parent_id ? T.get(t.parent_id) : null; } return false; })());
@@ -190,6 +190,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('button', { class: 'btn principal', onclick: () => ajouterLivres(themeCourant && aMoi(themeCourant) ? themeCourant.id : null) }, '＋  ' + E.ajouter),
           h('button', { class: 'btn', title: `Relire votre dossier « ${E.nomDossierNuage} » (synchronisé avec Nuage) : nouveaux fichiers, nouveaux dossiers, fichiers disparus`, onclick: () => mettreAJour() }, '↻  Mettre à jour depuis mon dossier'),
           h('button', { class: 'btn', onclick: () => partagerLot() }, '👥  Partager'),
+          avecEleves ? h('button', { class: 'btn', title: 'Cocher sur le site les documents et dossiers visibles des élèves d’une promotion', onclick: () => choisirPourEleves() }, '👁  Choisir pour les élèves') : null,
           h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'),
           h('button', { class: 'btn', onclick: () => dialogueReglages(ctx, recharger) }, '⚙  Réglages Nuage'),
           h('button', { class: 'btn' + (gestion ? ' actif-gestion' : ''), title: `Créer, renommer, ranger les ${E.themes} ; modifier ou supprimer les fiches`, onclick: () => { memoGestion(!gestion); recharger(); } }, gestion ? '✔  Terminer la gestion' : '✎  Gérer'))),
@@ -350,7 +351,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('div', { class: 'boutons-fiche' }, boutonOuvrir(l, 'btn principal'),
             aMoi(l) ? h('button', { class: 'btn' + (partageActif(l, 'livre_id') ? ' partage-actif' : ''), onclick: () => partagerUn('livre_id', l) }, partageActif(l, 'livre_id') ? '👥 Partagé' : '👥 Partager') : null,
             boutonEleves('livre_id', l, 'btn'),
-            aMoi(l) && autoDe(l).length ? h('p', { class: 'info-partage petit' }, '📅 Publication automatique (cours mobilisé dans le séquençage) : ',
+            aMoi(l) && autoDe(l).length ? h('p', { class: 'info-partage petit' }, '📌 Visible des élèves car mobilisé dans le séquençage : ',
               autoDe(l).map((a, i) => [i ? ' ; ' : '', h('b', {}, libPromo(a.promotion_id)), ' ' + quandAuto(a)])) : null,
             E.genres && aMoi(l) ? h('a', { class: 'btn', href: '#/qcm/l-' + l.id, title: 'Préparer un QCM à partir de ce document (avec une IA)' }, '📝 Créer un QCM') : null,
             aMoi(l) ? h('button', { class: 'btn', onclick: () => modifierLivre(l) }, '✎ Modifier') : null,
@@ -787,7 +788,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   // section « classe » de la fenêtre de partage (si la table des publications est disponible)
   function elevesPartage(cle, x) {
     if (!avecEleves || !aMoi(x)) return null;
-    const actuelles = pubsDe(cle, x.id).filter((p) => p.origine !== 'auto'), herite = cle === 'livre_id' ? publieHerite(x) : null, auto = cle === 'livre_id' && autoDe(x).length ? '📅 Cours mobilisé : publication automatique ' + autoDe(x).map((a) => libPromo(a.promotion_id) + ' ' + quandAuto(a)).join(' ; ') + '.' : null;
+    const actuelles = pubsDe(cle, x.id).filter((p) => p.origine !== 'auto'), herite = cle === 'livre_id' ? publieHerite(x) : null, auto = cle === 'livre_id' && autoDe(x).length ? '📌 Mobilisé dans le séquençage : déjà visible des élèves de ' + autoDe(x).map((a) => libPromo(a.promotion_id)).join(', ') + '.' : null;
     return { promos: [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut), coches: actuelles.map((p) => p.promotion_id), date: actuelles[0]?.a_partir_de || '',
       texte: (cle === 'theme_id' ? 'Les élèves des promotions cochées voient dans « Mes cours » de leur espace tout ce dossier, sous-dossiers compris (y compris ce qui y sera ajouté plus tard).' : 'Les élèves des promotions cochées voient ce document dans « Mes cours » de leur espace et peuvent l’ouvrir et le télécharger.')
         + ' Ils ne voient jamais l’adresse de votre Nuage.' + (herite ? ` Déjà visible par le dossier « ${herite.nom} ».` : '') + (auto ? ' ' + auto : '') };
@@ -862,6 +863,64 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       toast('Partages enregistrés');
     } catch (e) { erreur(e); }
     dessiner();
+  }
+
+  // ------------------------------------------------------------------ choix des documents visibles des élèves (sur le site)
+  async function choisirPourEleves() {
+    const promos = [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut);
+    if (!promos.length) { erreur(new Error('Aucune promotion.')); return; }
+    let pid = (ctx.promo && promos.some((p) => p.id === ctx.promo.id)) ? ctx.promo.id : promos[0].id;
+    const coches = new Set();       // 't12' (dossier) ou 'l34' (document) : publications manuelles voulues pour la promotion pid
+    const initial = () => { coches.clear(); (C.publications || []).filter((p) => p.promotion_id === pid && p.proprietaire === moi && (p.livre_id ? L.get(p.livre_id) : T.get(p.theme_id)))
+      .forEach((p) => coches.add(p.theme_id ? 't' + p.theme_id : 'l' + p.livre_id)); };
+    const parAuto = (l) => autoDe(l).some((a) => a.promotion_id === pid);
+    const dossierCoche = (t) => { let x = t, n = 0; while (x && n++ < 50) { if (coches.has('t' + x.id)) return x; x = x.parent_id ? T.get(x.parent_id) : null; } return null; };
+    const boite = h('div', { class: 'choix-dossier arbre-pdf choix-eleves' });
+    const compte = h('p', { class: 'compte-eleves' });
+    const dessinerArbre = () => {
+      const ligneL = (l, prof) => {
+        const auto = parAuto(l), viaDossier = l.theme_id ? dossierCoche(T.get(l.theme_id)) : null, bloque = auto || !!viaDossier;
+        return h('label', { class: 'option' + (bloque ? ' herite' : ''), style: { paddingLeft: 8 + prof * 18 + 'px' } },
+          h('input', { type: 'checkbox', disabled: bloque, checked: bloque || coches.has('l' + l.id), onchange: (e) => { e.target.checked ? coches.add('l' + l.id) : coches.delete('l' + l.id); majCompte(); } }),
+          (E.genres ? genreDe(l)[0] : E.iconeFiche) + ' ', l.titre,
+          auto ? h('small', { class: 'marque-auto' }, ' 📌 séquençage') : viaDossier ? h('small', { class: 'gris' }, ' (avec le dossier)') : null);
+      };
+      const ligneT = (t, prof) => {
+        const parent = t.parent_id ? dossierCoche(T.get(t.parent_id)) : null;
+        return [h('label', { class: 'option' + (parent ? ' herite' : ''), style: { paddingLeft: 8 + prof * 18 + 'px' } },
+          h('input', { type: 'checkbox', disabled: !!parent, checked: !!parent || coches.has('t' + t.id), onchange: (e) => { e.target.checked ? coches.add('t' + t.id) : coches.delete('t' + t.id); dessinerArbre(); } }),
+          '📁 ', h('b', {}, t.nom), h('small', { class: 'gris' }, parent ? ' (avec le dossier parent)' : ` (dossier entier, ${total(t.id)} ${E.fiche}(s), y compris ceux ajoutés plus tard)`)),
+        ...sousThemes(t.id, moi).flatMap((x) => ligneT(x, prof + 1)), ...livresDe(t.id).map((l) => ligneL(l, prof + 1))];
+      };
+      vider(boite, sousThemes(null, moi).flatMap((t) => ligneT(t, 0)), livresDe(null, moi).map((l) => ligneL(l, 0)),
+        !mesLivres.length ? h('p', { class: 'vide' }, `Aucun ${E.fiche} pour l’instant.`) : null);
+      majCompte();
+    };
+    const majCompte = () => {
+      const vis = mesLivres.filter((l) => parAuto(l) || coches.has('l' + l.id) || (l.theme_id && dossierCoche(T.get(l.theme_id)))).length;
+      compte.textContent = `👁 ${pluriel(vis, E.fiche + ' visible', E.fiches + ' visibles')} des élèves de cette promotion (dont ${mesLivres.filter(parAuto).length} par le séquençage).`;
+    };
+    const choixPromo = h('select', { class: 'champ', onchange: () => { pid = Number(choixPromo.value); initial(); dessinerArbre(); } }, promos.map((p) => h('option', { value: p.id, selected: p.id === pid }, 'Promotion ' + p.libelle)));
+    initial(); dessinerArbre();
+    const ok = await fenetre(`👁 ${E.Fiches} visibles des élèves`, h('div', { class: 'fenetre-choix-eleves' },
+      h('p', { class: 'aide' }, `Cochez les ${E.fiches} et les ${E.themes} que les élèves de la promotion voient dans leur espace (« Mes cours »). Ceux marqués 📌 sont mobilisés dans une séance du séquençage : ils sont visibles automatiquement, sans date. Un ${E.theme} coché rend visible tout son contenu, y compris ce qui y sera ajouté plus tard. Rien n’est modifié sur votre Nuage.`),
+      h('div', { class: 'tete-choix-eleves' }, h('label', {}, 'Promotion ', choixPromo), compte),
+      h('div', {}, h('div', { class: 'boutons-detail' },
+        h('button', { class: 'btn petit', type: 'button', onclick: () => { sousThemes(null, moi).forEach((t) => coches.add('t' + t.id)); livresDe(null, moi).forEach((l) => coches.add('l' + l.id)); dessinerArbre(); } }, 'Tout cocher'),
+        h('button', { class: 'btn petit', type: 'button', onclick: () => { coches.clear(); dessinerArbre(); } }, 'Tout décocher')), boite)),
+    [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', valeur: true }], { large: true });
+    if (!ok) return;
+    try {
+      const actuelles = (C.publications || []).filter((p) => p.promotion_id === pid && p.proprietaire === moi);
+      const cleDe = (p) => (p.theme_id ? 't' + p.theme_id : 'l' + p.livre_id);
+      const aRetirer = actuelles.filter((p) => (p.livre_id ? L.has(p.livre_id) : T.has(p.theme_id)) && !coches.has(cleDe(p)));
+      for (const p of aRetirer) await db.supprimer('publications_eleves', p.id);
+      C.publications = C.publications.filter((p) => !aRetirer.includes(p));
+      const deja = new Set(C.publications.filter((p) => p.promotion_id === pid).map(cleDe));
+      const ajout = [...coches].filter((c) => !deja.has(c)).map((c) => ({ [c[0] === 't' ? 'theme_id' : 'livre_id']: Number(c.slice(1)), promotion_id: pid }));
+      if (ajout.length) C.publications.push(...(await db.ajouter('publications_eleves', ajout)));
+      toast('Choix enregistré pour la ' + libPromo(pid)); dessiner();
+    } catch (e) { erreur(e); }
   }
 
   // ------------------------------------------------------------------ PDF / impression (liste et sommaires)
