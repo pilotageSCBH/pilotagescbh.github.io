@@ -844,8 +844,9 @@ svg.graph .centre-anneau { font-size: 26px; font-weight: 800; fill: var(--fonce)
 .hero-aide { background: linear-gradient(135deg, var(--fonce), var(--teal)); color: #fff; border-radius: 16px; padding: 26px 30px 22px; margin-bottom: 16px; box-shadow: var(--ombre); }
 .hero-aide h1 { color: #fff; font-size: 28px; }
 .hero-aide p { margin: 6px 0 14px; opacity: .92; }
-.champ.recherche-aide { width: 100%; max-width: 680px; font-size: 15px; padding: 11px 16px 11px 40px; border-radius: 26px; border: 0; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+.champ.recherche-aide, .champ.recherche-aide:hover:not(.lecture), .champ.recherche-aide:focus { color: var(--texte, #1F2D2B); width: 100%; max-width: 680px; font-size: 15px; padding: 11px 16px 11px 40px; border-radius: 26px; border: 0; box-shadow: 0 4px 14px rgba(0,0,0,.15);
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%235F6F6C' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px center; }
+.champ.recherche-aide::placeholder { color: #6B7A77; opacity: 1; }
 .resultat-aide { margin: 8px 0 0 !important; font-weight: 700; min-height: 1em; }
 .themes-aide { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .theme-aide { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-decoration: none; color: var(--texte);
