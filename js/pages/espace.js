@@ -153,7 +153,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const recharger = () => ctx.recharger();
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
   // publication pour les élèves : un document, ou un dossier entier (et tout ce qu'il contient) ; Mes cours : aussi
-  // publication automatique des cours mobilisés du séquençage (lundi de la semaine prévue dans la progression, 6 h)
+  // documents mobilisés dans le séquençage : visibles des élèves tout de suite (script 37)
   const avecEleves = !!E.eleves && Array.isArray(C.publications);   // la bibliothèque n'est jamais partagée avec les élèves
   const autoDe = (l) => (C.auto || []).filter((a) => a.livre_id === l.id);
   const libPromo = (id) => 'promotion ' + (ctx.promotions.find((p) => p.id === id)?.libelle || '');

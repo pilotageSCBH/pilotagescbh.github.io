@@ -1,7 +1,7 @@
 // Outils communs à « Ma semaine », au calendrier des évaluations et aux alertes de pilotage :
 // semaines de la promotion (90 semaines, 2 × 45 depuis la rentrée), chargement des données de suivi, liste des
 // évaluations datées et calcul des alertes.
-import { db } from './api.js';
+import { db, MODIFICATION } from './api.js';
 
 export const SEM_AN = 45, NB_SEM = 90;
 const JOUR = 86400000;
@@ -42,7 +42,20 @@ export function semaineActuelle(Y) {
 export const aujourdhui = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // ------------------------------------------------------------------------------------------- données
-export async function chargerSuivi(ctx) {
+// données de suivi d'une promotion : gardées 20 s (plusieurs pages et le badge des alertes les demandent à la suite) ;
+// toute modification enregistrée par le site les fait relire.
+let memoSuivi = null;
+try { window.addEventListener(MODIFICATION, () => { memoSuivi = null; }); } catch { /* hors navigateur */ }
+export function chargerSuivi(ctx) {
+  const id = ctx.promo?.id, cles = ctx.matieres.map((m) => m.id).join(',');
+  if (memoSuivi && memoSuivi.id === id && memoSuivi.cles === cles && Date.now() - memoSuivi.t < 20000) return memoSuivi.p;
+  const p = lireSuivi(ctx);
+  memoSuivi = { id, cles, t: Date.now(), p };
+  p.catch(() => { if (memoSuivi?.p === p) memoSuivi = null; });
+  return p;
+}
+export const oublierSuivi = () => { memoSuivi = null; };
+async function lireSuivi(ctx) {
   const P = ctx.promo;
   const [sequences, semainesL, joursL, casesL, evaluations, couverture, eleves, sommes] = await Promise.all([
     db.lire('sequences', `promotion_id=eq.${P.id}&order=matiere_id,numero`), db.lire('progression_semaines', `promotion_id=eq.${P.id}`),

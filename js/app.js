@@ -49,7 +49,7 @@ export const ctx = {
   // séquençage et progression : seulement les enseignants de la matière (le rôle administrateur ne suffit pas)
   enseigne: (id) => ctx.peutEcrire() && (ctx.profil?.matieres || []).includes(Number(id)),
   maintenance: null,
-  recharger: () => afficher(),
+  recharger: async () => { try { (await import('./pilotage.js')).oublierSuivi(); } catch { /* sans suivi */ } return afficher(); },
   async chargerBase() {
     const [matieres, enseignants, promo] = await Promise.all([
       db.lire('matieres', 'order=ordre'), db.lire('enseignants', 'order=ordre,nom'), db.lire('promotions', 'order=annee_debut'),
@@ -248,7 +248,7 @@ function ecranNouveauCode() {
 }
 
 // ------------------------------------------------------------------------------------------- cadre
-// fiches : quel document du menu « Mes documents pédagogiques » est ouvert (d'après l'onglet de la page)
+// fiches : quel document du menu « Documents pédagogiques » est ouvert (d'après l'onglet de la page)
 function modeFiches(arg) {
   const [sid, o = 'preparation'] = String(arg || '').split(':');
   if (!/^\d+$/.test(sid || '')) return sid || 'preparation';

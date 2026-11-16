@@ -56,7 +56,7 @@ export async function pageAccueil(zone, _arg, ctx) {
   const tuiles = [
     ['📘', 'Séquençages', 'Séquences et séances de chaque matière', monSeq ? '#/sequencage/' + monSeq.id : '#/synthese'],
     ['🗓', 'Progression', 'Placement des séances sur les deux années', '#/progression'],
-    ['📂', 'Mes documents pédagogiques', 'Fiches de préparation, de déroulement et contrats', '#/fiches/preparation'],
+    ['📂', 'Documents pédagogiques', 'Fiches de préparation, de déroulement et contrats', '#/fiches/preparation'],
     ['📆', 'Calendrier des évaluations', 'Toutes les évaluations de la promotion', '#/evaluations'],
     ['📌', 'Contrats hors séquence', 'Créer un contrat formatif ou sommatif sur n’importe quelle compétence', '#/contrats'],
     ['🏆', 'Résultats', 'Validation des compétences, moyennes, livrets', '#/validation'],
