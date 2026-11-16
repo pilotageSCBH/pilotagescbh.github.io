@@ -196,14 +196,14 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('button', { class: 'btn', onclick: () => partagerLot() }, '👥  Partager'),
           avecEleves ? h('button', { class: 'btn', title: 'Cocher sur le site les documents et dossiers visibles des élèves d’une promotion', onclick: () => choisirPourEleves() }, '👁  Choisir pour les élèves') : null,
           h('button', { class: 'btn', onclick: () => dialoguePDF() }, '⬇  PDF / Imprimer'),
-          h('button', { class: 'btn', onclick: () => dialogueReglages(ctx, recharger) }, '⚙  Réglages Nuage'),
+          h('button', { class: 'btn', onclick: () => reglagesPuisMaj() }, '⚙  Réglages Nuage'),
           h('button', { class: 'btn' + (gestion ? ' actif-gestion' : ''), title: `Créer, renommer, ranger les ${E.themes} ; modifier ou supprimer les fiches`, onclick: () => { memoGestion(!gestion); recharger(); } }, gestion ? '✔  Terminer la gestion' : '✎  Gérer'))),
       h('div', { class: 'zone-recherche-biblio' }, champ, recherche ? h('button', { class: 'effacer-recherche', type: 'button', title: 'Effacer', onclick: () => { recherche = recherches[E.cle] = ''; champ.value = ''; dessiner(); champ.focus(); } }, '×') : null)),
     h('nav', { class: 'onglets onglets-cours' },
       h('a', { href: E.base, class: vue === 'mes' ? 'actif' : '' }, `${E.icone} ${E.titre.replace(/^\S+\s+/, '')} (${mesLivres.length})`),
       h('a', { href: E.base + '/partages', class: vue === 'partages' ? 'actif' : '' }, `👥 Partagés avec moi (${sesLivres.length})`)),
     !reglage[E.lien] && vue === 'mes' ? h('div', { class: 'avertissement' }, `🔗  Pour ouvrir vos fichiers depuis le site, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans `,
-      h('button', { class: 'lien', type: 'button', onclick: () => dialogueReglages(ctx, recharger) }, '⚙ Réglages Nuage'), '.') : null,
+      h('button', { class: 'lien', type: 'button', onclick: () => reglagesPuisMaj() }, '⚙ Réglages Nuage'), '.') : null,
     bandeauNuage, contenu);
 
   // ------------------------------------------------------------------ rendu
@@ -731,7 +731,9 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     try {
       const l = await nuageListe(lienN, { force: true });
       pr.fin();
-      return l.filter((x) => !x.dossier).map((x) => ({ c: x.c, taille: x.taille, charger: () => nuageFichier(lienN, x.c) }));
+      const r = l.filter((x) => !x.dossier).map((x) => ({ c: x.c, taille: x.taille, charger: () => nuageFichier(lienN, x.c) }));
+      r.dossiers = l.filter((x) => x.dossier).map((x) => x.c);
+      return r;
     } catch (e) {
       pr.fin();
       const choix = await fenetre('Lecture de Nuage impossible', h('div', {}, h('p', { class: 'erreur-ia' }, e.message),
@@ -749,35 +751,76 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const prefixe = racineChoisie === 'Livres' && mesFiches().some((l) => l.chemin.startsWith('Livres/')) ? 'Livres/' : '';
     return tous.map((f) => ({ c: prefixe + cheminRelatif(f), f, taille: f.size, charger: async () => f }));
   }
+  // réglages Nuage : si le lien de ce dossier change, on propose de remettre le site en accord avec le nouveau dossier
+  async function reglagesPuisMaj() {
+    const avant = String(reglage[E.lien] || '').trim();
+    await dialogueReglages(ctx, async () => {
+      const apres = String(reglagesDe(moi)[E.lien] || '').trim();
+      if (apres && apres !== avant && analyserLien(apres) && await confirmer('Lien de partage modifié',
+        `Le lien de votre dossier « ${E.nomDossierNuage} » a changé. Mettre le site à jour maintenant d’après ce dossier (nouveaux fichiers, fichiers déplacés, ${E.themes} et fiches qui n’y sont plus) ?`, 'Mettre à jour')) {
+        reglage[E.lien] = apres;
+        await mettreAJour();
+      }
+      recharger();
+    });
+  }
   async function mettreAJour() {
     const lus = await lireDossierNuage();
     if (!lus) return;
+    const nfc = (x) => String(x || '').normalize('NFC');
+    const nomDe = (c) => nfc(c).split('/').pop().toLowerCase();
+    const dirDe = (c) => nfc(c).split('/').slice(0, -1).join('/');
     let fichiers = lus.filter((x) => x.c && !ignore(x.c));
     // les images de tuiles « illustration.* » ne sont pas des fiches
-    const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [x.c.split('/').slice(0, -1).join('/'), x]));
+    const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [dirDe(x.c), x]));
     fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));
-    const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.map((t) => [t.dossier.normalize('NFC'), t]));
-    const connus = new Set(mesFiches().map((l) => l.chemin.normalize('NFC')));
-    const nouveaux = fichiers.filter((x) => !connus.has(x.c));
-    const presents = new Set(fichiers.map((x) => x.c));
-    const disparus = mesFiches().filter((l) => l.chemin && !presents.has(l.chemin.normalize('NFC')));
-    const dossiers = [...new Set(nouveaux.map((x) => x.c.split('/').slice(0, -1).join('/')).filter(Boolean))];
+    const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.filter((t) => t.dossier).map((t) => [nfc(t.dossier), t]));
+    const connus = new Set(mesFiches().filter((l) => l.chemin).map((l) => nfc(l.chemin)));
+    let nouveaux = fichiers.filter((x) => !connus.has(nfc(x.c)));
+    const presents = new Set(fichiers.map((x) => nfc(x.c)));
+    let disparus = mesFiches().filter((l) => l.chemin && !presents.has(nfc(l.chemin)));
+    // fichiers déplacés ou renommés de dossier (même nom de fichier, un seul candidat) : la fiche suit le fichier
+    // (sommaire, savoirs, partages, publications et liens du séquençage sont gardés)
+    const deplaces = [], pris = new Set();
+    for (const l of disparus) {
+      const c = nouveaux.filter((x) => nomDe(x.c) === nomDe(l.chemin) && !pris.has(x.c));
+      if (c.length === 1 && disparus.filter((y) => nomDe(y.chemin) === nomDe(l.chemin)).length === 1) { deplaces.push({ l, x: c[0] }); pris.add(c[0].c); }
+    }
+    nouveaux = nouveaux.filter((x) => !pris.has(x.c));
+    disparus = disparus.filter((l) => !deplaces.some((d) => d.l === l));
+    // dossiers présents sur Nuage (avec leurs parents), dossiers à créer, dossiers qui n'y sont plus
+    const presentsD = new Set();
+    const ajouterD = (d) => { const p = nfc(d).split('/'); for (let k = 1; k <= p.length; k++) presentsD.add(p.slice(0, k).join('/')); };
+    fichiers.forEach((x) => { const d = dirDe(x.c); if (d) ajouterD(d); });
+    (lus.dossiers || []).forEach(ajouterD);
+    const dossiers = [...new Set([...nouveaux.map((x) => x.c), ...deplaces.map((d) => d.x.c)].map(dirDe).filter(Boolean))];
     const aCreer = [...new Set(dossiers.flatMap((d) => d.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))].filter((d) => d !== 'Livres' && !parDossier.has(d)).sort();
+    const dossiersPartis = fichiers.length ? mesT.filter((t) => t.dossier && !presentsD.has(nfc(t.dossier))) : [];
     // tuiles déjà créées : image « illustration.* » ajoutée depuis dans le dossier Nuage
-    const illus = mesT.filter((t) => !t.image && images.has(String(t.dossier || '').normalize('NFC')));
-    const lire = h('input', { type: 'checkbox', checked: true }), retirer = h('input', { type: 'checkbox' });
+    const illus = mesT.filter((t) => !t.image && images.has(nfc(t.dossier)));
+    // prudence : un dossier vide ou presque tout « introuvable » fait penser à un mauvais lien
+    const suspect = !fichiers.length || (disparus.length > 3 && disparus.length > mesFiches().length / 2);
+    const lire = h('input', { type: 'checkbox', checked: true });
+    const retirer = h('input', { type: 'checkbox', checked: !suspect }), retirerD = h('input', { type: 'checkbox', checked: !suspect });
+    const liste = (l, f) => (l.length ? ' : ' + l.slice(0, 8).map(f).join(', ') + (l.length > 8 ? '…' : '') : '');
     const ok = await fenetre('Mettre à jour depuis mon dossier', h('div', {},
       h('p', {}, `Dossier lu : ${pluriel(fichiers.length, 'fichier', 'fichiers')}.`),
+      suspect ? h('p', { class: 'avertissement' }, fichiers.length ? `⚠ La plupart de vos ${E.fiches} sont introuvables dans ce dossier : vérifiez le lien de partage dans « ⚙ Réglages Nuage ». Rien ne sera supprimé si vous ne cochez pas les cases.`
+        : `⚠ Le dossier lu est vide : vérifiez le lien de partage. Rien ne sera supprimé.`) : null,
       h('ul', { class: 'conseils-cours' },
-        h('li', {}, h('b', {}, pluriel(nouveaux.length, 'nouveau fichier', 'nouveaux fichiers')), nouveaux.length ? ' : ' + nouveaux.slice(0, 8).map((x) => x.c.split('/').pop()).join(', ') + (nouveaux.length > 8 ? '…' : '') : ''),
-        h('li', {}, h('b', {}, pluriel(aCreer.length, 'nouveau ' + E.theme, 'nouveaux ' + E.themes)), aCreer.length ? ' : ' + aCreer.slice(0, 8).map((d) => d.split('/').pop()).join(', ') : ''),
-        illus.length ? h('li', {}, h('b', {}, pluriel(illus.length, 'image de tuile', 'images de tuiles')), ' (illustration) : ' + illus.slice(0, 8).map((t) => t.nom).join(', ')) : null,
-        h('li', {}, h('b', {}, pluriel(disparus.length, 'fiche dont le fichier est introuvable', 'fiches dont le fichier est introuvable')), disparus.length ? ' : ' + disparus.slice(0, 6).map((l) => l.titre).join(', ') : '')),
+        h('li', {}, h('b', {}, pluriel(nouveaux.length, 'nouveau fichier', 'nouveaux fichiers')), liste(nouveaux, (x) => x.c.split('/').pop())),
+        deplaces.length ? h('li', {}, h('b', {}, pluriel(deplaces.length, 'fichier déplacé', 'fichiers déplacés')), ' (la fiche suit le fichier, rien n’est perdu)', liste(deplaces, (d) => d.l.titre)) : null,
+        h('li', {}, h('b', {}, pluriel(aCreer.length, 'nouveau ' + E.theme, 'nouveaux ' + E.themes)), liste(aCreer, (d) => d.split('/').pop())),
+        illus.length ? h('li', {}, h('b', {}, pluriel(illus.length, 'image de tuile', 'images de tuiles')), ' (illustration)', liste(illus, (t) => t.nom)) : null,
+        h('li', {}, h('b', {}, pluriel(disparus.length, 'fiche dont le fichier n’est plus sur Nuage', 'fiches dont le fichier n’est plus sur Nuage')), liste(disparus, (l) => l.titre)),
+        dossiersPartis.length ? h('li', {}, h('b', {}, pluriel(dossiersPartis.length, E.theme + ' qui n’est plus sur Nuage', E.themes + ' qui ne sont plus sur Nuage')), liste(dossiersPartis, (t) => t.nom)) : null),
       nouveaux.length ? h('label', { class: 'case' }, lire, ' Lire les nouveaux PDF et Word (sommaire, couverture) — plus long') : null,
-      disparus.length ? h('label', { class: 'case' }, retirer, ' Supprimer les fiches dont le fichier est introuvable') : null,
-      h('p', { class: 'aide' }, 'Seuls les noms des fichiers et dossiers sont lus (et les nouveaux PDF et Word, si coché), en lecture seule : rien n’est modifié sur votre Nuage.')),
-    [{ texte: 'Annuler', valeur: false }, { texte: 'Mettre à jour', classe: 'principal', valeur: true }]);
+      disparus.length && fichiers.length ? h('label', { class: 'case' }, retirer, ` Supprimer les ${E.fiches} dont le fichier n’est plus sur Nuage`) : null,
+      dossiersPartis.length ? h('label', { class: 'case' }, retirerD, ` Supprimer les ${E.themes} qui ne sont plus sur Nuage (ce qu’ils contiennent encore passe dans « Non classés »)`) : null,
+      h('p', { class: 'aide' }, `Une fiche supprimée perd son sommaire, ses savoirs, ses partages et sa publication aux élèves (les fiches déplacées gardent tout). Seuls les noms des fichiers et dossiers sont lus (et les nouveaux PDF et Word, si coché), en lecture seule : rien n’est modifié sur votre Nuage.`)),
+    [{ texte: 'Annuler', valeur: false }, { texte: 'Mettre à jour', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
+    let bilan = [];
     try {
       for (const d of aCreer) {
         const parts = d.split('/'), nom = parts.pop().replace(/^\d+\s*-\s*/, ''), parentD = parts.join('/');
@@ -788,10 +831,27 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         const t = await db.ajouter('biblio_themes', { espace: E.cle, parent_id: parent?.id ?? null, nom, dossier: d, ordre, image });
         T.set(t.id, t); parDossier.set(d, t);
       }
-      for (const t of illus) { try { const image = await reduireImage(await images.get(String(t.dossier).normalize('NFC')).charger(), 520, 0.72); await db.modifier('biblio_themes', t.id, { image }); t.image = image; } catch { /* image illisible */ } }
-      if (retirer.checked) for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); }
+      for (const t of illus) { try { const image = await reduireImage(await images.get(nfc(t.dossier)).charger(), 520, 0.72); await db.modifier('biblio_themes', t.id, { image }); t.image = image; } catch { /* image illisible */ } }
+      for (const { l, x } of deplaces) {
+        const v = { chemin: x.c, theme_id: parDossier.get(dirDe(x.c))?.id ?? null };
+        await db.modifier('biblio_livres', l.id, v); Object.assign(l, v);
+      }
+      if (deplaces.length) bilan.push(pluriel(deplaces.length, 'fiche déplacée', 'fiches déplacées'));
+      if (retirer.checked && disparus.length && fichiers.length) { for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); } bilan.push(pluriel(disparus.length, 'fiche supprimée', 'fiches supprimées')); }
+      if (retirerD.checked && dossiersPartis.length) {
+        // les plus profonds d'abord ; un dossier dont le parent est déjà supprimé l'est avec lui
+        const prof = (t) => chemin(t).length;
+        for (const t of [...dossiersPartis].sort((a, b) => prof(b) - prof(a))) {
+          if (!T.has(t.id)) continue;
+          await db.supprimer('biblio_themes', t.id); [t, ...descendants(t.id)].forEach((x) => T.delete(x.id));
+        }
+        [...L.values()].forEach((l) => { if (l.theme_id && !T.has(l.theme_id)) l.theme_id = null; });
+        bilan.push(pluriel(dossiersPartis.length, E.theme + ' supprimé', E.themes + ' supprimés'));
+      }
     } catch (e) { erreur(e); }
-    await creerFiches(nouveaux.map((x) => ({ f: x.f, charger: x.charger, taille: x.taille, chemin: x.c, themeId: parDossier.get(x.c.split('/').slice(0, -1).join('/'))?.id ?? null })), lire.checked);
+    if (bilan.length) toast(bilan.join(' · '));
+    await creerFiches(nouveaux.map((x) => ({ f: x.f, charger: x.charger, taille: x.taille, chemin: x.c, themeId: parDossier.get(dirDe(x.c))?.id ?? null })), lire.checked);
+    if (!nouveaux.length) recharger();
   }
 
   // ------------------------------------------------------------------ publication pour les élèves
