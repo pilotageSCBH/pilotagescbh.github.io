@@ -2279,3 +2279,9 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .carte-moi { padding: 4px 8px; }
 .avatar-menu { width: 28px; height: 28px; font-size: 11.5px; }
 .titre-menu .nb { display: none; }
+
+/* voix off des vidéos */
+.btn-voix { margin-left: auto; font: inherit; font-size: 13px; font-weight: 700; padding: 5px 11px; border-radius: 16px; border: 1px solid var(--teal); background: #E6F3F1; color: var(--fonce); cursor: pointer; white-space: nowrap; }
+.btn-voix:hover { background: #d3ebe7; }
+.btn-voix.coupee { background: #fff; color: #6B7A77; border-color: #C9D3D1; }
+.btn-voix[hidden] { display: none; }

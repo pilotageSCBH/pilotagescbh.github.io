@@ -389,15 +389,28 @@ export function ouvrirVideo(cle = 'decouverte') {
   const video = h('video', { controls: true, autoplay: true, playsinline: true, preload: 'auto', poster: v.src + '.jpg' },
     h('source', { src: v.src + '.mp4', type: 'video/mp4' }),
     'Votre navigateur ne peut pas lire cette vidéo.');
-  const fermer = () => { video.pause(); fond.remove(); document.removeEventListener('keydown', touche); window.removeEventListener('hashchange', fermer); };
+  const fermer = () => { video.pause(); voix?.arreter(); fond.remove(); document.removeEventListener('keydown', touche); window.removeEventListener('hashchange', fermer); };
   const touche = (e) => { if (e.key === 'Escape') fermer(); };
   window.addEventListener('hashchange', fermer);
   const chap = (v.chapitres || []).length ? h('ol', { class: 'chapitres-video' }, v.chapitres.map((c) => h('li', {}, h('button', { type: 'button', onclick: () => { video.currentTime = c.t; video.play(); } },
     h('span', { class: 'temps' }, `${Math.floor(c.t / 60)}:${String(Math.floor(c.t % 60)).padStart(2, '0')}`), c.titre)))) : null;
   if (chap) video.addEventListener('timeupdate', () => { let k = -1; v.chapitres.forEach((c, i) => { if (video.currentTime >= c.t - 0.3) k = i; }); chap.querySelectorAll('li').forEach((li, i) => li.classList.toggle('actif', i === k)); });
+  // voix off (synthèse vocale du navigateur, en français) : réglage mémorisé sur ce poste
+  const CLE_VOIX = 'pilotage-scbh-voix-off';
+  let voixOn = true; try { voixOn = localStorage.getItem(CLE_VOIX) !== 'non'; } catch { /* sans stockage */ }
+  const btnVoix = h('button', { class: 'btn-voix', type: 'button', hidden: true });
+  const etatVoix = (on) => { btnVoix.textContent = on ? '🔊 Voix off' : '🔇 Voix coupée'; btnVoix.title = on ? 'Couper la voix qui commente la vidéo' : 'Activer la voix qui commente la vidéo'; btnVoix.classList.toggle('coupee', !on); };
+  let voix = null;
+  import('./narration.js').then((N) => {
+    voix = N.brancherVoix(video, v.cle, { actif: voixOn, surEtat: (on) => { etatVoix(on); try { localStorage.setItem(CLE_VOIX, on ? 'oui' : 'non'); } catch { /* sans stockage */ } } });
+    if (!voix || !fond.isConnected) { voix?.arreter(); return; }
+    const montrer = () => { btnVoix.hidden = !N.francaisPossible(); };
+    montrer(); speechSynthesis.addEventListener?.('voiceschanged', montrer);
+    etatVoix(voix.actif); btnVoix.onclick = () => voix.basculer();
+  }).catch(() => {});
   const fond = h('div', { class: 'fond-video', onmousedown: (e) => { if (e.target === fond) fermer(); } },
     h('div', { class: 'boite-video' + (chap ? ' avec-chapitres' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': v.titre },
-      h('div', { class: 'tete-video' }, h('b', {}, '▶  ' + v.titre), h('span', { class: 'gris' }, [v.duree, 'sous-titrée', 'données fictives'].filter(Boolean).join(' · ')),
+      h('div', { class: 'tete-video' }, h('b', {}, '▶  ' + v.titre), h('span', { class: 'gris' }, [v.duree, 'sous-titrée et commentée', 'données fictives'].filter(Boolean).join(' · ')), btnVoix,
         h('button', { class: 'fermer', type: 'button', 'aria-label': 'Fermer', onclick: fermer }, '✕')),
       h('div', { class: 'corps-video' }, video, chap)));
   document.addEventListener('keydown', touche);
