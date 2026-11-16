@@ -175,6 +175,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   const livreCourant = k === 'l' ? L.get(Number(idTxt)) : null;
   const vue = arg === 'partages' || (themeCourant && !aMoi(themeCourant)) || (livreCourant && !aMoi(livreCourant)) ? 'partages' : 'mes';
   const modif = vue === 'mes' && gestion;
+  const enSommaire = arg === 'sommaire';   // sommaire automatique : tous les dossiers et documents en arborescence
 
   const mesLivres = [...L.values()].filter(aMoi), sesLivres = [...L.values()].filter((l) => !aMoi(l));
   const mesFiches = () => [...L.values()].filter(aMoi);     // liste à jour (après des créations sur la même page)
@@ -200,7 +201,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
           h('button', { class: 'btn' + (gestion ? ' actif-gestion' : ''), title: `Créer, renommer, ranger les ${E.themes} ; modifier ou supprimer les fiches`, onclick: () => { memoGestion(!gestion); recharger(); } }, gestion ? '✔  Terminer la gestion' : '✎  Gérer'))),
       h('div', { class: 'zone-recherche-biblio' }, champ, recherche ? h('button', { class: 'effacer-recherche', type: 'button', title: 'Effacer', onclick: () => { recherche = recherches[E.cle] = ''; champ.value = ''; dessiner(); champ.focus(); } }, '×') : null)),
     h('nav', { class: 'onglets onglets-cours' },
-      h('a', { href: E.base, class: vue === 'mes' ? 'actif' : '' }, `${E.icone} ${E.titre.replace(/^\S+\s+/, '')} (${mesLivres.length})`),
+      h('a', { href: E.base, class: vue === 'mes' && !enSommaire ? 'actif' : '' }, `${E.icone} ${E.titre.replace(/^\S+\s+/, '')} (${mesLivres.length})`),
+      h('a', { href: E.base + '/sommaire', class: enSommaire ? 'actif' : '', title: 'Tous les dossiers et documents, en arborescence' }, '🌳 Sommaire'),
       h('a', { href: E.base + '/partages', class: vue === 'partages' ? 'actif' : '' }, `👥 Partagés avec moi (${sesLivres.length})`)),
     !reglage[E.lien] && vue === 'mes' ? h('div', { class: 'avertissement' }, `🔗  Pour ouvrir vos fichiers depuis le site, collez le lien de partage de votre dossier « ${E.nomDossierNuage} » dans `,
       h('button', { class: 'lien', type: 'button', onclick: () => reglagesPuisMaj() }, '⚙ Réglages Nuage'), '.') : null,
@@ -210,6 +212,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   function dessiner() {
     if (recherche.trim()) return vider(contenu, resultats());
     if (livreCourant) return vider(contenu, ficheLivre(livreCourant));
+    if (enSommaire) return vider(contenu, pageSommaire());
     if (themeCourant) return vider(contenu, pageTheme(themeCourant));
     vider(contenu, vue === 'mes' ? accueil() : accueilPartages());
   }
@@ -255,6 +258,58 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       const li = [...L.values()].filter((l) => l.proprietaire === u && (!l.theme_id || !T.has(l.theme_id)));
       return h('section', { class: 'groupe-proprio-biblio' }, h('h2', { class: 'titre-section' }, '👤 ', nomCollegue(u)), th.length ? tuiles(th, null) : null, li.length ? listeLivres(li) : null);
     });
+  }
+  // ------------------------------------------------------------------ sommaire automatique (arborescence complète)
+  function pageSommaire() {
+    const filtre = h('input', { class: 'champ filtre-sommaire', type: 'search', placeholder: `Filtrer le sommaire (nom de ${E.theme} ou de ${E.fiche})…`, 'aria-label': 'Filtrer le sommaire' });
+    const zoneA = h('div', { class: 'sommaire-espace' });
+    const ligneDoc = (l) => {
+      const u = urlLivre(l);
+      return h('li', { class: 'som-doc', 'data-texte': sansAccent(l.titre || '') },
+        h('span', { class: 'ico' }, E.iconeFiche), h('a', { href: lienL(l) }, l.titre || 'Sans titre'),
+        avecEleves && aMoi(l) && estPublie('livre_id', l) ? h('span', { class: 'publie-eleves' }, '👁 élèves') : null,
+        u ? h('a', { class: 'ouvrir-som', href: u, target: '_blank', rel: 'noopener', title: 'Ouvrir le fichier', onclick: (ev) => ouvrirFichier(ev, l, null, u) }, 'Ouvrir ↗') : null);
+    };
+    const noeud = (t, prof) => {
+      const n = total(t.id);
+      return h('li', { class: 'som-dossier', 'data-texte': sansAccent(t.nom || '') },
+        h('details', { open: prof < 1 },
+          h('summary', {}, h('span', { class: 'ico' }, '📁'), h('a', { href: lienT(t), onclick: (e) => e.stopPropagation() }, t.nom), h('span', { class: 'nb' }, pluriel(n, E.fiche, E.fiches))),
+          h('ul', {}, sousThemes(t.id).map((x) => noeud(x, prof + 1)), livresDe(t.id).map(ligneDoc))));
+    };
+    const arbre = (racines, libres) => h('ul', { class: 'arbre-sommaire' }, racines.map((t) => noeud(t, 0)),
+      libres.length ? h('li', { class: 'som-dossier' }, h('details', { open: true }, h('summary', {}, h('span', { class: 'ico' }, '📂'), h('b', {}, 'Non classés'), h('span', { class: 'nb' }, pluriel(libres.length, E.fiche, E.fiches))),
+        h('ul', {}, libres.map(ligneDoc)))) : null);
+    const autres = [...new Set([...T.values(), ...L.values()].filter((x) => !aMoi(x)).map((x) => x.proprietaire))];
+    const sections = [
+      h('section', { class: 'bloc-sommaire' }, h('h2', { class: 'titre-section' }, `${E.icone} ${E.titre.replace(/^\S+\s+/, '')} · ${pluriel(mesLivres.length, E.fiche, E.fiches)}`),
+        mesLivres.length || sousThemes(null, moi).length ? arbre(sousThemes(null, moi), livresDe(null, moi)) : h('p', { class: 'vide' }, `Aucun ${E.fiche} pour l’instant.`)),
+      ...autres.map((u) => {
+        const th = [...T.values()].filter((t) => t.proprietaire === u && (!t.parent_id || !T.has(t.parent_id))).sort((a, b) => a.ordre - b.ordre || compareTitres(a.nom, b.nom));
+        const li = [...L.values()].filter((l) => l.proprietaire === u && (!l.theme_id || !T.has(l.theme_id)));
+        return h('section', { class: 'bloc-sommaire' }, h('h2', { class: 'titre-section' }, `👥 Partagé par ${nomCollegue(u)}`), arbre(th, li));
+      })];
+    vider(zoneA, sections);
+    const appliquer = () => {
+      const q = sansAccent(filtre.value.trim());
+      zoneA.querySelectorAll('li').forEach((li) => { li.hidden = false; });
+      if (!q) { zoneA.querySelectorAll('details').forEach((d) => { d.open = d.dataset.ouvert === '1'; }); return; }
+      // un élément reste visible s'il correspond, ou si un de ses descendants correspond (ou un de ses parents)
+      const correspond = (li) => (li.dataset.texte || '').includes(q);
+      const visible = (li) => correspond(li) || [...li.querySelectorAll('li')].some(correspond) || (() => { let p = li.parentElement?.closest('li'); while (p) { if (correspond(p)) return true; p = p.parentElement?.closest('li'); } return false; })();
+      zoneA.querySelectorAll('li').forEach((li) => { li.hidden = !visible(li); });
+      zoneA.querySelectorAll('details').forEach((d) => { d.open = [...d.querySelectorAll('li')].some((x) => !x.hidden && correspond(x)); });
+    };
+    zoneA.querySelectorAll('details').forEach((d) => { d.dataset.ouvert = d.open ? '1' : '0'; });
+    filtre.addEventListener('input', appliquer);
+    const tout = (o) => zoneA.querySelectorAll('details').forEach((d) => { d.open = o; });
+    return h('div', { class: 'page-sommaire' },
+      h('div', { class: 'outils-sommaire' }, filtre,
+        h('button', { class: 'btn petit', type: 'button', onclick: () => tout(true) }, '▾ Tout déplier'),
+        h('button', { class: 'btn petit', type: 'button', onclick: () => tout(false) }, '▸ Tout replier'),
+        h('button', { class: 'btn petit', type: 'button', onclick: () => dialoguePDF() }, '⬇ PDF / Imprimer')),
+      h('p', { class: 'aide' }, `Sommaire mis à jour automatiquement : tous vos ${E.themes} et ${E.fiches}${autres.length ? ', puis ceux que vos collègues partagent avec vous' : ''}. Cliquez un nom pour ouvrir sa fiche, « Ouvrir ↗ » pour ouvrir le fichier.`),
+      zoneA);
   }
   function pageTheme(t) {
     const st = sousThemes(t.id), li = livresDe(t.id);

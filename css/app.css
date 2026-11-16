@@ -2343,3 +2343,29 @@ main .champ::placeholder { color: #A39565; }
 .livre-biblio.glisse { opacity: .4; }
 .livre-biblio.avant { box-shadow: 0 -4px 0 0 #E8B04A, var(--ombre); }
 .livre-biblio.apres { box-shadow: 0 4px 0 0 #E8B04A, var(--ombre); }
+
+/* sommaire automatique de Mes ressources (arborescence) */
+.outils-sommaire { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+.outils-sommaire .filtre-sommaire { flex: 1 1 260px; max-width: 460px; border: 1px solid var(--ligne); background: #fff; }
+.bloc-sommaire { background: #fff; border-radius: 12px; box-shadow: var(--ombre); padding: 6px 16px 12px; margin-bottom: 14px; }
+.arbre-sommaire, .arbre-sommaire ul { list-style: none; margin: 0; padding: 0; }
+.arbre-sommaire ul { margin-left: 13px; padding-left: 14px; border-left: 1px dashed #CBD5D3; }
+.arbre-sommaire li[hidden] { display: none; }
+.arbre-sommaire summary { cursor: pointer; display: flex; align-items: center; gap: 7px; padding: 5px 4px; border-radius: 6px; font-weight: 700; list-style: none; }
+.arbre-sommaire summary::-webkit-details-marker { display: none; }
+.arbre-sommaire summary::before { content: '▸'; width: 12px; color: var(--teal); transition: transform .15s; }
+.arbre-sommaire details[open] > summary::before { transform: rotate(90deg); }
+.arbre-sommaire summary:hover { background: #F1F6F5; }
+.arbre-sommaire summary a { color: var(--fonce); text-decoration: none; }
+.arbre-sommaire summary a:hover { text-decoration: underline; }
+.arbre-sommaire .nb { margin-left: auto; font-size: 12px; font-weight: 600; color: #6B7A77; background: #EEF3F2; border-radius: 10px; padding: 1px 8px; }
+.arbre-sommaire .som-doc { display: flex; align-items: center; gap: 7px; padding: 3px 4px 3px 19px; font-size: 14px; }
+.arbre-sommaire .som-doc a:not(.ouvrir-som) { color: inherit; text-decoration: none; }
+.arbre-sommaire .som-doc a:not(.ouvrir-som):hover { color: var(--teal); text-decoration: underline; }
+.arbre-sommaire .ouvrir-som { margin-left: auto; font-size: 12px; color: var(--teal); white-space: nowrap; }
+.arbre-sommaire .ico { width: 18px; text-align: center; }
+@media (max-width: 640px) { .arbre-sommaire ul { margin-left: 6px; padding-left: 8px; } .arbre-sommaire .som-doc { flex-wrap: wrap; padding-left: 12px; } }
+@media print { .outils-sommaire { display: none; } .arbre-sommaire details > ul { display: block !important; } }
+.onglets-cours { flex-wrap: wrap; row-gap: 2px; }
+.onglets-cours a { white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 640px) { .onglets-cours a { padding: 8px 9px; font-size: 13px; } }
