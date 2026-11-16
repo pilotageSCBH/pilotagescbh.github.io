@@ -2,7 +2,7 @@
 import { db } from '../api.js';
 import { h, vider } from '../ui.js';
 import { chargerCollegues, nomCollegue, chargerReglages, compareTitres } from '../ressources.js';
-import { GENRES } from './espace.js';
+import { ICONE_DOC } from './espace.js';
 
 export async function pagePartages(zone, arg, ctx) {
   if (!ctx.peutEcrire()) { vider(zone, h('header', { class: 'entete-page' }, h('h1', {}, '👥  Partagés avec moi')), h('p', { class: 'vide' }, 'Cet espace est réservé aux enseignants.')); return; }
@@ -17,8 +17,8 @@ export async function pagePartages(zone, arg, ctx) {
     if (!th.length && !li.length) return null;
     return h('div', {}, h('h3', {}, titre), h('ul', { class: 'liste-contenu' },
       th.map((t) => h('li', {}, h('a', { class: 'lien', href: base + '/t-' + t.id }, '📁 ', h('b', {}, t.nom)))),
-      li.map((l) => h('li', {}, h('a', { class: 'lien', href: base + '/l-' + l.id }, (espace !== 'biblio' ? (GENRES[l.genre] || GENRES.cours)[0] : '📕') + ' ', h('b', {}, l.titre),
-        h('small', {}, espace !== 'biblio' ? ' · ' + (GENRES[l.genre] || GENRES.cours)[1] : [l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => ' · ' + x).join('')))))));
+      li.map((l) => h('li', {}, h('a', { class: 'lien', href: base + '/l-' + l.id }, (espace !== 'biblio' ? ICONE_DOC : '📕') + ' ', h('b', {}, l.titre),
+        h('small', {}, espace !== 'biblio' ? '' : [l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => ' · ' + x).join('')))))));
   };
   const blocs = autres.map((u) => {
     const nbL = livres.filter((l) => l.proprietaire === u && l.espace === 'biblio').length, nbC = livres.filter((l) => l.proprietaire === u && l.espace !== 'biblio').length;

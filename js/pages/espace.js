@@ -16,7 +16,9 @@ import {
 // ------------------------------------------------------------------------------------------- types de documents (Mes cours)
 export const GENRES = { cours: ['📘', 'Cours'], exercice: ['✏️', 'Exercice'], tdtp: ['🛠', 'TD / TP'], evaluation: ['📝', 'Évaluation'],
   corrige: ['✅', 'Corrigé'], ressource: ['🎬', 'Ressource'], autre: ['📄', 'Autre'] };
-export const iconeDoc = (r) => (r.type === 'dossier' ? '📁' : (GENRES[r.genre] || GENRES.cours)[0]);
+// le type d'un document (cours, évaluation…) n'est plus affiché nulle part : une seule icône pour tous les documents
+export const ICONE_DOC = '📄';
+export const iconeDoc = (r) => (r.type === 'dossier' ? '📁' : ICONE_DOC);
 export function genreDepuisNom(nom) {
   const n = String(nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   if (/corrig/.test(n)) return 'corrige';
@@ -82,13 +84,13 @@ export const ESPACES = {
     exempleTheme: 'Escaliers', exempleDossier: 'Livres/01 - Matériau bois', exempleChemin: 'Livres/01 - Matériau bois/Mon livre.pdf',
     recherche: 'Rechercher dans les titres, auteurs et sommaires : contreventement, lamellé-collé, DTU 31.2…', genres: false },
   cours: { cle: 'cours', base: '#/cours', titre: '🎓  Mes cours', icone: '🎓', lien: 'lien_cours', nomDossierNuage: 'Mes cours',
-    theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📘',
+    theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📄',
     exempleTheme: 'S1 - Déroulement d’une affaire', exempleDossier: 'Organisation/S1 - Déroulement d’une affaire', exempleChemin: 'Organisation/S1 - Déroulement d’une affaire/A01 - L’entreprise.pdf',
-    recherche: 'Rechercher dans les titres, types et sommaires : contreventement, métré, évaluation, S11-1…', genres: true, eleves: true },
+    recherche: 'Rechercher dans les titres et sommaires : contreventement, métré, S11-1…', genres: true, eleves: true },
   divers: { cle: 'divers', base: '#/divers', titre: '🗂  Mes ressources diverses', icone: '🗂', lien: 'lien_divers', nomDossierNuage: 'Mes ressources diverses',
-    theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📘',
+    theme: 'dossier', themes: 'dossiers', Theme: 'Dossier', fiche: 'document', fiches: 'documents', Fiches: 'Documents', ajouter: 'Ajouter des documents', iconeFiche: '📄',
     exempleTheme: 'Visites de chantier', exempleDossier: 'Organisation/Visites de chantier', exempleChemin: 'Organisation/Visites de chantier/Fiche visite.pdf',
-    recherche: 'Rechercher dans les titres, types et sommaires : visite, vidéo, fiche technique, S11-1…', genres: true, eleves: true, script: '36_ressources_diverses.sql' },
+    recherche: 'Rechercher dans les titres et sommaires : visite, vidéo, fiche technique, S11-1…', genres: true, eleves: true, script: '36_ressources_diverses.sql' },
 };
 // espace d'un document (Mes cours par défaut) : pour les liens vers sa fiche
 export const baseEspace = (espace) => (ESPACES[espace] || ESPACES.cours).base;
@@ -132,12 +134,11 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   // ------------------------------------------------------------------ outils
   const aMoi = (x) => x.proprietaire === moi;
   const sousThemes = (id, proprio = null) => [...T.values()].filter((t) => (t.parent_id ?? null) === id && (proprio === null || t.proprietaire === proprio)).sort((a, b) => a.ordre - b.ordre || compareTitres(a.nom, b.nom));
-  const rang = Object.keys(GENRES);
-  // ordre des documents : par type (cours, exercices…) ; un dossier trié à la main (glisser-déposer : ordre < 1000) garde l'ordre choisi
+  // ordre des documents : ordre d'ajout puis titre ; un dossier trié à la main (glisser-déposer : ordre < 1000) garde l'ordre choisi
   const livresDe = (id, proprio) => {
     const l = [...L.values()].filter((x) => (x.theme_id ?? null) === id && (id !== null || x.proprietaire === proprio));
     const main = l.some((x) => x.ordre < 1000);
-    return l.sort((a, b) => (main ? a.ordre - b.ordre : 0) || (E.genres ? rang.indexOf(a.genre || 'cours') - rang.indexOf(b.genre || 'cours') : 0) || a.ordre - b.ordre || compareTitres(a.titre, b.titre));
+    return l.sort((a, b) => (main ? a.ordre - b.ordre : 0) || a.ordre - b.ordre || compareTitres(a.titre, b.titre));
   };
   const descendants = (id) => { const o = []; const p = [id]; while (p.length) { const x = p.pop(); for (const t of sousThemes(x)) { o.push(t); p.push(t.id); } } return o; };
   const total = (id) => [id, ...descendants(id).map((t) => t.id)].reduce((s, x) => s + livresDe(x).length, 0);
@@ -152,7 +153,6 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   };
   const urlTheme = (t) => adresseDossier(reglagesDe(t.proprietaire)[E.lien], t.dossier);
   const libSavoir = (c) => ref.sav[c]?.libelle || '';
-  const genreDe = (l) => GENRES[l.genre] || GENRES.cours;
   const memoGestion = (v) => { gestion = v; try { sessionStorage.setItem(CLE_GESTION, v ? '1' : '0'); } catch { /* sans stockage */ } };
   const recharger = () => ctx.recharger();
   const lienT = (t) => E.base + '/t-' + t.id, lienL = (l) => E.base + '/l-' + l.id;
@@ -275,7 +275,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   // ------------------------------------------------------------------ fiches
   const couverture = (l, classe = 'couv-mini') => (l.vignette ? h('img', { class: classe, src: l.vignette, alt: '', loading: 'lazy' })
     : h('div', { class: 'tranche ' + classe, style: { '--couleur': couleurTranche(l.titre) } }, (l.titre || '?').charAt(0).toUpperCase()));
-  const details = (l, sur = (x) => x) => [E.genres ? genreDe(l).join(' ') : null, l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => sur(x));
+  const details = (l, sur = (x) => x) => [l.auteur, l.editeur, l.annee].filter(Boolean).map((x) => sur(x));
   // ouvrir sans télécharger : le fichier passe par le relais et s'affiche dans un nouvel onglet (PDF à la bonne page, images, vidéos, textes)
   const AFFICHABLES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
     mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', txt: 'text/plain;charset=utf-8' };
@@ -346,7 +346,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   }
   function ficheLivre(l) {
     const t = l.theme_id ? T.get(l.theme_id) : null;
-    const infos = [[E.genres ? 'Type' : '', E.genres ? genreDe(l).join(' ') : ''], ['Auteur', l.auteur], ['Éditeur', l.editeur], ['Année', l.annee], ['ISBN', l.isbn], ['Pages', l.pages || ''],
+    const infos = [['Auteur', l.auteur], ['Éditeur', l.editeur], ['Année', l.annee], ['ISBN', l.isbn], ['Pages', l.pages || ''],
       [E.Theme, t ? chemin(t).map((x) => x.nom).join(' › ') : 'Non classé'], ['Fichier sur Nuage', l.chemin || (l.lien ? 'lien direct' : '—')]].filter(([a, v]) => a && v !== '' && v != null);
     const sav = l.savoirs || [];
     return h('div', { class: 'fiche-livre' },
@@ -424,7 +424,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const liste = (vue === 'mes' ? mesFiches() : sesLivres);
     const trouves = [];
     for (const l of liste) {
-      const tete = sansAccent([l.titre, E.genres ? genreDe(l)[1] : '', l.auteur, l.editeur, l.isbn, l.notes, ...(l.savoirs || [])].join(' '));
+      const tete = sansAccent([l.titre, l.auteur, l.editeur, l.isbn, l.notes, ...(l.savoirs || [])].join(' '));
       const lignes = (l.sommaire || []).filter((e) => { const s = sansAccent(e.t); return T2.every((m) => s.includes(m)); });
       const lignesUn = lignes.length ? lignes : (l.sommaire || []).filter((e) => { const s = sansAccent(e.t); return T2.some((m) => s.includes(m)); });
       const tout = sansAccent(tete + ' ' + (l.sommaire || []).map((e) => e.t).join(' '));
@@ -561,8 +561,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
   async function modifierLivre(l, focus = '') {
     const ch = (v, ph = '') => h('input', { class: 'champ', value: v || '', placeholder: ph });
     const titre = ch(l.titre), auteur = ch(l.auteur), editeur = ch(l.editeur), annee = ch(l.annee), isbn = ch(l.isbn, '978…');
-    const genre = h('select', { class: 'champ' }, Object.entries(GENRES).map(([k2, [ic, n]]) => h('option', { value: k2, selected: k2 === (l.genre || 'cours') }, `${ic} ${n}`)));
-    const theme = selectTheme(l.theme_id), cheminF = ch(l.chemin, 'ex. ' + E.exempleChemin), lien = ch(l.lien, 'https://… (facultatif : remplace le chemin)');
+      const theme = selectTheme(l.theme_id), cheminF = ch(l.chemin, 'ex. ' + E.exempleChemin), lien = ch(l.lien, 'https://… (facultatif : remplace le chemin)');
     const notes = h('textarea', { class: 'champ', rows: 2 }); notes.value = l.notes || '';
     const som = h('textarea', { class: 'champ saisie-sommaire', rows: 10, placeholder: 'Chapitre 1 - Les bases … 12\n  1.1 Première partie … 14\nChapitre 2 - La suite … 35' }); som.value = versTexte(l.sommaire);
     let vignette = l.vignette, source = l.source, pages = l.pages, savoirsWord = [];
@@ -587,7 +586,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const exigerPdf = () => { if (!pdfLocal) throw new Error('Lisez d’abord le fichier PDF (sur Nuage ou sur votre ordinateur).'); };
     const attente = fenetre(`Modifier « ${l.titre || E.fiche} »`, h('div', { class: 'modif-livre' },
       h('div', { class: 'formulaire' },
-        h('label', { class: 'large' }, 'Titre', titre), E.genres ? h('label', {}, 'Type de document', genre) : null,
+        h('label', { class: 'large' }, 'Titre', titre), null,
         h('label', {}, 'Auteur', auteur), h('label', {}, 'Éditeur', editeur), h('label', {}, 'Année', annee),
         h('label', {}, 'ISBN', h('span', { class: 'ligne-lien' }, isbn, h('button', { class: 'btn petit', type: 'button', onclick: () => chercherEnLigne() }, '🔎 Rechercher en ligne'))),
         h('div', { class: 'large' }, propositions),
@@ -639,7 +638,6 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const ordre = ref.savoirs.map((s) => s.code);
     const v = { titre: titre.value.trim() || l.titre, auteur: auteur.value.trim(), editeur: editeur.value.trim(), annee: annee.value.trim(), isbn: isbn.value.trim(),
       theme_id: theme.value ? Number(theme.value) : null, chemin: cheminF.value.trim(), lien: lien.value.trim(), notes: notes.value.trim(), vignette, sommaire, source, pages };
-    if (E.genres) v.genre = genre.value;
     if (savoirsWord.length) v.savoirs = [...new Set([...(l.savoirs || []), ...savoirsWord])].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
     try { await db.modifier('biblio_livres', l.id, v); Object.assign(l, v); toast('Fiche enregistrée'); dessiner(); } catch (e) { erreur(e); }
     pdfLocal?.destroy?.();
@@ -862,7 +860,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const coches = new Set();
     const boite = h('div', { class: 'choix-dossier arbre-pdf' });
     const dessinerArbre = () => {
-      const ligneL = (l, prof) => h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: coches.has('l' + l.id), onchange: (e) => { e.target.checked ? coches.add('l' + l.id) : coches.delete('l' + l.id); } }), (E.genres ? genreDe(l)[0] : E.iconeFiche) + ' ', l.titre,
+      const ligneL = (l, prof) => h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: coches.has('l' + l.id), onchange: (e) => { e.target.checked ? coches.add('l' + l.id) : coches.delete('l' + l.id); } }), E.iconeFiche + ' ', l.titre,
         estPartage(l, 'livre_id') ? h('small', { class: 'deja-partage' }, ' 👥') : null);
       const ligneT = (t, prof) => [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: coches.has('t' + t.id), onchange: (e) => { e.target.checked ? coches.add('t' + t.id) : coches.delete('t' + t.id); } }), '📁 ', h('b', {}, t.nom), h('small', { class: 'gris' }, ` (${E.theme} entier, ${total(t.id)} ${E.fiche}(s))`),
         estPartage(t, 'theme_id') ? h('small', { class: 'deja-partage' }, ' 👥') : null),
@@ -934,7 +932,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         const auto = parAuto(l), viaDossier = l.theme_id ? dossierCoche(T.get(l.theme_id)) : null, bloque = auto || !!viaDossier;
         return h('label', { class: 'option' + (bloque ? ' herite' : ''), style: { paddingLeft: 8 + prof * 18 + 'px' } },
           h('input', { type: 'checkbox', disabled: bloque, checked: bloque || coches.has('l' + l.id), onchange: (e) => { e.target.checked ? coches.add('l' + l.id) : coches.delete('l' + l.id); majCompte(); } }),
-          (E.genres ? genreDe(l)[0] : E.iconeFiche) + ' ', l.titre,
+          E.iconeFiche + ' ', l.titre,
           auto ? h('small', { class: 'marque-auto' }, ' 📌 séquençage') : viaDossier ? h('small', { class: 'gris' }, ' (avec le dossier)') : null);
       };
       const ligneT = (t, prof) => {
@@ -985,7 +983,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     base.th.forEach((t) => toutDe(t).forEach((id) => coches.add(id))); base.li.forEach((l) => coches.add(l.id));
     const boite = h('div', { class: 'choix-dossier arbre-pdf' });
     const dessinerArbre = () => {
-      const ligneL = (l, prof) => h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: coches.has(l.id), onchange: (e) => { e.target.checked ? coches.add(l.id) : coches.delete(l.id); } }), (E.genres ? genreDe(l)[0] : E.iconeFiche) + ' ', l.titre);
+      const ligneL = (l, prof) => h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: coches.has(l.id), onchange: (e) => { e.target.checked ? coches.add(l.id) : coches.delete(l.id); } }), E.iconeFiche + ' ', l.titre);
       const ligneT = (t, prof) => [h('label', { class: 'option', style: { paddingLeft: 8 + prof * 18 + 'px' } }, h('input', { type: 'checkbox', checked: toutDe(t).length > 0 && toutDe(t).every((id) => coches.has(id)), onchange: (e) => { toutDe(t).forEach((id) => (e.target.checked ? coches.add(id) : coches.delete(id))); dessinerArbre(); } }), '📁 ', h('b', {}, t.nom)),
         ...sousThemes(t.id).flatMap((s) => ligneT(s, prof + 1)), ...livresDe(t.id).map((l) => ligneL(l, prof + 1))];
       vider(boite, base.th.flatMap((t) => ligneT(t, 0)), base.li.map((l) => ligneL(l, 0)));
@@ -1020,13 +1018,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     for (const l of liste) {
       const g = cheminTexte(l) || 'Non classés';
       if (g !== grp) { grp = g; lignes.push({ groupe: g }); }
-      const cell = [l.titre || 'Sans titre', E.genres ? genreDe(l)[1] : [l.auteur, l.annee].filter(Boolean).join(', ')];
+      const cell = [l.titre || 'Sans titre', [l.auteur, l.annee].filter(Boolean).join(', ')];
       if (!opt.sommaire) cell.push(String((l.sommaire || []).length || '—'));
       if (opt.savoirs) cell.push((l.savoirs || []).join(', '));
       if (opt.liens) cell.push(urlLivre(l));
       lignes.push(cell);
     }
-    const colonnes = [{ titre: E.Fiches.replace(/s$/, ''), part: 45, gras: true }, { titre: E.genres ? 'Type' : 'Auteur', part: 16 }];
+    const colonnes = [{ titre: E.Fiches.replace(/s$/, ''), part: 45, gras: true }, { titre: 'Auteur', part: 16 }];
     if (!opt.sommaire) colonnes.push({ titre: 'Titres', part: 8, centre: true });
     if (opt.savoirs) colonnes.push({ titre: 'Savoirs associés', part: 26 });
     if (opt.liens) colonnes.push({ titre: 'Lien', part: 34 });
@@ -1036,7 +1034,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       for (const l of liste) {
         const g = cheminTexte(l);
         if (g !== dossier) { dossier = g; if (g) blocs.push({ t: 'dossier', texte: g }); }
-        blocs.push({ t: 'cours', titre: (l.titre || 'Sans titre') + (E.genres ? `  (${genreDe(l)[1]})` : ''), lignes: (l.sommaire || []).map((e) => ({ n: e.n || 0, t: e.t + (e.p ? ' (p. ' + e.p + ')' : '') })),
+        blocs.push({ t: 'cours', titre: l.titre || 'Sans titre', lignes: (l.sommaire || []).map((e) => ({ n: e.n || 0, t: e.t + (e.p ? ' (p. ' + e.p + ')' : '') })),
           savoirs: opt.savoirs ? (l.savoirs || []).map((c) => `${c} ${libSavoir(c)}`) : [], lien: opt.liens ? urlLivre(l) : '' });
       }
     }
@@ -1049,8 +1047,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const t = l.theme_id ? T.get(l.theme_id) : null;
     const actuel = (l.sommaire || []).map((e) => '  '.repeat(e.n || 0) + e.t).join('\n');
     return {
-      titre: `${genreDe(l)[1]} · ${l.titre}`,
-      demande: async () => `DOCUMENT À REMPLIR : le sommaire détaillé d’un document pédagogique de l’enseignant (type : ${genreDe(l)[1].toLowerCase()}) et les savoirs associés du référentiel.
+      titre: l.titre,
+      demande: async () => `DOCUMENT À REMPLIR : le sommaire détaillé d’un document pédagogique de l’enseignant et les savoirs associés du référentiel.
 Titre : ${l.titre}
 ${t ? `Dossier : ${chemin(t).map((x) => x.nom).join(' › ')}\n` : ''}${voisins.length ? `Autres documents du même dossier (pour éviter les doublons) : ${voisins.join(' ; ')}\n` : ''}Sommaire actuel : ${actuel ? '\n' + actuel : '(vide)'}
 Savoirs associés actuels : ${(l.savoirs || []).join(', ') || '(aucun)'}

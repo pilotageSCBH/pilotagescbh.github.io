@@ -34,8 +34,7 @@ async function fichierDocument(d) {
 }
 import { h, vider, toast, erreur, fenetre } from '../ui.js';
 import { lundi, libSemaine, semaineActuelle, jourDe, NB_SEM, SEM_AN } from '../pilotage.js';
-import { GENRES as GENRES_ESPACE } from '../pages/espace.js';
-const GENRES = { ...GENRES_ESPACE, livre: ['📖', 'Livre'] };   // documents de « Ma bibliothèque » des enseignants
+import { ICONE_DOC } from '../pages/espace.js';   // le type d'un document (cours, évaluation…) n'est jamais affiché
 import { blocInstallation } from '../appli.js';
 
 let D = null, charge = 0;            // données de l'élève (gardées 2 minutes)
@@ -162,7 +161,7 @@ const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
 // documents mobilisés dans une séance (publiés)
-const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie', href: baseDoc(d) + '/' + d.id }, (GENRES[d.genre] || GENRES.cours)[0] + ' ' + d.titre); });
+const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie', href: baseDoc(d) + '/' + d.id }, ICONE_DOC + ' ' + d.titre); });
 
 // ---- ma semaine : séances prévues et prochaines évaluations
 async function pageSemaine(zone, arg) {
@@ -333,8 +332,8 @@ async function pageSeance(zone, arg) {
         x.objectifs_ops ? h('div', {}, h('b', {}, 'Objectifs opérationnels'), h('ul', { class: 'liste-ops' }, String(x.objectifs_ops).split(/\n+/).map((l) => l.replace(/^\s*[-•*–]\s*/, '').trim()).filter(Boolean).map((l) => h('li', {}, l)))) : null,
         !x.objectif_inter && !x.objectifs_ops ? h('p', { class: 'gris' }, 'Objectifs à venir.') : null),
       bloc('📘 Cours mobilisés', cours.length ? h('div', { class: 'cours-seance' }, cours.map((d) => h('div', { class: 'ligne-doc' },
-        h('span', { class: 'icone-doc' }, (GENRES[d.genre] || GENRES.cours)[0]), h('a', { class: 'titre-doc', href: '#/documents/' + d.id }, d.titre),
-        h('span', { class: 'details-doc' }, (GENRES[d.genre] || GENRES.cours)[1]), h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn petit') : null))))
+        h('span', { class: 'icone-doc' }, ICONE_DOC), h('a', { class: 'titre-doc', href: baseDoc(d) + '/' + d.id }, d.titre),
+        h('span', { class: 'details-doc' }, d.auteur || ''), h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn petit') : null))))
         : h('p', { class: 'gris' }, 'Aucun cours mis à disposition pour cette séance pour l’instant.')),
       bloc('🧩 Compétences', codes(x.competences, libC)),
       bloc('📖 Savoirs associés', codes(x.savoirs, libS)),
@@ -401,7 +400,7 @@ async function pageDocuments(zone, arg, divers = false) {
   let ouverts; try { ouverts = new Set(JSON.parse(localStorage.getItem(CLE) || '[]')); } catch { ouverts = new Set(); }
   const memoriser = () => { try { localStorage.setItem(CLE, JSON.stringify([...ouverts])); } catch { /* stockage indisponible */ } };
   const tri = (x, y) => (x.ordre ?? 0) - (y.ordre ?? 0) || String(x.nom || x.titre || '').localeCompare(String(y.nom || y.titre || ''), 'fr', { numeric: true });
-  const trouve = (d, t) => !t.length || t.every((m) => sansAccent([d.titre, (GENRES[d.genre] || GENRES.cours)[1], chemin(d.theme_id).join(' '), (d.sommaire || []).map((e) => e.t).join(' ')].join(' ')).includes(m));
+  const trouve = (d, t) => !t.length || t.every((m) => sansAccent([d.titre, chemin(d.theme_id).join(' '), (d.sommaire || []).map((e) => e.t).join(' ')].join(' ')).includes(m));
   // arborescence compacte d'une liste de documents (seuls les dossiers qui en contiennent apparaissent)
   const arbre = (docs, t) => {
     const dossiers = [...D.dossiers.values()];
@@ -442,15 +441,14 @@ async function pageDocuments(zone, arg, divers = false) {
 }
 // une ligne compacte de l'arborescence
 function ligneDocument(d) {
-  const g = GENRES[d.genre] || GENRES.cours;
   return h('div', { class: 'ligne-doc' },
-    h('span', { class: 'icone-doc', title: g[1] }, g[0]),
+    h('span', { class: 'icone-doc' }, ICONE_DOC),
     h('a', { class: 'titre-doc', href: baseDoc(d) + '/' + d.id }, d.titre || 'Document'),
-    h('span', { class: 'details-doc' }, g[1] + (d.auteur ? ' · ' + d.auteur : '')),
+    h('span', { class: 'details-doc' }, d.auteur || ''),
     h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn mini') : null));
 }
 const tranche = (d, classe = 'couv-mini') => (d.vignette ? h('img', { class: classe, src: d.vignette, alt: '', loading: 'lazy' })
-  : h('div', { class: 'tranche tranche-doc ' + classe, style: { '--couleur': ({ cours: '#1E8F86', exercice: '#C79A12', tdtp: '#C8790B', evaluation: '#B03A2E', corrige: '#4E9A2F', ressource: '#3D84C6', autre: '#6F6A8A', livre: '#7A4E2D' })[d.genre] || '#1E8F86' } }, (GENRES[d.genre] || GENRES.cours)[0]));
+  : h('div', { class: 'tranche tranche-doc ' + classe, style: { '--couleur': '#1E8F86' } }, ICONE_DOC));
 const AFFICHABLES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', txt: 'text/plain;charset=utf-8' };
 function boutonsFichier(d, classe) {
   const type = AFFICHABLES[d.extension || ''];
@@ -477,7 +475,7 @@ function ficheDocument(zone, d) {
     h('div', { class: 'grille-fiche-livre' },
       h('div', { class: 'col-couv' }, tranche(d, 'couv-grande'), h('div', { class: 'boutons-fiche' }, d.fichier ? boutonsFichier(d, 'btn') : h('p', { class: 'aide' }, 'Pas de fichier associé.'))),
       h('div', { class: 'col-infos' }, h('h2', { class: 'titre-livre' }, d.titre),
-        h('p', { class: 'gris' }, (GENRES[d.genre] || GENRES.cours).join(' '), d.auteur ? ' · publié par ' + d.auteur : ''),
+        d.auteur ? h('p', { class: 'gris' }, 'Publié par ' + d.auteur) : null,
         seances.length ? h('p', {}, h('b', {}, 'Utilisé dans : '), seances.map((x) => etiquette(x) + (x.titre ? ' ' + x.titre : '')).join(' · ')) : null,
         (d.savoirs || []).length ? h('p', {}, h('b', {}, 'Savoirs : '), d.savoirs.map((c) => { const s = (D.savoirs || []).find((y) => y.code === c); return c + (s ? ' ' + (s.libelle_court || s.libelle) : ''); }).join(' · ')) : null,
         h('h3', {}, 'Sommaire'),

@@ -1,7 +1,7 @@
 // Séquençage d'une matière : séquences (intitulé, objectif principal) et leurs séances.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { iconeDoc, GENRES, baseEspace } from './cours.js';
+import { iconeDoc, baseEspace } from './cours.js';
 import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
@@ -150,7 +150,7 @@ export async function pageSequencage(zone, id, ctx) {
     const td = h('td', { class: 'cell-cours' });
     const dessinerC = () => vider(td,
       (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('div', { class: 'ligne-cours-lie' },
-        h('a', { class: 'cours-lie', href: baseEspace(c.espace) + '/l-' + c.id, title: (GENRES[c.genre] || GENRES.cours)[1] + ((c.savoirs || []).length ? ' · savoirs associés : ' + c.savoirs.join(', ') : '') }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
+        h('a', { class: 'cours-lie', href: baseEspace(c.espace) + '/l-' + c.id, title: (c.savoirs || []).length ? 'Savoirs associés : ' + c.savoirs.join(', ') : 'Ouvrir la fiche du document' }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
         /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
       champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
       modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
@@ -194,7 +194,7 @@ export async function pageSequencage(zone, id, ctx) {
         const g = (r.proprietaire === moi ? (r.espace === 'divers' ? 'Mes ressources diverses' : 'Mes cours') : nomE + ' partagés par ' + nomDe(r.proprietaire)) + (chemin(r) ? ' · ' + chemin(r) : '');
         if (g !== grp) { grp = g; out.push(h('div', { class: 'groupe' }, g)); }
         out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.id), onchange: (e) => (e.target.checked ? choix.add(r.id) : choix.delete(r.id)) }),
-          iconeDoc(r) + ' ', h('b', {}, r.titre || 'Document sans titre'), h('small', { class: 'gris' }, ' · ' + (GENRES[r.genre] || GENRES.cours)[1]), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
+          iconeDoc(r) + ' ', h('b', {}, r.titre || 'Document sans titre'), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
         return out;
       }), disparus.length ? [h('div', { class: 'groupe' }, 'Cours plus disponibles (supprimés ou plus partagés)'),
         disparus.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(c.id), onchange: (e) => (e.target.checked ? choix.add(c.id) : choix.delete(c.id)) }), '📘 ', h('b', {}, c.titre)))] : null,

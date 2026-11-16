@@ -2,6 +2,6 @@
 // Fonctionne exactement comme « Ma bibliothèque » (même moteur : voir espace.js) ; chaque document a en plus un type.
 import { pageEspace, ESPACES } from './espace.js';
 
-export { GENRES, iconeDoc, genreDepuisNom, lireWord, baseEspace } from './espace.js';
+export { GENRES, ICONE_DOC, iconeDoc, genreDepuisNom, lireWord, baseEspace } from './espace.js';
 export const pageCours = pageEspace(ESPACES.cours);
 export const pageDivers = pageEspace(ESPACES.divers);   // « Mes ressources diverses » : exactement comme Mes cours
