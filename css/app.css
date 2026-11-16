@@ -2285,3 +2285,8 @@ a.tuile-prog:hover { background: color-mix(in srgb, var(--couleur) 26%, #fff); b
 .btn-voix:hover { background: #d3ebe7; }
 .btn-voix.coupee { background: #fff; color: #6B7A77; border-color: #C9D3D1; }
 .btn-voix[hidden] { display: none; }
+.reglages-voix { display: flex; gap: 6px; }
+.reglages-voix[hidden], .choix-voix[hidden] { display: none; }
+.choix-voix { font: inherit; font-size: 12.5px; padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; max-width: 210px; }
+.choix-voix option { color: #1F2D2B; background: #fff; }
+@media (max-width: 700px) { .tete-video { flex-wrap: wrap; } .tete-video .gris { flex-basis: 100%; order: 3; } .choix-voix { max-width: 140px; } }

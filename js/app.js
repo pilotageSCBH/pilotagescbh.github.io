@@ -401,16 +401,31 @@ export function ouvrirVideo(cle = 'decouverte') {
   const btnVoix = h('button', { class: 'btn-voix', type: 'button', hidden: true });
   const etatVoix = (on) => { btnVoix.textContent = on ? '🔊 Voix off' : '🔇 Voix coupée'; btnVoix.title = on ? 'Couper la voix qui commente la vidéo' : 'Activer la voix qui commente la vidéo'; btnVoix.classList.toggle('coupee', !on); };
   let voix = null;
-  import('./narration.js').then((N) => {
-    voix = N.brancherVoix(video, v.cle, { actif: voixOn, surEtat: (on) => { etatVoix(on); try { localStorage.setItem(CLE_VOIX, on ? 'oui' : 'non'); } catch { /* sans stockage */ } } });
+  btnVoix.addEventListener('click', (e) => { e.stopPropagation(); voix?.basculer(); reglages.hidden = btnVoix.hidden || !voix?.actif; });
+  const lireL2 = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const ecrireL2 = (k, x) => { try { localStorage.setItem(k, x); } catch { /* sans stockage */ } };
+  const choixVoix = h('select', { class: 'choix-voix', title: 'Choisir la voix', 'aria-label': 'Voix' });
+  const choixVitesse = h('select', { class: 'choix-voix', title: 'Vitesse de la voix', 'aria-label': 'Vitesse' },
+    [['0.9', 'Lente'], ['1', 'Normale'], ['1.05', 'Un peu rapide'], ['1.15', 'Rapide']].map(([x, l]) => h('option', { value: x, selected: x === lireL2('pilotage-scbh-voix-vitesse', '1.05') }, l)));
+  const reglages = h('span', { class: 'reglages-voix', hidden: true }, choixVoix, choixVitesse);
+  import('./narration.js?v=3').then((N) => {
+    voix = N.brancherVoix(video, v.cle, { actif: voixOn, nomVoix: lireL2('pilotage-scbh-voix-nom', ''), vitesse: Number(lireL2('pilotage-scbh-voix-vitesse', '1.05')),
+      surEtat: (on) => { etatVoix(on); ecrireL2(CLE_VOIX, on ? 'oui' : 'non'); } });
     if (!voix || !fond.isConnected) { voix?.arreter(); return; }
-    const montrer = () => { btnVoix.hidden = !N.francaisPossible(); };
-    montrer(); speechSynthesis.addEventListener?.('voiceschanged', montrer);
-    etatVoix(voix.actif); btnVoix.onclick = () => voix.basculer();
-  }).catch(() => {});
+    etatVoix(voix.actif);
+    const remplir = () => {
+      const l = N.voixFrancaises(), nom = voix.voix?.name;
+      vider(choixVoix, l.map((x) => h('option', { value: x.name, selected: x.name === nom }, (N.voixNaturelle(x) ? '★ ' : '') + x.name.replace(/^Microsoft\s+|\s+Online\b|\s*-\s*French.*$|\s*\(.*?\)\s*$/g, '') + (N.voixNaturelle(x) ? ' (naturelle)' : ''))));
+      choixVoix.hidden = l.length < 2;
+      btnVoix.hidden = !N.francaisPossible(); reglages.hidden = btnVoix.hidden || !voix.actif;
+    };
+    remplir(); try { window.speechSynthesis.addEventListener('voiceschanged', remplir); } catch { /* ancien navigateur */ }
+    choixVoix.onchange = () => { ecrireL2('pilotage-scbh-voix-nom', choixVoix.value); voix.regler({ nomVoix: choixVoix.value }); };
+    choixVitesse.onchange = () => { ecrireL2('pilotage-scbh-voix-vitesse', choixVitesse.value); voix.regler({ vitesse: Number(choixVitesse.value) }); };
+  }).catch((e) => console.warn('Voix off indisponible', e));
   const fond = h('div', { class: 'fond-video', onmousedown: (e) => { if (e.target === fond) fermer(); } },
     h('div', { class: 'boite-video' + (chap ? ' avec-chapitres' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': v.titre },
-      h('div', { class: 'tete-video' }, h('b', {}, '▶  ' + v.titre), h('span', { class: 'gris' }, [v.duree, 'sous-titrée et commentée', 'données fictives'].filter(Boolean).join(' · ')), btnVoix,
+      h('div', { class: 'tete-video' }, h('b', {}, '▶  ' + v.titre), h('span', { class: 'gris' }, [v.duree, 'sous-titrée et commentée', 'données fictives'].filter(Boolean).join(' · ')), reglages, btnVoix,
         h('button', { class: 'fermer', type: 'button', 'aria-label': 'Fermer', onclick: fermer }, '✕')),
       h('div', { class: 'corps-video' }, video, chap)));
   document.addEventListener('keydown', touche);

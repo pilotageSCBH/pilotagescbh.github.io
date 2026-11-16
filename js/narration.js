@@ -79,11 +79,15 @@ export const NARRATION = {
   ],
 };
 
-// voix française la plus naturelle disponible sur cet appareil
-export function voixFrancaise() {
-  const v = (window.speechSynthesis?.getVoices() || []).filter((x) => /^fr(-|_|$)/i.test(x.lang));
-  const score = (x) => (/natural|neural|online/i.test(x.name) ? 4 : 0) + (/google/i.test(x.name) ? 3 : 0) + (/denise|vivienne|henri|eloise|amélie|amelie|thomas|audrey|hortense|julie|paul/i.test(x.name) ? 2 : 0) + (/fr-FR/i.test(x.lang) ? 1 : 0);
-  return v.sort((a, b) => score(b) - score(a))[0] || null;
+// voix françaises de l'appareil, de la plus naturelle à la moins naturelle
+const scoreVoix = (x) => (/natural|neural/i.test(x.name) ? 6 : 0) + (/online/i.test(x.name) ? 3 : 0) + (/google/i.test(x.name) ? 3 : 0)
+  + (/denise|vivienne|henri|eloise|remy|amélie|amelie|thomas|audrey|aurélie|hortense|julie|paul/i.test(x.name) ? 2 : 0) + (/fr-FR/i.test(x.lang) ? 1 : 0);
+export const voixFrancaises = () => (window.speechSynthesis?.getVoices() || []).filter((x) => /^fr(-|_|$)/i.test(x.lang)).sort((a, b) => scoreVoix(b) - scoreVoix(a));
+export const voixNaturelle = (x) => scoreVoix(x) >= 6;
+// voix choisie (par son nom) si elle existe, sinon la plus naturelle
+export function voixFrancaise(nom) {
+  const l = voixFrancaises();
+  return (nom && l.find((x) => x.name === nom)) || l[0] || null;
 }
 
 // faux seulement si l'appareil liste des voix mais aucune en français (liste vide = pas encore chargée : on essaie)
@@ -93,39 +97,52 @@ export function francaisPossible() {
 }
 
 // branche la voix off sur un élément <video> ; renvoie { actif, basculer, arreter }
-export function brancherVoix(video, cle, { actif = true, surEtat } = {}) {
+// Contournements des navigateurs : petite attente entre cancel() et speak() (Chrome perd sinon la phrase),
+// énoncé gardé en mémoire (sinon Chrome peut l'abandonner en route), pas de pause()/resume() (souvent bloqués).
+export function brancherVoix(video, cle, { actif = true, surEtat, nomVoix = '', vitesse = 1.05 } = {}) {
   const S = window.speechSynthesis, cues = NARRATION[cle] || [];
   if (!S || !window.SpeechSynthesisUtterance || !cues.length) return null;
-  let on = actif, dernier = -1, voix = voixFrancaise();
-  S.onvoiceschanged = () => { voix = voixFrancaise(); };
+  let on = actif, dernier = -1, voix = voixFrancaise(nomVoix), enCours = null, minuterie = null;
+  const majVoix = () => { voix = voixFrancaise(nomVoix); };
+  try { S.addEventListener('voiceschanged', majVoix); } catch { S.onvoiceschanged = majVoix; }
   const indice = (t) => { let k = -1; cues.forEach(([d], i) => { if (t >= d - 0.05) k = i; }); return k; };
   const finDe = (k) => (cues[k + 1]?.[0] ?? video.duration ?? 1e9);
-  const dire = (k) => {
-    S.cancel();
-    if (!on || k < 0 || !francaisPossible()) return;
-    const u = new SpeechSynthesisUtterance(cues[k][1]);
-    u.lang = 'fr-FR'; if (voix) u.voice = voix; u.rate = 1.1;
-    S.speak(u);
+  const taire = () => { clearTimeout(minuterie); try { S.cancel(); } catch { /* rien */ } };
+  const parler = (texte) => {
+    taire();
+    if (!francaisPossible()) return;
+    minuterie = setTimeout(() => {
+      const u = new SpeechSynthesisUtterance(texte);
+      u.lang = 'fr-FR'; u.rate = vitesse; try { if (voix) u.voice = voix; } catch { /* voix refusée : celle par défaut */ }
+      enCours = u; u.onend = () => { if (enCours === u) enCours = null; };
+      try { S.resume(); S.speak(u); } catch { /* synthèse indisponible */ }
+    }, 80);
   };
   const tic = () => {
-    if (video.paused) return;
+    if (video.paused || !on) return;
     const k = indice(video.currentTime);
-    if (k !== dernier) {
-      dernier = k;
-      // à la reprise au milieu d'une scène : on ne parle que s'il reste assez de temps
-      if (k >= 0 && finDe(k) - video.currentTime > 2.5) dire(k); else S.cancel();
-    }
+    if (k === dernier) return;
+    dernier = k;
+    // à la reprise au milieu d'une scène : on ne parle que s'il reste assez de temps
+    if (k >= 0 && finDe(k) - video.currentTime > 2.5) parler(cues[k][1]); else taire();
   };
   video.addEventListener('timeupdate', tic);
-  video.addEventListener('play', () => { if (S.paused) S.resume(); tic(); });
-  video.addEventListener('pause', () => { if (S.speaking) S.pause(); });
-  video.addEventListener('seeking', () => { S.cancel(); dernier = -2; });
-  video.addEventListener('ended', () => S.cancel());
-  const ctl = {
+  video.addEventListener('play', () => { dernier = -2; tic(); });
+  video.addEventListener('pause', () => { taire(); dernier = -2; });
+  video.addEventListener('seeking', () => { taire(); dernier = -2; });
+  video.addEventListener('ended', taire);
+  return {
     get actif() { return on; },
-    basculer() { on = !on; S.cancel(); if (on && !video.paused) { dernier = -2; tic(); } surEtat?.(on); return on; },
-    arreter() { S.cancel(); },
+    basculer() {
+      on = !on; dernier = -2;
+      if (!on) taire();
+      else if (video.paused) parler('Voix activée.'); else tic();
+      surEtat?.(on); return on;
+    },
+    arreter() { taire(); try { S.removeEventListener('voiceschanged', majVoix); } catch { /* rien */ } },
     get voix() { return voix; },
+    // changer de voix ou de vitesse : on rejoue la phrase de la scène pour l'entendre
+    regler(r) { if ('nomVoix' in r) { nomVoix = r.nomVoix; voix = voixFrancaise(nomVoix); } if ('vitesse' in r) vitesse = r.vitesse;
+      if (!on) return; const k = indice(video.currentTime); parler(k >= 0 && !video.paused ? cues[k][1] : 'Voici la voix choisie pour commenter les vidéos.'); },
   };
-  return ctl;
 }
