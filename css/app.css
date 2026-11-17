@@ -2439,3 +2439,8 @@ table.calendrier-epreuves tr.passee td { color: #8A9694; }
 .liste-reporter { columns: 2 320px; font-size: 13.5px; padding-left: 18px; }
 table.decisions select.champ { min-width: 220px; }
 @media print { .filtres-stages, .boutons-stage, .pied-epreuve button { display: none !important; } .grille-epreuves { display: block; } .carte-epreuve { margin-bottom: 10px; } }
+
+/* fiche élève : tuteur et enseignant chargé du suivi */
+.tuteur-liste { margin-top: 3px; color: #33413F; }
+.tuteur-fiche { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; font-size: 13.5px; }
+.tuteur-fiche a { color: var(--teal); }

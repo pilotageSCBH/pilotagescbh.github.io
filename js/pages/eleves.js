@@ -5,13 +5,16 @@ import { anneau, barresH, carteGraph } from '../graphiques.js';
 import { h, vider, toast, erreur, fenetre, confirmer, dateFr, imprimer } from '../ui.js';
 import { badgeRedoublant, badgePap, libPromo } from '../redoublants.js';
 import { pageAcces } from './acces.js';
+import { chargerCollegues, nomCollegue } from '../ressources.js';
 import { apercuEleve } from '../app.js';
 
 const CHAMPS = [
   ['nom', 'NOM'], ['prenom', 'Prénom'], ['naissance', 'Né(e) le', 'date'], ['statut', 'Statut', ['Scolaire', 'Apprenti']],
   ['telephone', 'Téléphone'], ['mail', 'Mail', 'email'], ['commune', "Commune d'origine"], ['code_postal', 'Code postal'],
   ['departement', 'Département'], ['entreprise', 'Entreprise'], ['entreprise_commune', 'Commune de l’entreprise'],
-  ['entreprise_cp', 'Code postal de l’entreprise'], ['etudes', 'Études précédentes'], ['etablissement', 'Établissement précédent'],
+  ['entreprise_cp', 'Code postal de l’entreprise'],
+  ['tuteur', 'Tuteur en entreprise (Prénom NOM)'], ['tuteur_fonction', 'Fonction du tuteur'], ['tuteur_tel', 'Téléphone du tuteur', 'tel'], ['tuteur_mail', 'Mail du tuteur', 'email'],
+  ['suivi_par', 'Enseignant chargé du suivi', 'enseignant'], ['etudes', 'Études précédentes'], ['etablissement', 'Établissement précédent'],
   ['projet', 'Projet post-BTS'], ['arret', 'Arrêt de la formation (date ou motif ; vide = en formation)'],
   ['redoublant', 'Redoublant(e)', 'case'], ['date_arrivee', 'Arrivé(e) dans la promotion le (vide = dès le début)', 'date'],
   ['devenir', 'Suite du parcours (ex. redouble avec la promotion suivante)'],
@@ -19,6 +22,7 @@ const CHAMPS = [
   ['pap_amenagements', 'Aménagements du PAP (un par ligne) : visibles des enseignants au survol du symbole PAP, jamais des élèves', 'zone'],
 ];
 let avecPap = false;   // colonnes du PAP présentes (script SQL 38)
+let avecTuteur = false;   // tuteur et suivi (script SQL 40)
 
 export async function pageEleves(zone, _arg, ctx) {
   if (_arg === 'acces') return pageAcces(zone, ctx);
@@ -26,7 +30,10 @@ export async function pageEleves(zone, _arg, ctx) {
 
   async function dessiner() {
     const eleves = await db.lire('eleves', `promotion_id=eq.${ctx.promo.id}&order=nom,prenom`);
-    avecPap = eleves.length ? eleves.some((x) => 'pap' in x) : await db.lire('eleves', 'limit=1').then((l) => !l.length || 'pap' in l[0]).catch(() => false);
+    const exemple = eleves[0] || (await db.lire('eleves', 'limit=1').catch(() => []))[0];
+    avecPap = exemple ? 'pap' in exemple : false;
+    avecTuteur = exemple ? 'tuteur' in exemple : false;
+    await chargerCollegues();
     eleves.sort((a, b) => (!!a.arret - !!b.arret) || a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr'));
     const actifs = eleves.filter((e) => !e.arret);
     const app = actifs.filter((e) => e.statut === 'Apprenti').length;
@@ -64,7 +71,9 @@ export async function pageEleves(zone, _arg, ctx) {
           h('td', {}, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut)),
           h('td', { class: 'petit' }, e.telephone, h('br'), e.mail),
           h('td', { class: 'petit' }, e.commune, ' ', e.code_postal, h('br'), e.departement),
-          h('td', { class: 'petit' }, e.entreprise, h('br'), [e.entreprise_commune, e.entreprise_cp].filter(Boolean).join(' ')),
+          h('td', { class: 'petit' }, e.entreprise, h('br'), [e.entreprise_commune, e.entreprise_cp].filter(Boolean).join(' '),
+            e.tuteur ? h('div', { class: 'tuteur-liste' }, '👷 ', e.tuteur, e.tuteur_tel ? ' · ' + e.tuteur_tel : '') : null,
+            e.suivi_par ? h('div', { class: 'tuteur-liste' }, '🎓 suivi : ', nomCollegue(e.suivi_par)) : null),
           h('td', { class: 'petit' }, e.etudes, h('br'), e.etablissement, e.projet ? h('div', {}, '→ ' + e.projet) : null),
           h('td', { class: 'petit' }, e.arret)))))),
       eleves.length === 0 ? h('p', { class: 'vide' }, 'Aucun élève saisi.') : null,
@@ -86,8 +95,10 @@ export async function pageEleves(zone, _arg, ctx) {
 
   async function formulaire(e) {
     const val = {};
-    const champs = CHAMPS.filter(([k]) => avecPap || !k.startsWith('pap')).map(([k, lab, t]) => {
+    const collegues = await chargerCollegues();
+    const champs = CHAMPS.filter(([k]) => (avecPap || !k.startsWith('pap')) && (avecTuteur || !(k.startsWith('tuteur') || k === 'suivi_par'))).map(([k, lab, t]) => {
       let el;
+      if (t === 'enseignant') { el = h('select', { class: 'champ' }, h('option', { value: '' }, '—'), (collegues || []).map((c) => h('option', { value: c.id, selected: e?.[k] === c.id }, c.nom))); val[k] = el; return h('label', {}, lab, el); }
       if (t === 'zone') { el = h('textarea', { class: 'champ', rows: 4, placeholder: 'ex. tiers-temps aux évaluations\nsujets agrandis (police 14)\nusage de l’ordinateur' }, e?.[k] ?? ''); val[k] = el; return h('label', { class: 'large' }, lab, el); }
       if (Array.isArray(t)) el = h('select', { class: 'champ' }, t.map((o) => h('option', { selected: (e?.[k] || 'Scolaire') === o }, o)));
       else if (t === 'case') { el = h('input', { type: 'checkbox', checked: !!e?.[k] }); val[k] = el; return h('label', { class: 'case-form' }, el, ' ', lab); }
@@ -104,6 +115,7 @@ export async function pageEleves(zone, _arg, ctx) {
       const d = Object.fromEntries(Object.entries(val).map(([k, el]) => [k, el.type === 'checkbox' ? el.checked : el.value.trim()]));
       if ('pap' in d && !d.pap && !d.pap_amenagements) d.pap_amenagements = '';
       d.date_arrivee = d.date_arrivee || null;
+      if ('suivi_par' in d) d.suivi_par = d.suivi_par || null;
       d.nom = d.nom.toUpperCase();
       if (!d.nom && !d.prenom) throw new Error('Saisissez au moins le nom ou le prénom.');
       d.naissance = d.naissance || null;

@@ -1,4 +1,4 @@
-// Bilan de l'année : effectifs, réalisé / prévu, couverture du référentiel, évaluations et compétences, stages, épreuves ;
+// Bilan de l'année : effectifs, réalisé / prévu, couverture du référentiel, évaluations et compétences, épreuves ;
 // préparation de l'année suivante : séances prévues et non faites (à reporter), décision pour chaque élève.
 import { db } from '../api.js';
 import { h, vider, toast, erreur, dateFr, imprimer, fenetre } from '../ui.js';
@@ -15,8 +15,7 @@ export async function pageBilan(zone, arg, ctx) {
   let annee = arg === '2' ? 2 : arg === '1' ? 1 : (wAuj >= SEM_AN ? 2 : 1);
   const [D, tous] = await Promise.all([chargerSuivi(ctx), db.lire('eleves', `promotion_id=eq.${P.id}&order=nom,prenom`)]);
   const eleves = tous.filter((e) => !e.arret);
-  const [best, stages, epreuves] = await Promise.all([meilleursNiveaux(ctx, eleves),
-    db.lire('stages', `promotion_id=eq.${P.id}`).catch(() => null), db.lire('epreuves', `promotion_id=eq.${P.id}&order=ordre,id`).catch(() => null)]);
+  const [best, epreuves] = await Promise.all([meilleursNiveaux(ctx, eleves), db.lire('epreuves', `promotion_id=eq.${P.id}&order=ordre,id`).catch(() => null)]);
   const admin = ctx.estAdmin();
   const corps = h('div', {});
   const pc = (a, b) => (b ? Math.round((a / b) * 100) : 0);
@@ -43,7 +42,6 @@ export async function pageBilan(zone, arg, ctx) {
       const cs = cases.filter((c) => D.seances.get(c.seance_id)?.mat?.id === m.id), ps = passees.filter((c) => D.seances.get(c.seance_id)?.mat?.id === m.id);
       return { m, prevues: new Set(cs.map((c) => c.seance_id)).size, passees: ps.length, faites: D.faites ? ps.filter((c) => D.faites.has(c.seance_id)).length : null };
     });
-    const st = stages || [];
     vider(corps,
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, eleves.length), h('span', {}, 'en formation')),
@@ -64,9 +62,6 @@ export async function pageBilan(zone, arg, ctx) {
         h('p', {}, `${contratsAn.length} contrat(s) sommatif(s) et ${evalsAn.length} résultat(s) intermédiaire(s) sur l’année.`),
         h('div', { class: 'ligne-jauge' }, h('span', {}, `Compétences évaluées (toute la formation) : ${pc(ev, ev + n.NE)} % des cases élève × compétence`), barre(pc(ev, ev + n.NE))),
         h('div', { class: 'barre-niv' }, [['A', 'a', 'Acquis'], ['EVA', 'eva', 'En voie'], ['NA', 'na', 'Non acquis']].map(([k, cl, l]) => n[k] ? h('span', { class: 'seg seg-' + cl, style: { flex: n[k] }, title: `${l} : ${n[k]}` }, `${l} ${pc(n[k], ev)} %`) : null))),
-      stages ? h('section', { class: 'bloc bilan-bloc' }, h('h2', {}, '🏭 Stages et entreprises'),
-        h('p', {}, `${st.length} période(s) · ${st.filter((s) => s.convention === 'Signée').length} convention(s) signée(s) · ${st.filter((s) => s.type === 'Stage' && s.attestation).length} attestation(s) de stage reçue(s) · ${eleves.filter((e) => !st.some((s) => s.eleve_id === e.id)).length} élève(s) sans période.`),
-        h('a', { class: 'lien ecran', href: '#/stages' }, 'Ouvrir « Stages et entreprises » →')) : null,
       epreuves?.length ? h('section', { class: 'bloc bilan-bloc' }, h('h2', {}, '🎓 Épreuves'),
         h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Épreuve', 'Dates', 'Compétences acquises (promotion)'].map((t) => h('th', {}, t)))),
           h('tbody', {}, epreuves.map((x) => {

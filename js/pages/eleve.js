@@ -6,6 +6,7 @@ import { h, vider, toast, erreur, champ, dateFr } from '../ui.js';
 import { moyenne, niveau } from './contrat.js';
 import { barresH, courbe, anneau, carteGraph } from '../graphiques.js';
 import { telecharger, nomFichier } from '../echange.js';
+import { chargerCollegues, nomCollegue } from '../ressources.js';
 import { acquisAnterieurs, fusionnerAcquis, badgeRedoublant, badgePap, libPromo, concerne, chargerManuelles, ajouterManuelles } from '../redoublants.js';
 
 const CLE_PER = 'pilotage-scbh-eleve-periode';
@@ -43,6 +44,7 @@ export async function pageEleve(zone, arg, ctx) {
   const appreciations = new Map(ap.map((a) => [`${a.eleve_id}:${a.matiere_id}`, a.texte]));
   // redoublants : acquis de la promotion d'origine ; élèves de cette promotion partis redoubler ailleurs
   const anterieurs = await acquisAnterieurs(ctx, eleves);
+  await chargerCollegues();
   const manuelles = await chargerManuelles(P.id);   // compétences évaluées sans fiche contrat (ex. en entreprise)
   const suites = await db.lire('eleves', `origine_eleve_id=in.(${eleves.map((e) => e.id).join(',')})&select=id,origine_eleve_id,promotion_id`).catch(() => []);
   const ouvrirAilleurs = (promotionId, eleveId) => {
@@ -114,6 +116,11 @@ export async function pageEleve(zone, arg, ctx) {
           h('div', { class: 'profil-badges' }, h('span', { class: 'badge ' + (e.statut === 'Apprenti' ? 'apprenti' : 'scolaire') }, e.statut), badgeRedoublant(e, ctx, true), badgePap(e, true),
             e.entreprise ? h('span', { class: 'role-pill' }, '🏭  ' + e.entreprise) : null, e.naissance ? h('span', { class: 'role-pill' }, 'né(e) le ' + dateFr(e.naissance)) : null),
           e.etudes ? h('p', { class: 'gris' }, `Parcours : ${e.etudes}${e.etablissement ? ' · ' + e.etablissement : ''}`) : null,
+          e.tuteur || e.suivi_par ? h('div', { class: 'tuteur-fiche' },
+            e.tuteur ? h('span', {}, '👷 Tuteur : ', h('b', {}, e.tuteur), e.tuteur_fonction ? ` (${e.tuteur_fonction})` : '',
+              e.tuteur_tel ? [' · ', h('a', { href: 'tel:' + e.tuteur_tel.replace(/\s+/g, '') }, e.tuteur_tel)] : null,
+              e.tuteur_mail ? [' · ', h('a', { href: 'mailto:' + e.tuteur_mail }, e.tuteur_mail)] : null) : null,
+            e.suivi_par ? h('span', {}, '🎓 Suivi par ', h('b', {}, nomCollegue(e.suivi_par))) : null) : null,
           e.redoublant ? h('div', { class: 'bandeau-redoublant' },
             h('span', {}, `↻ Redoublant(e)${e.origine_promotion_id ? ` · vient de la promotion ${libPromo(ctx, e.origine_promotion_id)}` : ''}${e.date_arrivee ? ` · arrivé(e) le ${dateFr(e.date_arrivee)}` : ''}. `
               + 'Les évaluations antérieures à son arrivée ne comptent pas ; les compétences validées auparavant sont reprises dans le livret (N-1).'),
