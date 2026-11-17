@@ -70,6 +70,38 @@ export function champs(corps, spec) {
   return out;
 }
 
+// ------------------------------------------------------------------------------------------- réponse jointe en fichier
+// texte d'un fichier joint (.txt, .md, .csv, .json, .html, .docx, .pdf) ; lu dans le navigateur, rien n'est envoyé
+export async function texteFichier(f) {
+  const nom = f.name || 'fichier';
+  if (f.size > 20 * 1024 * 1024) throw new Error(`« ${nom} » est trop volumineux (20 Mo au maximum).`);
+  if (/\.(txt|md|markdown|csv|json|text)$/i.test(nom) || /^text\/plain/.test(f.type)) return f.text();
+  if (/\.html?$/i.test(nom)) {
+    const d = new DOMParser().parseFromString(await f.text(), 'text/html');
+    d.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+    d.querySelectorAll('li').forEach((li) => li.prepend('- '));
+    d.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6, pre, tr').forEach((b) => b.append('\n'));
+    return d.body.textContent;
+  }
+  if (/\.docx$/i.test(nom)) {
+    const P = await import('./pdf.js?v=20261113'); await P.chargerOutils();
+    const zip = await window.JSZip.loadAsync(await f.arrayBuffer());
+    const fx = zip.file('word/document.xml'); if (!fx) throw new Error(`« ${nom} » n’est pas un document Word lisible.`);
+    const doc = new DOMParser().parseFromString(await fx.async('string'), 'application/xml');
+    return [...doc.getElementsByTagName('w:p')].map((par) => {
+      const t = [...par.getElementsByTagName('*')].map((e) => (e.tagName === 'w:t' ? e.textContent : e.tagName === 'w:tab' ? ' ' : e.tagName === 'w:br' ? '\n' : '')).join('');
+      return par.getElementsByTagName('w:numPr').length && t.trim() ? '- ' + t : t;
+    }).join('\n');
+  }
+  if (/\.pdf$/i.test(nom)) {
+    const { ouvrirPdf, textePages } = await import('./ressources.js');
+    const pdf = await ouvrirPdf(f);
+    return (await textePages(pdf, 1, pdf.numPages)).join('\n');
+  }
+  if (/\.(doc|odt|rtf|pages)$/i.test(nom)) throw new Error(`« ${nom} » : enregistrez-le d’abord en .docx, .pdf ou .txt (ou copiez son texte).`);
+  throw new Error(`« ${nom} » : format non lu. Fichiers acceptés : .txt, .md, .docx, .pdf, .html, .csv, .json.`);
+}
+
 // ------------------------------------------------------------------------------------------- fenêtre de l'assistant
 export function boutonIA(config, classe = 'btn') {
   return h('button', { class: classe + ' bouton-ia ecran', type: 'button', title: 'Préparer une demande pour l’IA de votre choix (ChatGPT, Le Chat, Claude…), puis remplir avec sa réponse',
@@ -98,7 +130,7 @@ export async function assistantIA(cfg) {
     IAS.map(([n, u]) => h('a', { class: 'lien-ia' + (n === prefere ? ' prefere' : ''), href: u, target: '_blank', rel: 'noopener', onclick: () => ecrireL(CLE_IA, n) }, n)),
     h('span', { class: 'gris petit' }, 'ou toute autre IA'));
 
-  const reponse = h('textarea', { class: 'champ zone-ia reponse-ia', rows: 7, placeholder: 'Collez ici la réponse complète de l’IA (Ctrl+V)…' });
+  const reponse = h('textarea', { class: 'champ zone-ia reponse-ia', rows: 7, placeholder: 'Collez ici la réponse complète de l’IA (Ctrl+V), ou joignez le fichier qu’elle a produit…' });
   const remplacer = h('input', { type: 'checkbox' });
   const zoneApercu = h('div', { class: 'apercu-ia' });
   let lu = null, coches = new Set(), attente = null;
@@ -120,6 +152,26 @@ export async function assistantIA(cfg) {
   };
   reponse.addEventListener('input', () => { clearTimeout(attente); attente = setTimeout(lire, 250); });
   vide();
+  // réponse fournie en fichier (bouton ou glisser-déposer sur la zone)
+  const infoFichier = h('span', { class: 'gris petit fichier-ia' });
+  const joindre = async (liste) => {
+    const fs = [...(liste || [])]; if (!fs.length) return;
+    try {
+      infoFichier.textContent = '⏳ Lecture…';
+      const textes = [];
+      for (const f of fs) textes.push((await texteFichier(f)).replace(/\r/g, '').trim());
+      const t = textes.filter(Boolean).join('\n\n');
+      if (!t) throw new Error('Aucun texte trouvé dans ce fichier (un PDF scanné ne contient pas de texte).');
+      reponse.value = reponse.value.trim() ? reponse.value.trimEnd() + '\n\n' + t : t;
+      infoFichier.textContent = '📎 ' + fs.map((f) => f.name).join(', ');
+      lire();
+    } catch (e) { infoFichier.textContent = ''; erreur(e); }
+  };
+  const choixFichier = h('input', { type: 'file', multiple: true, hidden: true, accept: '.txt,.md,.markdown,.csv,.json,.html,.htm,.docx,.pdf,text/plain',
+    onchange: (e) => { joindre(e.target.files); e.target.value = ''; } });
+  reponse.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); reponse.classList.add('survol-ia'); } });
+  reponse.addEventListener('dragleave', () => reponse.classList.remove('survol-ia'));
+  reponse.addEventListener('drop', (e) => { if (!e.dataTransfer?.files?.length) return; e.preventDefault(); reponse.classList.remove('survol-ia'); joindre(e.dataTransfer.files); });
 
   await fenetre('🤖  ' + cfg.titre, h('div', { class: 'assistant-ia' },
     h('div', { class: 'etape-ia' }, h('span', { class: 'num-etape' }, '1'), h('div', {},
@@ -127,7 +179,9 @@ export async function assistantIA(cfg) {
       h('div', { class: 'boutons-detail' }, h('button', { class: 'btn principal', type: 'button', onclick: copier }, '📋  Copier la demande'), liens),
       h('details', { class: 'voir-demande' }, h('summary', {}, 'Voir le texte de la demande'), voir))),
     h('div', { class: 'etape-ia' }, h('span', { class: 'num-etape' }, '2'), h('div', {},
-      h('h3', {}, 'Coller la réponse de l’IA'), reponse)),
+      h('h3', {}, 'Coller la réponse de l’IA'), reponse,
+      h('div', { class: 'joindre-ia' }, h('button', { class: 'btn petit', type: 'button', onclick: () => choixFichier.click() }, '📎  Joindre un fichier'),
+        h('span', { class: 'gris petit' }, 'si l’IA a répondu par un fichier (.docx, .pdf, .txt, .md…) — ou glissez-le sur la zone'), infoFichier, choixFichier))),
     h('div', { class: 'etape-ia' }, h('span', { class: 'num-etape' }, '3'), h('div', {},
       h('h3', {}, 'Vérifier puis remplir'), zoneApercu,
       h('label', { class: 'case remplacer-ia' }, remplacer, ' Remplacer aussi ce qui est déjà rempli (sinon, seules les cases vides sont complétées)'),

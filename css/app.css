@@ -2444,3 +2444,8 @@ table.decisions select.champ { min-width: 220px; }
 .tuteur-liste { margin-top: 3px; color: #33413F; }
 .tuteur-fiche { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; font-size: 13.5px; }
 .tuteur-fiche a { color: var(--teal); }
+
+/* assistant IA : réponse jointe en fichier */
+.joindre-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+.fichier-ia { color: var(--teal); font-weight: 600; }
+.reponse-ia.survol-ia { outline: 2px dashed var(--teal); outline-offset: 2px; background: #EEF7F6; }
