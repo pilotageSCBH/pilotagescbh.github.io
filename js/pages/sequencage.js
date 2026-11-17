@@ -47,6 +47,8 @@ export async function pageSequencage(zone, id, ctx) {
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           sequences.length ? h('button', { class: 'btn', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats de la matière', onclick: async () => {
             const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF') : null,
+          modif && sequences.length ? h('button', { class: 'btn', title: 'Mettre les fiches contrats, activités et prérequis des fiches en accord avec le séquençage', onclick: async () => {
+            try { const { mettreAJourFiches } = await import('../majFiches.js'); await mettreAJourFiches(m, ctx); } catch (e) { erreur(e); } } }, '↻  Mettre à jour les fiches') : null,
           modif ? h('button', { class: 'btn', title: 'Remplacer le séquençage de cette matière (pour cette promotion) par celui d’un fichier Excel', onclick: () => importerExcel().catch(erreur) }, '📥  Importer (Excel)') : null,
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),
@@ -520,6 +522,8 @@ Savoirs : S11-1, S21-2
       }
       toast(`Séquençage importé : ${lu.sequences.length} séquence(s), ${nbS} séance(s)`);
     } finally { attente.remove(); await dessiner(); }
+    const { mettreAJourFiches } = await import('../majFiches.js');
+    await mettreAJourFiches(m, ctx, { apresImport: true });
   }
 
   async function insererSeance(s, x) {

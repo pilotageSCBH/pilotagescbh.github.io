@@ -2459,3 +2459,9 @@ table.decisions select.champ { min-width: 220px; }
 .avert-import { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #FFF6E5; border: 1px solid #F0D49A; font-size: 13px; }
 .avert-import ul { margin: 4px 0 0 18px; padding: 0; }
 .alerte-import { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #FDECEC; border: 1px solid #F2B8B5; font-size: 13px; }
+
+/* mise à jour des fiches d'après le séquençage */
+.maj-fiches .case-maj { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 4px; }
+.maj-fiches .case-maj input { margin-top: 4px; }
+.maj-fiches .case-maj small { display: block; color: #6B7A78; margin-top: 2px; }
+.liste-maj { max-height: 30vh; overflow: auto; margin: 2px 0 6px 30px; padding: 0; font-size: 13px; }
