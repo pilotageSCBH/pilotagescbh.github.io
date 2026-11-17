@@ -518,11 +518,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const parent = selectTheme(t.parent_id, { racine: `Accueil (${E.theme} principal)`, exclure: t.id });
     let image = t.image;
     const apercu = h('div', { class: 'apercu-tuile', style: { backgroundImage: image ? `url("${image}")` : grainDeBois(t.nom) } });
+    // image de la tuile : choisie sur l'ordinateur (réduite, gardée avec la tuile), ou « illustration.jpg » dans le dossier sur Nuage
+    const fichier = h('input', { type: 'file', accept: 'image/*', onchange: async () => { try { image = await reduireImage(fichier.files[0], 520, 0.72); apercu.style.backgroundImage = `url("${image}")`; } catch (e) { erreur(e); } } });
     const ok = await fenetre(`Modifier le ${E.theme}`, h('div', { class: 'formulaire' },
       h('label', {}, 'Nom de la tuile', nom), h('label', {}, 'Ranger dans', parent),
       h('label', { class: 'large' }, 'Dossier sur Nuage (depuis le dossier partagé)', dossier),
-      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Image de la tuile'), apercu,
-        h('p', { class: 'aide' }, 'Pour une image : déposez un fichier nommé « illustration.jpg » (ou .png) dans ce dossier sur Nuage, puis « ↻ Mettre à jour depuis mon dossier ».'),
+      h('div', { class: 'large' }, h('span', { class: 'lib-form' }, 'Image de la tuile'), apercu, fichier,
+        h('p', { class: 'aide' }, 'Choisissez une image (elle est réduite et gardée avec la tuile), ou déposez un fichier nommé « illustration.jpg » (ou .png) dans ce dossier sur Nuage, puis « ↻ Mettre à jour depuis mon dossier ».'),
         h('button', { class: 'lien petit', type: 'button', onclick: () => { image = ''; apercu.style.backgroundImage = grainDeBois(nom.value); } }, 'Revenir au veinage bois'))),
     [{ texte: 'Annuler', valeur: false }, { texte: 'Enregistrer', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
