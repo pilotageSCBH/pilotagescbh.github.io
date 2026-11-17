@@ -17,6 +17,8 @@ async function rpcEleve(fonction, args = {}) {
     case 'eleve_details_seances': return db.rpc('apercu_details_seances', { p });
     case 'eleve_matieres_documents': return db.rpc('apercu_matieres_documents', { p });
     case 'eleve_competences_manuelles': return db.rpc('apercu_competences_manuelles', { p });
+    case 'eleve_epreuves': return db.rpc('apercu_epreuves', { p });
+    case 'eleve_annonces': return db.rpc('apercu_annonces', { p });
     case 'eleve_qcm_ouvrir': return db.rpc('apercu_qcm_ouvrir', { q: args.session });
     case 'eleve_qcm_rendre': { const c = await db.rpc('apercu_qcm_rendre', { q: args.session, reponses: args.reponses }); corrigesApercu.set(args.session, c); return c; }
     case 'eleve_qcm_correction': { if (corrigesApercu.has(args.session)) return corrigesApercu.get(args.session); throw new Error('Aperçu : faites d’abord le QCM.'); }
@@ -126,6 +128,7 @@ function menu(page, retourConnexion) {
       lien('#/documents', '🎓', 'Mes cours', 'documents'),
       lien('#/divers', '🗂', 'Mes ressources diverses', 'divers'),
       lien('#/qcm', '📝', 'Mes QCM', 'qcm'),
+      lien('#/epreuves', '🎓', 'Mes épreuves', 'epreuves'),
       lien('#/resultats', '🏆', 'Mes résultats', 'resultats'),
       lien('#/compte', '👤', 'Mon compte', 'compte')),
     h('div', { class: 'pied-menu' }, h('span', { class: 'avatar petit' }, ((s.prenom || '?')[0] + (s.nom || '?')[0]).toUpperCase()),
@@ -156,7 +159,7 @@ function ecranCode(app, retourConnexion) {
 }
 
 // ------------------------------------------------------------------------------------------- pages
-const PAGES = { semaine: pageSemaine, progression: pageCalendrier, seance: pageSeance, formation: pageFormation, documents: pageDocuments, divers: pageDivers, qcm: pageQcmEleve, resultats: pageResultats, compte: pageCompte };
+const PAGES = { semaine: pageSemaine, progression: pageCalendrier, seance: pageSeance, formation: pageFormation, documents: pageDocuments, divers: pageDivers, qcm: pageQcmEleve, epreuves: pageEpreuvesEleve, resultats: pageResultats, compte: pageCompte };
 const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, titre), sous ? h('p', { class: 'sous-titre' }, sous) : null),
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
@@ -177,12 +180,17 @@ async function pageSemaine(zone, arg) {
   const parMat = [...new Set(seances.map((x) => x.mat?.id))].map((id) => D.mats.get(id)).filter(Boolean).sort((a, b) => a.ordre - b.ordre);
   const evts = Array.from({ length: 7 }, (_, k) => [k, jours.get(w * 7 + k)]).filter(([, e]) => e);
   const apprenti = D.eleve.statut === 'Apprenti';
+  // annonces des enseignants (script 39) : chargées à part, la semaine s'affiche sans les attendre
+  const annoncesZone = h('div', { class: 'annonces-eleve' });
+  rpcEleve('eleve_annonces').then((l) => vider(annoncesZone, (l || []).map((a) => h('article', { class: 'annonce-eleve' + (a.importante ? ' importante' : '') },
+    h('div', { class: 'tete-annonce' }, h('span', { class: 'ico' }, a.importante ? '❗' : '📣'), h('b', {}, a.titre || 'Annonce'), a.auteur ? h('span', { class: 'gris petit' }, ' · ' + a.auteur) : null),
+    a.texte ? h('p', {}, a.texte) : null)))).catch(() => {});
   vider(zone,
     entete('📅  Ma semaine', `Promotion ${P.libelle} · ${libSemaine(Y, w)} · ${w < SEM_AN ? '1re' : '2e'} année`,
       h('a', { class: 'btn' + (w <= 0 ? ' desactive' : ''), href: '#/semaine/' + Math.max(0, w - 1), title: 'Semaine précédente' }, '◀'),
       w !== wAuj ? h('a', { class: 'btn', href: '#/semaine/' + wAuj }, 'Cette semaine') : null,
       h('a', { class: 'btn' + (w >= NB_SEM - 1 ? ' desactive' : ''), href: '#/semaine/' + Math.min(NB_SEM - 1, w + 1), title: 'Semaine suivante' }, '▶')),
-    blocNouveautes(), blocAFaire(),
+    annoncesZone, blocNouveautes(), blocAFaire(),
     h('div', { class: 'puces-semaine' },
       sem.vacances ? h('div', { class: 'puce-info vac' }, '🏖  ' + sem.vacances) : null,
       apprenti && sem.apprentis ? h('div', { class: 'puce-info ' + (sem.apprentis === 'PFMP' ? 'pfmp' : 'presents') }, sem.apprentis === 'PFMP' ? '🏭  Semaine en entreprise' : '🏫  Semaine au lycée') : null,
@@ -196,6 +204,47 @@ async function pageSemaine(zone, arg) {
           puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : null)))))
         : h('p', { class: 'vide' }, sem.vacances ? 'Vacances : pas de séance.' : 'Aucune séance placée cette semaine dans la progression.')),
     h('section', {}, h('h2', { class: 'titre-section' }, 'Prochaines évaluations'), listeEvaluations()));
+}
+// ---- mes épreuves : calendrier des épreuves de l'examen et, pour chacune, mon niveau sur les compétences évaluées
+async function livretEleve() {
+  const notes = new Map((D.notes || []).map((n) => [n.critere_id, n.valeur]));
+  const moy = (crit) => { let s = 0, c = 0; for (const k of crit) { const v = notes.get(k.id); if (v === undefined || v === 'NE' || v === '') continue; const co = Number(k.coefficient) || 0; s += Number(v) * co; c += co; } return c ? s / c : null; };
+  const ordre = ['NE', 'NA', 'EVA', 'A'], livret = new Map();
+  for (const c of (D.contrats || []).filter((x) => x.type === 'sommatif')) {
+    const crit = (D.criteres || []).filter((k) => k.contrat_id === c.id);
+    for (const g of new Set(crit.map((k) => k.groupe))) { const n = niveau(moy(crit.filter((k) => k.groupe === g))); if (!livret.has(g) || ordre.indexOf(n) > ordre.indexOf(livret.get(g))) livret.set(g, n); }
+  }
+  const directes = await rpcEleve('eleve_competences_manuelles').catch(() => []);
+  for (const m of directes || []) if (ordre.includes(m.niveau) && (!livret.has(m.competence) || ordre.indexOf(m.niveau) > ordre.indexOf(livret.get(m.competence)))) livret.set(m.competence, m.niveau);
+  return livret;
+}
+async function pageEpreuvesEleve(zone) {
+  await donnees();
+  const [epreuves, livret] = await Promise.all([rpcEleve('eleve_epreuves').catch(() => []), livretEleve()]);
+  const comps = D.competences || [];
+  const codesDe = (code) => comps.filter((c) => c.code === code || (c.code.startsWith(code) && /^[a-z]$/i.test(c.code.slice(code.length))));
+  const auj = new Date().toISOString().slice(0, 10);
+  const sit = (epreuves || []).flatMap((x) => (x.situations || []).filter((s) => s.debut).map((s) => ({ x, s }))).sort((a, b) => String(a.s.debut).localeCompare(String(b.s.debut)));
+  const quand = (s) => (s.debut ? dateFr(s.debut) + (s.fin && s.fin !== s.debut ? ' → ' + dateFr(s.fin) : '') : 'date à venir');
+  vider(zone, entete('🎓  Mes épreuves', `Examen du BTS · promotion ${D.P.libelle}`),
+    !(epreuves || []).length ? h('p', { class: 'vide' }, 'Les épreuves de l’examen n’ont pas encore été renseignées par vos enseignants.') : [
+      h('section', {}, h('h2', { class: 'titre-section' }, '📅 Calendrier'),
+        sit.length ? h('ul', { class: 'calendrier-eleve' }, sit.map(({ x, s }) => h('li', { class: (s.fin || s.debut) < auj ? 'passee' : '' },
+          h('span', { class: 'date' }, quand(s)), h('b', {}, `${x.code} · ${x.intitule}`), s.libelle ? h('span', {}, ' · ' + s.libelle) : null, s.lieu ? h('span', { class: 'gris' }, ' · ' + s.lieu) : null)))
+          : h('p', { class: 'vide' }, 'Pas encore de date fixée.')),
+      h('section', {}, h('h2', { class: 'titre-section' }, 'Les épreuves et mes compétences'),
+        h('p', { class: 'aide' }, 'Pour chaque épreuve, les compétences évaluées et le meilleur niveau que tu as déjà obtenu (contrats sommatifs, évaluations en entreprise).'),
+        h('div', { class: 'epreuves-eleve' }, epreuves.map((x) => {
+          const cs = (x.competences || []).flatMap(codesDe);
+          const a = cs.filter((c) => livret.get(c.code) === 'A').length;
+          return h('article', { class: 'carte-epreuve-eleve' + (x.facultative ? ' facultative' : '') },
+            h('div', { class: 'tete' }, h('span', { class: 'code-epreuve' }, x.code), h('div', {}, h('h3', {}, x.intitule),
+              h('p', { class: 'gris' }, [x.unite, x.coefficient ? `coef. ${String(x.coefficient).replace('.', ',')}` : (x.facultative ? 'facultative' : ''), x.forme, x.duree].filter(Boolean).join(' · ')))),
+            (x.situations || []).length ? h('ul', { class: 'situations' }, x.situations.map((s) => h('li', {}, '📅 ', s.libelle || 'Situation', ' · ', quand(s), s.lieu ? ' · ' + s.lieu : ''))) : null,
+            cs.length ? [h('p', { class: 'resume-epreuve' }, `${a} / ${cs.length} compétence(s) acquise(s)`),
+              h('div', { class: 'livret-eleve' }, cs.map((c) => { const n = livret.get(c.code) || 'NE';
+                return h('div', { class: 'ligne-livret' }, h('b', {}, c.code), h('span', { class: 'lib' }, c.libelle_court || c.libelle || ''), h('span', { class: 'niveau ' + NIV[n][1] }, NIV[n][0])); }))] : null);
+        })))]);
 }
 // ---- travail à faire : échéances des fiches de travail préparatoire et de travail à la maison (3 semaines à venir)
 const isoJour = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

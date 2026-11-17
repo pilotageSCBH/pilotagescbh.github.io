@@ -24,6 +24,10 @@ import { pageSemaine } from './pages/semaine.js';
 import { pageEvaluations } from './pages/evaluations.js';
 import { pageAlertes } from './pages/alertes.js';
 import { pageCours, pageDivers } from './pages/cours.js';
+import { pageStages } from './pages/stages.js';
+import { pageEpreuves } from './pages/epreuves.js';
+import { pageAnnonces } from './pages/annonces.js';
+import { pageBilan } from './pages/bilan.js';
 import { pageBibliotheque } from './pages/bibliotheque.js';
 import { pagePartages } from './pages/partages.js';
 import { pageRecherche, allerALaCible } from './pages/recherche.js';
@@ -90,7 +94,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, divers: pageDivers, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, divers: pageDivers, stages: pageStages, epreuves: pageEpreuves, annonces: pageAnnonces, bilan: pageBilan, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -276,13 +280,16 @@ function menu(route) {
   const S = [
     { cle: 'promotion', titre: 'Promotion', icone: '🎓', items: [
       { href: '#/equipe', icone: '👥', texte: 'Matières et équipe', actif: page === 'equipe' },
-      { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' }] },
+      { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' },
+      { href: '#/stages', icone: '🏭', texte: 'Stages et entreprises', actif: page === 'stages' },
+      { href: '#/annonces', icone: '📣', texte: 'Annonces aux élèves', actif: page === 'annonces' }] },
     { cle: 'sequencages', titre: 'Séquençages', icone: '🧱', items: ctx.matieres.map((m) => ({ href: '#/sequencage/' + m.id, texte: m.nom, pastille: m.couleur,
       actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })).concat(
       { href: '#/synthese', icone: '📋', texte: 'Synthèse des séquençages', actif: page === 'synthese' }) },
     { cle: 'planifier', titre: 'Planification', icone: '📅', items: [
       { href: '#/progression', icone: '🗂', texte: 'Progression', actif: page === 'progression' },
-      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' }] },
+      { href: '#/evaluations', icone: '📆', texte: 'Calendrier des évaluations', actif: page === 'evaluations' },
+      { href: '#/epreuves', icone: '🎓', texte: 'Épreuves et CCF', actif: page === 'epreuves' }] },
     { cle: 'evaluer', titre: 'Documents pédagogiques', icone: '📂', items: [
       { sous: 'Fiches de préparation' },
       { href: '#/fiches/preparation', icone: '📋', texte: 'Préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
@@ -311,7 +318,8 @@ function menu(route) {
     { cle: 'suivi', titre: 'Suivi et contrôle', icone: '🔔', items: [
       { href: '#/alertes', icone: '⚠️', texte: 'Alertes de pilotage', actif: page === 'alertes',
         badge: ctx.badgeAlertes?.promo === ctx.promo?.id && ctx.badgeAlertes.n ? { texte: ctx.badgeAlertes.n, cle: 'alertes', classe: 'rouge' } : { texte: '', cle: 'alertes', classe: 'vide' } },
-      { href: '#/historique', icone: '🕘', texte: 'Historique des modifications', actif: page === 'historique' }] },
+      { href: '#/historique', icone: '🕘', texte: 'Historique des modifications', actif: page === 'historique' },
+      { href: '#/bilan', icone: '📊', texte: 'Bilan de l’année', actif: page === 'bilan' }] },
   ];
   const sections = S.map((sec) => {
     const active = sec.items.some((x) => x.actif);
@@ -465,7 +473,7 @@ async function afficher() {
     if (n === rendu) allerALaCible(zone);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
     const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches',
-      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'ressources', biblio: 'ressources', partages: 'ressources', qcm: 'ressources', recherche: 'demarrer', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
+      validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'ressources', biblio: 'ressources', divers: 'ressources', stages: 'eleve', annonces: 'eleve', epreuves: 'validation', bilan: 'pilotage', partages: 'ressources', qcm: 'ressources', recherche: 'demarrer', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
