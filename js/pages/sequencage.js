@@ -2,7 +2,7 @@
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
 import { iconeDoc, baseEspace } from './cours.js';
-import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume } from '../ia.js';
+import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume, sansAccent } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 export async function pageSequencage(zone, id, ctx) {
@@ -47,6 +47,7 @@ export async function pageSequencage(zone, id, ctx) {
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           sequences.length ? h('button', { class: 'btn', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats de la matière', onclick: async () => {
             const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF') : null,
+          modif ? h('button', { class: 'btn', title: 'Remplacer le séquençage de cette matière (pour cette promotion) par celui d’un fichier Excel', onclick: () => importerExcel().catch(erreur) }, '📥  Importer (Excel)') : null,
           modif ? h('button', { class: 'btn principal', onclick: ajouterSequence }, '＋  Ajouter une séquence') : null,
           !modif ? h('span', { class: 'badge-lecture' }, 'Consultation seule') : null)),
       sequences.map((s) => carteSequence(s, seances.filter((x) => x.sequence_id === s.id))),
@@ -464,6 +465,63 @@ Savoirs : S11-1, S21-2
     };
   }
 
+  // ------------------------------------------------------------------------------------- import d'un séquençage Excel
+  // Remplace intitulés, objectifs et séances de la matière (cette promotion) par ceux du fichier. Les séquences et séances
+  // existantes sont réutilisées dans l'ordre (leurs fiches restent rattachées) ; celles en trop sont supprimées avec leurs fiches.
+  async function importerExcel() {
+    const f = await new Promise((ok) => { const i = h('input', { type: 'file', accept: '.xlsx,.xlsm', onchange: () => ok(i.files[0]) }); i.click(); });
+    if (!f) return;
+    const { lireExcel } = await import('../lireExcel.js');
+    const lu = lireSequencageExcel(await lireExcel(f), ref);
+    if (!lu.sequences.length) throw new Error('Aucune séquence reconnue dans ce fichier : il faut des lignes « SÉQUENCE 1 … », une ligne d’en-têtes commençant par « N° » et des séances numérotées « 1.1 », « 1.2 »…');
+    if (lu.sequences.length > 10) throw new Error('10 séquences au maximum par matière.');
+    const { sequences, seances } = await charger();
+    const nbS = lu.sequences.reduce((a, q) => a + q.seances.length, 0);
+    const nbH = lu.sequences.reduce((a, q) => a + q.seances.reduce((b, x) => b + (Number(x.duree) || 0), 0), 0);
+    const ok = await fenetre(`Importer un séquençage · ${m.nom}`, h('div', { class: 'import-seq' },
+      h('p', {}, h('b', {}, f.name), ` : ${lu.sequences.length} séquence(s) · ${nbS} séance(s) · ${heures(nbH) || '0 h'}.`),
+      h('div', { class: 'apercu-import' }, lu.sequences.map((q, k) => h('div', { class: 'seq-import' },
+        h('b', {}, `Séquence ${k + 1} · ${q.intitule || 'sans intitulé'}`),
+        h('ul', {}, q.seances.map((x, j) => h('li', {}, `${k + 1}.${j + 1}  ${x.titre || 'sans titre'}`,
+          h('small', {}, ` · ${x.duree ? heures(x.duree) : 'durée ?'} · ${x.competences.join(' ') || 'aucune compétence'} · ${x.savoirs.length} savoir(s)`))))))),
+      lu.avertissements.length ? h('div', { class: 'avert-import' }, h('b', {}, '⚠ À vérifier'), h('ul', {}, lu.avertissements.map((a) => h('li', {}, a)))) : null,
+      h('p', { class: 'alerte-import' }, `Le séquençage actuel de ${m.nom} pour la promotion ${ctx.promo.libelle} (${sequences.length} séquence(s), ${seances.length} séance(s)) sera remplacé. `
+        + 'Les séquences et séances existantes sont reprises dans l’ordre, avec leurs fiches ; celles en trop sont supprimées avec leurs fiches et contrats.'),
+      h('p', { class: 'aide' }, 'Les cours mobilisés sont repris en texte : reliez-les ensuite à vos documents avec « ＋ de la liste ». Le fichier est lu dans votre navigateur.')),
+    [{ texte: 'Annuler', valeur: false }, { texte: '📥  Remplacer le séquençage', classe: 'principal', valeur: true }], { large: true });
+    if (!ok) return;
+    const attente = h('div', { class: 'toast' }, '⏳ Import en cours…'); document.body.append(attente);
+    try {
+      let { sequences: S0 } = await charger();
+      for (let n = S0.length; n < lu.sequences.length; n++) await db.rpc('ajouter_sequence', { m: m.id, p: ctx.promo.id });
+      for (const s of [...S0].sort((a, b) => b.numero - a.numero)) if (s.numero > lu.sequences.length) await db.rpc('supprimer_sequence', { s: s.id });
+      let { sequences: S1, seances: X1 } = await charger();
+      for (const [k, q] of lu.sequences.entries()) {
+        const s = S1[k]; let nb = X1.filter((x) => x.sequence_id === s.id).length;
+        while (nb < q.seances.length) { await db.rpc('inserer_seance', { s: s.id, apres: nb }); nb++; }
+        const trop = X1.filter((x) => x.sequence_id === s.id).sort((a, b) => b.numero - a.numero);
+        for (const x of trop) if (x.numero > q.seances.length) await db.rpc('supprimer_seance', { x: x.id });
+      }
+      ({ sequences: S1, seances: X1 } = await charger());
+      const ids = new Map();
+      for (const [k, q] of lu.sequences.entries()) {
+        const s = S1[k];
+        await db.modifier('sequences', s.id, { intitule: q.intitule, objectif: q.objectif });
+        const xs = X1.filter((x) => x.sequence_id === s.id).sort((a, b) => a.numero - b.numero);
+        xs.forEach((x, j) => { ids.set(`${k + 1}.${j + 1}`, x.id); if (q.seances[j]?.ref) ids.set(q.seances[j].ref, x.id); });
+      }
+      for (const [k, q] of lu.sequences.entries()) {
+        const xs = X1.filter((x) => x.sequence_id === S1[k].id).sort((a, b) => a.numero - b.numero);
+        for (const [j, x] of q.seances.entries()) {
+          const pre = (x.prerequisRefs || []).map((r) => ids.get(r)).filter((i) => i && i !== xs[j].id);
+          await db.modifier('seances', xs[j].id, { titre: x.titre, duree: x.duree, objectif_inter: x.objectif_inter, objectifs_ops: x.objectifs_ops,
+            cours: x.cours, cours_lies: [], competences: x.competences, savoirs: x.savoirs, prerequis: [...new Set(pre)], prerequis_texte: x.prerequis_texte });
+        }
+      }
+      toast(`Séquençage importé : ${lu.sequences.length} séquence(s), ${nbS} séance(s)`);
+    } finally { attente.remove(); await dessiner(); }
+  }
+
   async function insererSeance(s, x) {
     try { await db.rpc('inserer_seance', { s: s.id, apres: x.numero }); toast(`Séance ${s.numero}.${x.numero + 1} insérée`); await dessiner(); } catch (e) { erreur(e); }
   }
@@ -473,4 +531,79 @@ Savoirs : S11-1, S21-2
   }
 
   await dessiner();
+}
+
+// ------------------------------------------------------------------------------------------- lecture d'un séquençage Excel
+// Lignes « SÉQUENCE n · intitulé » (ou intitulé dans la cellule suivante), « Objectif principal : … », en-têtes commençant par « N° »,
+// puis séances numérotées « n.m ». Les compétences et savoirs sont les codes du référentiel trouvés dans leurs colonnes.
+export function lireSequencageExcel(feuilles, ref) {
+  const N = (t) => sansAccent(t).replace(/\s+/g, ' ').trim();
+  const codesC = ref.competences.map((c) => c.code), codesS = ref.savoirs.map((c) => c.code);
+  const avert = [];
+  for (const F of feuilles) {
+    const sequences = []; let cur = null, entetes = null;
+    for (const brut of F.lignes) {
+      const L = (brut || []).map((v) => String(v ?? '').trim());
+      const pleins = L.map((v, i) => [v, i]).filter(([v]) => v);
+      if (!pleins.length) continue;
+      const [premier] = pleins[0];
+      const mSeq = N(premier).match(/^sequence\s*(\d+)\s*(?:[·:–—\-.|]\s*(.*))?$/);
+      if (mSeq && !premier.includes('\n')) {
+        let titre = (premier.match(/^\S+\s*\d+\s*(?:[·:–—\-.|]\s*(.*))?$/) || [])[1] || '';
+        if (!titre && pleins[1] && !/s[ée]ances?\s*·|^\d+\s*h$/i.test(pleins[1][0])) titre = pleins[1][0];
+        cur = { intitule: titre.trim(), objectif: '', seances: [] }; sequences.push(cur); continue;
+      }
+      if (cur && /^objectif principal/.test(N(premier))) {
+        const apres = premier.replace(/^[^:]*:\s*/, '');
+        cur.objectif = (premier.includes(':') && apres ? apres : (pleins[1]?.[0] || '')).trim(); continue;
+      }
+      const iNum = L.findIndex((v) => /^(n°|no|n o|numero)$/.test(N(v)));
+      if (iNum >= 0) {
+        const col = {};
+        L.forEach((v, i) => {
+          const t = N(v);
+          if (/objectifs? operationn/.test(t)) col.ops ??= i;
+          else if (/objectif intermediaire/.test(t)) col.inter ??= i;
+          else if (/prerequis/.test(t)) col.pre ??= i;
+          else if (/^duree/.test(t)) col.duree ??= i;
+          else if (/^cours/.test(t)) col.cours ??= i;
+          else if (/competence/.test(t)) col.comps ??= i;
+          else if (/savoir/.test(t)) col.savs ??= i;
+          else if (/^seance|^titre|^intitule/.test(t)) col.titre ??= i;
+        });
+        const debuts = Object.values(col).concat(iNum).sort((a, b) => a - b);
+        const fin = (i) => { const n = debuts.find((d) => d > i); return n === undefined ? 999 : n; };
+        entetes = { iNum, col, fin }; continue;
+      }
+      if (!cur || !entetes) continue;
+      const num = String(L[entetes.iNum] || '').replace(',', '.');
+      const mNum = num.match(/^(\d+)\.(\d+)$/);
+      if (!mNum) continue;
+      const { col, fin } = entetes;
+      const cel = (k) => (col[k] === undefined ? '' : L[col[k]] || '');
+      const plage = (k) => (col[k] === undefined ? '' : L.slice(col[k], fin(col[k])).join('\n'));
+      const preTexte = cel('pre');
+      const refs = [...preTexte.matchAll(/(\d+)\.(\d+)/g)].map((m) => `${m[1]}.${m[2]}`);
+      const reste = preTexte.replace(/(\d+)\.(\d+)/g, '').replace(/[—\-–·,;/\s]+/g, ' ').trim();
+      const tC = plage('comps'), tS = plage('savs');
+      const x = {
+        ref: num, titre: cel('titre'), duree: nombreDe(cel('duree')), objectif_inter: cel('inter'),
+        objectifs_ops: enListe(cel('ops')), cours: cel('cours'),
+        competences: codesDans(tC, codesC), savoirs: codesDans(tS, codesS),
+        prerequisRefs: refs, prerequis_texte: reste ? preTexte : '',
+      };
+      const inconnus = [...new Set([...(tC + '\n' + tS).matchAll(/\b([CS]\d{1,2}(?:-\d{1,2}[a-z]?|[a-z])?)\b/g)].map((m) => m[1]))]
+        .filter((c) => !codesC.includes(c) && !codesS.includes(c) && !codesS.some((s) => s.startsWith(c + '-')) && !codesC.some((s) => s.startsWith(c)));
+      if (inconnus.length) avert.push(`Séance ${num} : code(s) absent(s) du référentiel, ignoré(s) : ${inconnus.join(', ')}`);
+      if (Number(mNum[1]) !== sequences.length) avert.push(`Séance ${num} rangée dans la séquence ${sequences.length}.`);
+      if (!x.competences.length) avert.push(`Séance ${num} : aucune compétence reconnue.`);
+      cur.seances.push(x);
+    }
+    const valides = sequences.filter((q) => q.seances.length);
+    if (valides.length) {
+      if (valides.length < sequences.length) avert.push(`${sequences.length - valides.length} séquence(s) sans séance ignorée(s).`);
+      return { sequences: valides, avertissements: avert, feuille: F.nom };
+    }
+  }
+  return { sequences: [], avertissements: avert };
 }
