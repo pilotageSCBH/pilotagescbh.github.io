@@ -2471,3 +2471,7 @@ table.decisions select.champ { min-width: 220px; }
 .liste-libres li.seance-libre > a { flex: 1; min-width: 0; }
 .actions-libre { display: flex; gap: 2px; flex-shrink: 0; }
 .actions-libre .lien { text-decoration: none; padding: 2px 6px; }
+
+/* séquençage : ajout d'une séance */
+.ajout-seance { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px 12px; }
+.ajout-seance .aide { margin: 0; }

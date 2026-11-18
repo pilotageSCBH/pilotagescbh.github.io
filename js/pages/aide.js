@@ -24,7 +24,7 @@ const SECTIONS = [
     ['Mettre à jour l’affichage', "Après une mise à jour de l'application, faites Ctrl + F5 pour être sûr d'avoir la dernière version."],
   ]],
   ['sequencage', 'Séquençages', [
-    ['Séquences', "« Ajouter une séquence » crée une séquence numérotée (10 au plus par matière) ; saisissez son intitulé et son objectif principal dans l'en-tête. Le ✖ de l'en-tête supprime la séquence et renumérote les suivantes."],
+    ['Séquences', "« Ajouter une séquence » crée une séquence numérotée (10 au plus par matière) ; saisissez son intitulé et son objectif principal dans l'en-tête. Le ✖ de l'en-tête supprime la séquence et renumérote les suivantes. Sous le tableau de chaque séquence, « ＋ Ajouter une séance » ajoute une séance à la fin ; pour en insérer une entre deux autres, survolez une séance et cliquez sur le « ＋ » sous son numéro (le ✖ voisin la supprime)."],
     ['Séances', "Au survol du numéro d'une séance : ＋ insère une séance juste après, ✖ la supprime ; la numérotation suit toute seule. Pour réordonner, faites glisser la séance par la poignée ⠿."],
     ['Compétences et savoirs', "« ＋ choisir » ouvre la liste du référentiel avec une recherche : cochez les codes, leur libellé s'affiche dans la case."],
     ['Cours mobilisés', "Saisissez les cours librement, ou « ＋ depuis mes cours » pour cocher des documents de « Mes ressources → Mes cours » (cours, exercices, évaluations… : les vôtres et ceux partagés avec vous) : leur titre s’affiche dans la case et leurs savoirs associés s’ajoutent automatiquement aux savoirs de la séance (marqués 📘). Décocher un cours retire les savoirs qu’il avait apportés."],

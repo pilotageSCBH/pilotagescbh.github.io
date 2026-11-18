@@ -79,7 +79,10 @@ export async function pageSequencage(zone, id, ctx) {
         h('thead', {}, h('tr', {},
           ['', 'N°', 'Séance', 'Durée', 'Prérequis (antériorités)', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Compétences', 'Savoirs associés']
             .map((t) => h('th', {}, t)))),
-        h('tbody', {}, seances.map((x) => ligneSeance(s, x, seances.length))))));
+        h('tbody', {}, seances.map((x) => ligneSeance(s, x, seances.length))))),
+      modif ? h('div', { class: 'ajout-seance ecran' },
+        h('button', { class: 'btn petit', title: `Ajouter une séance à la fin de la séquence ${s.numero}`, onclick: () => insererSeance(s, { numero: seances.length }) }, `＋  Ajouter une séance (${s.numero}.${seances.length + 1})`),
+        h('span', { class: 'aide' }, 'Pour insérer une séance entre deux autres : survolez une séance et cliquez sur « ＋ » sous son numéro.')) : null);
   }
 
   // ------------------------------------------------------------------------------------- séance
