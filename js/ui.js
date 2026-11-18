@@ -72,7 +72,10 @@ export const confirmer = (titre, texte, ok = 'Confirmer') =>
 export function champ(valeur, enregistrer, { multi = false, lecture = false, placeholder = '', type = 'text', classe = '', options = null } = {}) {
   let initial = valeur ?? '';
   let el;
-  if (options) {
+  if (options && lecture) {   // consultation : la valeur choisie en texte (pas de liste déroulante grisée)
+    el = h('input', { class: 'champ ' + classe, type: 'text', readonly: true });
+    el.value = options.find((o) => String(o.valeur) === String(initial))?.texte ?? String(initial);
+  } else if (options) {
     el = h('select', { class: 'champ ' + classe, disabled: lecture },
       options.map((o) => h('option', { value: o.valeur, selected: String(o.valeur) === String(initial) }, o.texte)));
   } else if (multi) {

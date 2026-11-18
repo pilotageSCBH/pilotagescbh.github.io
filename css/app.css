@@ -2475,3 +2475,7 @@ table.decisions select.champ { min-width: 220px; }
 /* séquençage : ajout d'une séance */
 .ajout-seance { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px 12px; }
 .ajout-seance .aide { margin: 0; }
+
+/* séquençage en consultation (matière d'un collègue) : même présentation que le séquençage modifiable,
+   cases en gris clair au lieu du crème « à remplir » */
+.sequence .champ.lecture { background: #F6F8F8; border: 1px solid #E3E9E8; }
