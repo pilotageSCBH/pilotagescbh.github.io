@@ -5,6 +5,7 @@ import { lancerEspaceEleve } from './eleves/espaceEleve.js';
 import { h, vider, erreur, toast } from './ui.js';
 import { pageAccueil } from './pages/accueil.js';
 import { pageContratsLibres } from './pages/contratsLibres.js';
+import { pageSeancesLibres } from './pages/seancesLibres.js';
 import { pageEquipe } from './pages/equipe.js';
 import { pageEleves } from './pages/eleves.js';
 import { pageReferentiel } from './pages/referentiel.js';
@@ -93,7 +94,7 @@ export const ctx = {
 
 const PAGES = {
   accueil: pageAccueil, equipe: pageEquipe, eleves: pageEleves, referentiel: pageReferentiel,
-  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, divers: pageDivers, epreuves: pageEpreuves, annonces: pageAnnonces, bilan: pageBilan, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
+  sequencage: pageSequencage, admin: pageAdmin, compte: pageCompte, progression: pageProgression, fiches: pageFiches, 'seances-hors': pageSeancesLibres, validation: pageValidation, couverture: pageCouverture, synthese: pageSynthese, historique: pageHistorique, aide: pageAide, resultats: pageResultats, eleve: pageEleve, semaine: pageSemaine, evaluations: pageEvaluations, alertes: pageAlertes, contrats: pageContratsLibres, cours: pageCours, divers: pageDivers, epreuves: pageEpreuves, annonces: pageAnnonces, bilan: pageBilan, biblio: pageBibliotheque, partages: pagePartages, recherche: pageRecherche, qcm: pageQcm,
 };
 
 // ------------------------------------------------------------------------------------------- connexion
@@ -291,7 +292,8 @@ function menu(route) {
     { cle: 'evaluer', titre: 'Documents pédagogiques', icone: '📂', items: [
       { sous: 'Fiches de préparation' },
       { href: '#/fiches/preparation', icone: '📋', texte: 'Préparation de séquence', actif: page === 'fiches' && modeFiches(arg) === 'preparation' },
-      { href: '#/fiches/deroulement', icone: '📝', texte: 'Déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' },
+      { href: '#/fiches/deroulement', icone: '📝', texte: 'Déroulement de séance', actif: page === 'fiches' && modeFiches(arg) === 'deroulement' && !String(arg || '').startsWith('h-') },
+      { href: '#/seances-hors', icone: '🧩', texte: 'Séances hors séquence', actif: page === 'seances-hors' || (page === 'fiches' && String(arg || '').startsWith('h-')) },
       { sous: 'Documents d’évaluation' },
       { href: '#/fiches/formatifs', icone: '✅', texte: 'Fiches contrats formatifs', actif: page === 'fiches' && modeFiches(arg) === 'formatifs' },
       { href: '#/fiches/sommatif', icone: '🏁', texte: 'Fiches contrats sommatifs', actif: page === 'fiches' && modeFiches(arg) === 'sommatif' },
@@ -470,7 +472,7 @@ async function afficher() {
     await PAGES[r[0]](zone, r[1], ctx);
     if (n === rendu) allerALaCible(zone);
     if (ctx.maintenance && n === rendu) zone.prepend(bandeauMaintenance());
-    const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches',
+    const SECTION_AIDE = { accueil: 'demarrer', equipe: 'admin', eleves: 'admin', sequencage: 'sequencage', progression: 'progression', fiches: 'fiches', contrats: 'fiches', 'seances-hors': 'fiches',
       validation: 'validation', resultats: 'resultats', eleve: 'eleve', semaine: 'pilotage', evaluations: 'pilotage', alertes: 'pilotage', couverture: 'couverture', synthese: 'couverture', cours: 'ressources', biblio: 'ressources', divers: 'ressources', annonces: 'eleve', epreuves: 'validation', bilan: 'pilotage', partages: 'ressources', qcm: 'ressources', recherche: 'demarrer', admin: 'admin', historique: 'historique', compte: 'demarrer', referentiel: 'demarrer' };
     if (r[0] === 'accueil' && n === rendu && ctx.profil.a_secours === false) zone.prepend(h('div', { class: 'avertissement' },
       '🔑  Créez votre code de secours dans ', h('a', { href: '#/compte' }, 'Mon compte'), ' : il vous permettra de choisir vous-même un nouveau code si vous oubliez le vôtre.'));

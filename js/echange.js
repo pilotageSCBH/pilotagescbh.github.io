@@ -23,14 +23,15 @@ async function donneesContrat(type, cle, id) {
     criteres: k.filter((x) => x.actif).map((x) => ({ rubrique: x.groupe, ordre: x.ordre, texte: x.texte, coefficient: Number(x.coefficient) })) };
 }
 export async function exportSequence(sq) {
-  const [seances, fs] = await Promise.all([db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`), db.lire('fiches_sequence', `sequence_id=eq.${sq.id}`)]);
+  const [seances, fs] = sq.hors ? [[sq.seance], []]   // séance hors séquence : elle seule
+    : await Promise.all([db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`), db.lire('fiches_sequence', `sequence_id=eq.${sq.id}`)]);
   const fiches = seances.length ? await db.lire('fiches_seance', `seance_id=in.(${seances.map((x) => x.id).join(',')})`) : [];
   const f0 = fs[0] || {};
   return {
     numero: sq.numero, intitule: sq.intitule, objectif: sq.objectif,
     preparation: { activites: texteVide(f0.activites), situation: texteVide(f0.situation), prerequis: texteVide(f0.prerequis),
       modalites: texteVide(f0.modalites), ressources: texteVide(f0.ressources), bilan: texteVide(f0.bilan) },
-    contrat_sommatif: await donneesContrat('sommatif', 'sequence_id', sq.id),
+    contrat_sommatif: sq.hors ? null : await donneesContrat('sommatif', 'sequence_id', sq.id),
     seances: await Promise.all(seances.map(async (x) => {
       const f = fiches.find((y) => y.seance_id === x.id) || {};
       return {

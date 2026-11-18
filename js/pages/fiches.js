@@ -17,21 +17,29 @@ const COLS_PHASES = [['phase', 'Phase'], ['activite', 'Activité proposée'], ['
 const idPhase = () => 'p' + Math.random().toString(36).slice(2, 9);
 const phaseVide = () => ({ id: idPhase(), phase: '', activite: '', enseignant: '', eleves: '', duree: '', liens: '' });
 // intitulé saisi sans son numéro (« 2. Découverte » → « Découverte ») ; intitulés par défaut d'avant effacés
+// numéro affiché d'une séance (« 2.3 », ou « hors séquence »)
+export const numSeance = (sq, x) => (sq.hors ? 'hors séquence' : `${sq.numero}.${x.numero}`);
 const sansNumero = (t) => { const v = String(t || '').replace(/^\s*\d+\s*[.)-]?\s*/, ''); return PHASES_ANCIENNES.includes(v.trim()) ? '' : v; };
 
 export async function pageFiches(zone, arg, ctx) {
   let [sid, onglet = 'preparation'] = String(arg || '').split(':');
-  if (!sid || !/^\d+$/.test(sid)) return index(zone, ctx, MODES[sid] ? sid : 'preparation');
-  const sq = (await db.lire('sequences', `id=eq.${sid}`))[0];
+  if (!sid || !/^(\d+|h-\d+)$/.test(sid)) return index(zone, ctx, MODES[sid] ? sid : 'preparation');
+  // séance hors séquence (« h-12 ») : une pseudo-séquence qui ne contient qu'elle
+  const libre = sid.startsWith('h-') ? (await db.lire('seances', `id=eq.${sid.slice(2)}`))[0] : null;
+  if (sid.startsWith('h-') && !libre) { vider(zone, h('p', {}, 'Séance hors séquence introuvable (elle a peut-être été supprimée).')); return; }
+  const sq = libre ? { id: sid, hors: true, seance: libre, numero: 'HS', intitule: 'Séance hors séquence', objectif: '', matiere_id: libre.matiere_id, promotion_id: libre.promotion_id }
+    : (await db.lire('sequences', `id=eq.${sid}`))[0];
   if (!sq) { vider(zone, h('p', {}, 'Séquence introuvable.')); return; }
+  if (libre && (onglet === 'preparation' || onglet === 'deroulement')) onglet = `seance-${libre.id}`;
+  if (libre && (onglet === 'sommatif' || onglet === 'formatifs')) onglet = `formatif-${libre.id}`;
   const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
   const ref = await ctx.referentiel();
   const modif = ctx.peutMatiere(m.id);
   const [seances, toutes, eleves, fs] = await Promise.all([
-    db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`),
-    db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=eq.${sq.promotion_id}&order=numero`),
+    libre ? [libre] : db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`),
+    libre ? [] : db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=eq.${sq.promotion_id}&order=numero`),
     db.lire('eleves', `promotion_id=eq.${sq.promotion_id}`),
-    db.lire('fiches_sequence', `sequence_id=eq.${sq.id}`)]);
+    libre ? [] : db.lire('fiches_sequence', `sequence_id=eq.${sq.id}`)]);
   const actifs = eleves.filter((e) => !e.arret), app = actifs.filter((e) => e.statut === 'Apprenti').length;
   const effectif = `${actifs.length} élèves (${app} apprentis · ${actifs.length - app} scolaires${actifs.some((e) => e.redoublant) ? ` · dont ${actifs.filter((e) => e.redoublant).length} redoublant(s)` : ""})`;
   const profs = ctx.enseignantsDe(m.id).join(', ') || '—';
@@ -49,28 +57,31 @@ export async function pageFiches(zone, arg, ctx) {
   // trois onglets : fiche de préparation · fiches de déroulement (une par séance) · fiches contrats (sommatif + formatifs)
   const groupe = onglet === 'preparation' || !onglet ? 'preparation' : onglet.startsWith('seance-') || onglet.startsWith('avant-') || onglet.startsWith('apres-') ? 'deroulement' : 'contrats';
   const sousOnglets = () => {
+    if (libre) return null;
     const tab = (k, t, titre = '') => h('a', { href: lien(k), class: k === onglet ? 'actif' : '', title: titre }, t);
-    if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, `Séance ${sq.numero}.${x.numero}`, x.titre || '')));
+    if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, `Séance ${numSeance(sq, x)}`, x.titre || '')));
     if (groupe === 'contrats') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiche contrat sommatif :'), tab('sommatif', `Séquence ${sq.numero}`),
       h('span', { class: 'lib-sous sep' }, 'Fiches contrats formatifs :'),
-      seances.map((x) => tab(`formatif-${x.id}`, `Séance ${sq.numero}.${x.numero}`, `Fiche contrat formatif · séance ${sq.numero}.${x.numero}${x.titre ? ' · ' + x.titre : ''}`)));
+      seances.map((x) => tab(`formatif-${x.id}`, `Séance ${numSeance(sq, x)}`, `Fiche contrat formatif · séance ${numSeance(sq, x)}${x.titre ? ' · ' + x.titre : ''}`)));
     return null;
   };
 
   // ------------------------------------------------------------------------------------- en-tête et onglets
-  const onglets = [['preparation', '📋  Fiche de préparation', 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
-    ['sommatif', `✅  Fiches contrats (${seances.length + 1})`, 'contrats']];
+  const onglets = libre ? [[`seance-${libre.id}`, '📝  Fiche de déroulement', 'deroulement'], [`formatif-${libre.id}`, '✅  Fiche contrat formatif', 'contrats']]
+    : [['preparation', '📋  Fiche de préparation', 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
+      ['sommatif', `✅  Fiches contrats (${seances.length + 1})`, 'contrats']];
   vider(zone,
     h('header', { class: 'entete-page ecran' },
-      h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`),
+      h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), libre ? `Séance hors séquence · ${libre.titre || 'sans titre'}` : `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`),
         h('p', { class: 'sous-titre' }, `${m.nom}  ·  Promotion ${promo}  ·  ${volume}`)),
       h('div', { class: 'actions-page' },
-        h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}:${groupe === 'deroulement' ? 'deroulement' : onglet === 'sommatif' ? 'sommatif' : onglet.startsWith('formatif') ? 'formatifs' : 'preparation'}`; } },
+        libre ? null : h('select', { class: 'champ choix-mat', onchange: (e) => { location.hash = `#/fiches/${e.target.value}:${groupe === 'deroulement' ? 'deroulement' : onglet === 'sommatif' ? 'sommatif' : onglet.startsWith('formatif') ? 'formatifs' : 'preparation'}`; } },
           toutes.map((s) => h('option', { value: s.id, selected: s.id === sq.id }, `Séquence ${s.numero} · ${s.intitule || 'sans intitulé'}`))),
         modif ? boutonAnnuler(ctx, 'fiches') : null,
         h('button', { class: 'btn', onclick: () => imprimer('A4 portrait') }, '🖶  Imprimer'),
         h('button', { class: 'btn', onclick: () => menuTelecharger() }, '⬇  Télécharger'),
-        h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
+        libre && modif ? h('button', { class: 'btn', onclick: async () => { const { modifierSeanceLibre } = await import('./seancesLibres.js'); if (await modifierSeanceLibre(ctx, libre)) pageFiches(zone, arg, ctx); } }, '✎  Modifier la séance') : null,
+        libre ? h('a', { class: 'btn', href: '#/seances-hors' }, '☰  Séances hors séquence') : h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t, g]) => h('a', { href: lien(k), class: g === groupe ? 'actif' : '' }, t))),
     sousOnglets(),
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
@@ -88,10 +99,10 @@ export async function pageFiches(zone, arg, ctx) {
   // aucune donnée d'élève : seulement l'effectif global (nombre de scolaires et d'apprentis)
   const libCodes = (liste, index) => (liste || []).map((c) => `${c} (${index[c]?.libelle || '?'})`).join(' ; ') || '—';
   const contexteSequence = () => `Matière : ${m.nom} · promotion ${promo} · ${actifs.length} étudiants (${app} apprentis, ${actifs.length - app} scolaires).
-Séquence ${sq.numero} : ${sq.intitule || '(sans intitulé)'}
-Objectif principal : ${sq.objectif || '—'}
-Séances de la séquence :
-${seances.map((x) => `- Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'} · ${x.duree ? x.duree + ' h' : 'durée ?'} · objectif intermédiaire : ${x.objectif_inter || '—'}`
+${libre ? 'Séance hors séquence (cas particulier, en dehors du séquençage)' : `Séquence ${sq.numero} : ${sq.intitule || '(sans intitulé)'}
+Objectif principal : ${sq.objectif || '—'}`}
+Séances${libre ? '' : ' de la séquence'} :
+${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'} · ${x.duree ? x.duree + ' h' : 'durée ?'} · objectif intermédiaire : ${x.objectif_inter || '—'}`
   + `${x.objectifs_ops ? '\n  objectifs opérationnels : ' + x.objectifs_ops.replace(/\n/g, ' / ') : ''}\n  compétences : ${libCodes(x.competences, ref.comp)}\n  savoirs : ${libCodes(x.savoirs, ref.sav)}`
   + `${coursMobilises(x) ? '\n  cours mobilisés : ' + coursMobilises(x).replace(/\n/g, ' / ') : ''}`).join('\n') || '(aucune)'}`;
 
@@ -137,7 +148,7 @@ ${seances.map((x) => `- Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans t
       zoneTexte('Prérequis', ficheSeq.prerequis, maj('prerequis')),
       h('div', { class: 'rubrique' }, h('h3', {}, 'Séances de la séquence'),
         h('table', { class: 'table-fiche auto' }, h('thead', {}, h('tr', {}, ['N°', 'Séance', 'Durée', 'Objectif intermédiaire', 'Compétences', 'Savoirs'].map((t) => h('th', {}, t)))),
-          h('tbody', {}, seances.map((x) => h('tr', {}, h('td', { class: 'num' }, `${sq.numero}.${x.numero}`), h('td', { class: 'fort' }, x.titre),
+          h('tbody', {}, seances.map((x) => h('tr', {}, h('td', { class: 'num' }, `${numSeance(sq, x)}`), h('td', { class: 'fort' }, x.titre),
             h('td', { class: 'centre' }, heures(x.duree == null ? null : Number(x.duree))), h('td', {}, x.objectif_inter),
             h('td', { class: 'petit' }, (x.competences || []).join(' ')), h('td', { class: 'petit' }, (x.savoirs || []).join(' '))))))),
       zoneTexte('Modalités d’évaluation', ficheSeq.modalites, maj('modalites')),
@@ -220,7 +231,7 @@ ${seances.map((x) => `- Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans t
       ajusterTout(tablePhases);
     };
     const corps = h('div', {});
-    const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
+    const titre = `Séance ${numSeance(sq, x)} · ${x.titre || ''}`;
     // séances prérequises (séquençage), toutes matières
     const ids = (x.prerequis || []).map(Number);
     const pre = ids.length ? await db.lire('seances', `id=in.(${ids.join(',')})`) : [];
@@ -233,8 +244,8 @@ ${seances.map((x) => `- Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans t
       ['evaluation', 'Évaluation', 'comment les acquis sont vérifiés pendant ou en fin de séance'], ['differenciation', 'Différenciation', 'adaptations scolaires / apprentis, aides, approfondissements']];
     const phasesVides = () => phases.every((p) => !(p.phase || p.activite || p.enseignant || p.eleves || p.duree));
     const ia = modif ? boutonIA(() => ({
-      titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`,
-      demande: async () => `DOCUMENT À REMPLIR : la fiche de déroulement de la séance ${sq.numero}.${x.numero} « ${x.titre || 'sans titre'} » (durée : ${x.duree ? x.duree + ' h' : 'non précisée'}).
+      titre: `Fiche de déroulement · séance ${numSeance(sq, x)}`,
+      demande: async () => `DOCUMENT À REMPLIR : la fiche de déroulement de la séance ${numSeance(sq, x)} « ${x.titre || 'sans titre'} » (durée : ${x.duree ? x.duree + ' h' : 'non précisée'}).
 Objectif intermédiaire : ${x.objectif_inter || '—'}
 Objectifs opérationnels :\n${x.objectifs_ops || '—'}
 Compétences : ${libCodes(x.competences, ref.comp)}
@@ -283,7 +294,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
       h('article', { class: 'feuille' },
         entete('FICHE DE DÉROULEMENT DE SÉANCE', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif),
-          info('Séquence', `${sq.numero} · ${sq.intitule || ''}`), info('Durée', heures(x.duree == null ? null : Number(x.duree)) || '—'),
+          info('Séquence', libre ? 'Hors séquence' : `${sq.numero} · ${sq.intitule || ''}`), info('Durée', heures(x.duree == null ? null : Number(x.duree)) || '—'),
           h('div', { class: 'info' }, h('span', { class: 'lib' }, 'Salle / atelier'), champ(f.salle || '', maj('salle'), { lecture: !modif, placeholder: modif ? 'À compléter' : '' }))),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire'), h('p', { class: 'fort' }, x.objectif_inter || '—')),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectifs opérationnels'), h('p', { class: 'pre' }, x.objectifs_ops || '—')),
@@ -304,7 +315,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),
         zoneTexte('Différenciation scolaires / apprentis', f.differenciation, maj('differenciation')),
         zoneTexte('Bilan de séance / remédiation', f.bilan, maj('bilan'), 'Après la séance…')),
-      h('p', { class: 'aide ecran' }, 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
+      h('p', { class: 'aide ecran' }, libre ? 'La fiche contrat formatif de cette séance est dans l’onglet « Fiche contrat formatif ».' : 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
     dessinerPhases();
     ajusterTout(fiche);
   }
@@ -336,12 +347,12 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         : [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']];
       const liens = liensLibelles(o.ressources);
       const doc = {
-        fichier: nomFichier(`${ctx.codeMat(m)}_S${sq.numero}.${x.numero}_${avant ? 'travail_preparatoire' : 'travail_a_la_maison'}.pdf`),
-        titre: `${avant ? 'Travail préparatoire' : 'Travail à la maison'} · séance ${sq.numero}.${x.numero}`,
-        pied: `${m.nom} · Séance ${sq.numero}.${x.numero} · Promotion ${promo}`,
+        fichier: nomFichier(`${ctx.codeMat(m)}_${sq.hors ? 'Hors_sequence' : 'S' + sq.numero + '.' + x.numero}_${avant ? 'travail_preparatoire' : 'travail_a_la_maison'}.pdf`),
+        titre: `${avant ? 'Travail préparatoire' : 'Travail à la maison'} · séance ${numSeance(sq, x)}`,
+        pied: `${m.nom} · Séance ${numSeance(sq, x)} · Promotion ${promo}`,
         blocs: [
-          { t: 'titre', texte: avant ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', sous: `${m.nom} · Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: avant ? '#E8893A' : '#3D84C6' },
-          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], [avant ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree], ['Promotion', promo], ['Séance', `${sq.numero}.${x.numero} · ${x.titre || ''}`]] },
+          { t: 'titre', texte: avant ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', sous: `${m.nom} · Séance ${numSeance(sq, x)} · ${x.titre || ''}`, couleur: avant ? '#E8893A' : '#3D84C6' },
+          { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], [avant ? 'À faire pour le' : 'À rendre le', dt(o.echeance)], ['Durée estimée', o.duree], ['Promotion', promo], ['Séance', `${numSeance(sq, x)} · ${x.titre || ''}`]] },
           ...rub.flatMap(([k, l]) => [o[k] ? R(l, o[k]) : null, k === 'ressources' && liens.length ? { t: 'qr', liens } : null]).filter(Boolean),
           { t: 'note', texte: liens.length ? 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' : '' },
         ] };
@@ -424,21 +435,21 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
   // ------------------------------------------------------------------------------------- séance : contrat d'évaluation formative
   async function formatif(x) {
     const corps = h('div', {});
-    const titre = `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`;
+    const titre = `Séance ${numSeance(sq, x)} · ${x.titre || ''}`;
     vider(fiche,
       h('article', { class: 'feuille large' },
         entete('FICHE CONTRAT FORMATIF', titre),
         h('div', { class: 'grille-infos' }, info('Matière', m.nom), info('Enseignant', profs), info('Promotion', promo), info('Effectif', effectif)),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Objectif intermédiaire évalué'), h('p', { class: 'fort' }, x.objectif_inter || '—')), corps));
     await dessinerContrat(corps, { type: 'formatif', id: x.id, modif, ctx, titreGroupe: (g) => ({ code: g, libelle: '' }),
-      contexteIA: () => `Séance ${sq.numero}.${x.numero} « ${x.titre || 'sans titre'} » (${x.duree ? x.duree + ' h' : 'durée ?'}).\nObjectif intermédiaire évalué : ${x.objectif_inter || '—'}\n`
+      contexteIA: () => `Séance ${numSeance(sq, x)} « ${x.titre || 'sans titre'} » (${x.duree ? x.duree + ' h' : 'durée ?'}).\nObjectif intermédiaire évalué : ${x.objectif_inter || '—'}\n`
         + `Objectifs opérationnels :\n${x.objectifs_ops || '—'}\nCompétences : ${libCodes(x.competences, ref.comp)}\nSavoirs associés : ${libCodes(x.savoirs, ref.sav)}\n\nCONTEXTE :\n${contexteSequence()}` });
   }
 
   // ------------------------------------------------------------------------------------- téléchargement (PDF A4 portrait dans un .zip)
   // choix des documents : préparation et contrat sommatif de la séquence, fiche de déroulement et contrat formatif de chaque séance
   async function menuTelecharger() {
-    const docs = [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Fiche contrat sommatif', null],
+    const docs = [...(libre ? [] : [['preparation', 'Fiche de préparation de séquence', null], ['sommatif', 'Fiche contrat sommatif', null]]),
       ...seances.flatMap((x) => [[`seance-${x.id}`, `Fiche de déroulement`, x], [`formatif-${x.id}`, `Fiche contrat formatif`, x]])];
     const coche = (k) => (idSeance ? k.endsWith('-' + idSeance) : true);
     const cases = new Map(docs.map(([k]) => [k, h('input', { type: 'checkbox', checked: coche(k) })]));
@@ -448,16 +459,16 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
     const tous = (v) => { cases.forEach((c) => { c.checked = v; }); majCompte(); };
     const ligne = (k, t) => h('label', { class: 'choix-doc' }, cases.get(k), t);
     majCompte();
-    const ok = await fenetre(`Télécharger · séquence ${sq.numero}`, h('div', { class: 'choix-telecharger' },
+    const ok = await fenetre(libre ? 'Télécharger · séance hors séquence' : `Télécharger · séquence ${sq.numero}`, h('div', { class: 'choix-telecharger' },
       h('p', { class: 'aide' }, 'Chaque document est un PDF au format A4 portrait ; l’ensemble est regroupé dans un fichier .zip.'),
       h('div', { class: 'ligne-com' }, compte, h('span', {},
         h('button', { class: 'lien petit', type: 'button', onclick: () => tous(true) }, 'tout cocher'), '  ·  ',
         h('button', { class: 'lien petit', type: 'button', onclick: () => tous(false) }, 'tout décocher'))),
-      h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Fiche contrat sommatif')),
+      libre ? null : h('fieldset', { class: 'groupe-docs' }, h('legend', {}, `Séquence ${sq.numero} · ${sq.intitule || ''}`), ligne('preparation', 'Fiche de préparation de séquence'), ligne('sommatif', 'Fiche contrat sommatif')),
       seances.map((x) => h('fieldset', { class: 'groupe-docs' + (String(x.id) === idSeance ? ' courante' : '') },
         h('legend', {}, h('label', {}, h('input', { type: 'checkbox', checked: coche(`seance-${x.id}`) && coche(`formatif-${x.id}`), onchange: (e) => {
           [`seance-${x.id}`, `formatif-${x.id}`].forEach((k) => { cases.get(k).checked = e.target.checked; }); majCompte(); } }),
-        `Séance ${sq.numero}.${x.numero} · ${x.titre || 'sans titre'}`)),
+        `Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'}`)),
         ligne(`seance-${x.id}`, 'Fiche de déroulement (avec le travail à la maison)'), ligne(`formatif-${x.id}`, 'Fiche contrat formatif')))),
     [{ texte: 'Annuler', valeur: false }, { texte: '⬇  Télécharger le .zip', classe: 'principal', action: () => {
       if (![...cases.values()].some((c) => c.checked)) throw new Error('Cochez au moins un document.');
@@ -472,7 +483,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
       const logo = await fetch('img/logo.jpg').then((r) => r.arrayBuffer()).catch(() => null);
       const modeles = await modelesSequence({ sq, m, ref, seances, actifs, effectif, profs, promo, volume }, ctx, choisis);
       const zip = await zipDePDF(modeles, logo);
-      telecharger(nomFichier(`${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.zip`), zip);
+      telecharger(nomFichier(libre ? `${ctx.codeMat(m)}_seance_hors_sequence_${promo}.zip` : `${ctx.codeMat(m)}_sequence${sq.numero}_${promo}.zip`), zip);
       toast(`${modeles.length} document(s) téléchargé(s)`);
     } catch (x) { erreur(x); }
   }
@@ -510,7 +521,7 @@ export async function modelesSequence(S, ctx, choisis) {
   const dt = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR') : '');
   const codes = (l, idx) => (l || []).map((c) => `${c}  ${idx[c]?.libelle || ''}`).join('\n');
   const R = (titre, texte, opts = {}) => ({ t: 'rubrique', titre, texte, ...opts });
-  const pied = `${m.nom} · Séquence ${sq.numero} · Promotion ${promo}`;
+  const pied = `${m.nom} · ${sq.hors ? 'Séance hors séquence' : 'Séquence ' + sq.numero} · Promotion ${promo}`;
   const num = (n) => String(n).padStart(2, '0');
   const maison = (o, cle) => (!o ? null : { t: 'cadre', couleur: cle === 'avant' ? '#E8893A' : '#3D84C6',
     titre: cle === 'avant' ? 'Avant la séance : travail préparatoire à la maison (classe inversée)' : 'Après la séance : travail à la maison (devoirs)',
@@ -567,9 +578,9 @@ export async function modelesSequence(S, ctx, choisis) {
       const preSeq = pre.length ? await db.lire('sequences', `id=in.(${[...new Set(pre.map((y) => y.sequence_id))].join(',')})`) : [];
       const lPre = pre.map((y) => { const q = preSeq.find((z) => z.id === y.sequence_id); return `${ctx.codeMat(ctx.matieres.find((z) => z.id === q?.matiere_id))} ${q?.numero}.${y.numero} · ${y.titre || ''}`; });
       if (x.prerequis_texte) lPre.push(x.prerequis_texte);
-      out.push({ fichier: `S${sq.numero}.${x.numero}_a_Fiche_de_deroulement.pdf`, titre: `Fiche de déroulement · séance ${sq.numero}.${x.numero}`, pied, blocs: [
-        { t: 'titre', texte: 'FICHE DE DÉROULEMENT DE SÉANCE', sous: `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, couleur: m.couleur },
-        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', `${sq.numero} · ${sq.intitule || ''}`],
+      out.push({ fichier: `${sq.hors ? 'Hors_sequence' : 'S' + sq.numero + '.' + x.numero}_a_Fiche_de_deroulement.pdf`, titre: `Fiche de déroulement · séance ${numSeance(sq, x)}`, pied, blocs: [
+        { t: 'titre', texte: 'FICHE DE DÉROULEMENT DE SÉANCE', sous: `Séance ${numSeance(sq, x)} · ${x.titre || ''}`, couleur: m.couleur },
+        { t: 'infos', paires: [['Matière', m.nom], ['Enseignant', profs], ['Promotion', promo], ['Effectif', effectif], ['Séquence', sq.hors ? 'Hors séquence' : `${sq.numero} · ${sq.intitule || ''}`],
           ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
         R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', coursMobilises(x), { gris: true }),
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
@@ -582,8 +593,8 @@ export async function modelesSequence(S, ctx, choisis) {
         maison(f.maison_apres, 'apres'),
         R('Évaluation', f.evaluation), R('Différenciation scolaires / apprentis', f.differenciation), R('Bilan de séance / remédiation', f.bilan)].filter(Boolean) });
     } else if (k.startsWith('formatif-')) {
-      out.push({ fichier: `S${sq.numero}.${x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${sq.numero}.${x.numero}`, pied,
-        blocs: await contrat('formatif', x.id, `Séance ${sq.numero}.${x.numero} · ${x.titre || ''}`, (g) => g) });
+      out.push({ fichier: `${sq.hors ? 'Hors_sequence' : 'S' + sq.numero + '.' + x.numero}_b_Fiche_contrat_formatif.pdf`, titre: `Fiche contrat formatif · séance ${numSeance(sq, x)}`, pied,
+        blocs: await contrat('formatif', x.id, `Séance ${numSeance(sq, x)} · ${x.titre || ''}`, (g) => g) });
     }
   }
   return out;
@@ -607,6 +618,7 @@ async function index(zone, ctx, mode = 'preparation') {
     h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
     (mode === 'formatifs' || mode === 'sommatif') && ctx.matieres.some((m) => ctx.peutMatiere(m.id)) ? bandeauCreation(ctx) : null,
     mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, h('a', { href: '#/contrats' }, '📌 Voir tous les contrats hors séquence de la promotion →')) : null,
+    mode === 'deroulement' || mode === 'formatifs' ? h('p', { class: 'aide' }, h('a', { href: '#/seances-hors' }, '🧩 Séances hors séquence (cas particuliers) : leurs fiches de déroulement et contrats formatifs →')) : null,
     h('section', { class: 'grille-matieres' }, ctx.matieres.map((m) => {
       const sq = sequences.filter((s) => s.matiere_id === m.id);
       return h('div', { class: 'carte-matiere', style: { '--couleur': m.couleur } },

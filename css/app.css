@@ -2465,3 +2465,9 @@ table.decisions select.champ { min-width: 220px; }
 .maj-fiches .case-maj input { margin-top: 4px; }
 .maj-fiches .case-maj small { display: block; color: #6B7A78; margin-top: 2px; }
 .liste-maj { max-height: 30vh; overflow: auto; margin: 2px 0 6px 30px; padding: 0; font-size: 13px; }
+
+/* séances hors séquence */
+.liste-libres li.seance-libre { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.liste-libres li.seance-libre > a { flex: 1; min-width: 0; }
+.actions-libre { display: flex; gap: 2px; flex-shrink: 0; }
+.actions-libre .lien { text-decoration: none; padding: 2px 6px; }
