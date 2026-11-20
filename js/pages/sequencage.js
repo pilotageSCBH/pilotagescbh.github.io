@@ -5,6 +5,8 @@ import { iconeDoc, baseEspace } from './cours.js';
 import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, listeSavoirs, aEcrire, resume, sansAccent } from '../ia.js';
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
+const DUREE_DEFAUT = 4;   // durée d'une nouvelle séance (h)
+
 export async function pageSequencage(zone, id, ctx) {
   const m = ctx.matieres.find((x) => String(x.id) === String(id));
   if (!m) { vider(zone, h('p', {}, 'Matière introuvable.')); return; }
@@ -25,6 +27,11 @@ export async function pageSequencage(zone, id, ctx) {
     const seances = tout.filter((x) => mes.has(x.sequence_id)).sort((a, b) => a.numero - b.numero);
     return { sequences, seances };
   }
+  // séquences repliées : mémorisées sur cet appareil, par promotion et matière
+  const CLE_REPLI = `pilotage-scbh-repliees-${ctx.promo.id}-${m.id}`;
+  let repliees; try { repliees = new Set(JSON.parse(localStorage.getItem(CLE_REPLI) || '[]')); } catch { repliees = new Set(); }
+  let retourFait = false;
+  const memoRepliees = () => { try { localStorage.setItem(CLE_REPLI, JSON.stringify([...repliees])); } catch { /* sans stockage */ } };
   const etiquette = (y) => `${ctx.codeMat(y.mat)} ${y.seq.numero}.${y.numero}`;
   const rangMat = (y) => ctx.matieres.findIndex((z) => z.id === y.mat?.id);
   const trier = (a, b) => rangMat(a) - rangMat(b) || a.seq.numero - b.seq.numero || a.numero - b.numero;
@@ -41,7 +48,7 @@ export async function pageSequencage(zone, id, ctx) {
         h('div', {},
           h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), 'Séquençage · ' + m.nom),
           h('p', { class: 'sous-titre' }, `Promotion ${ctx.promo.libelle}  ·  ` + (profs.length ? 'Enseignant : ' + profs.join(', ') : 'Enseignant à attribuer') +
-            `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  ${heures(totH) || '0 h'}`)),
+            `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  `, volumeTotal(totH))),
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
@@ -56,6 +63,30 @@ export async function pageSequencage(zone, id, ctx) {
       sequences.length === 0 ? await videPromotion() : null);
     ajusterTout(zone);
     window.scrollTo(0, garde);
+    // retour depuis une fiche : la page se place sur la séance (ou la séquence) qu'on venait de quitter
+    let r = null; try { r = JSON.parse(sessionStorage.getItem('pilotage-scbh-retour-seq') || 'null'); if (r?.m === m.id) sessionStorage.removeItem('pilotage-scbh-retour-seq'); } catch { /* sans stockage */ }
+    if (r && r.m === m.id && !retourFait) {
+      retourFait = true;
+      const cible = (r.seance && zone.querySelector(`tr[data-id="${r.seance}"]`)) || zone.querySelector(`section[data-seq="${r.seq}"]`);
+      if (cible) { cible.closest('.sequence')?.classList.remove('repliee'); requestAnimationFrame(() => { cible.scrollIntoView({ block: 'center' }); cible.classList.add('retour-ici'); setTimeout(() => cible.classList.remove('retour-ici'), 2200); }); }
+    }
+  }
+
+  // total des heures, comparé au volume prévu de la matière (script SQL 43) : vert si conforme, rouge si dépassé
+  function volumeTotal(totH) {
+    const v = Number(m.volume) || 0;
+    const etat = !v ? '' : totH > v ? 'depasse' : totH < v * 0.9 ? 'sous' : 'ok';
+    const titre = !v ? 'Volume prévu non renseigné' : totH > v ? `Dépassement de ${heures(totH - v)}` : totH < v ? `Il reste ${heures(v - totH)} à programmer` : 'Volume prévu atteint';
+    return h('span', { class: 'volume-total ' + etat, title: titre }, heures(totH) || '0 h', v ? ` / ${heures(v)} prévues` : '',
+      modif && 'volume' in m ? h('button', { class: 'lien petit ecran', title: 'Volume horaire prévu pour la matière (sur toute la formation)', onclick: reglerVolume }, v ? ' ✎' : ' ＋ volume prévu') : null);
+  }
+  async function reglerVolume() {
+    const champV = h('input', { class: 'champ', type: 'number', min: 0, step: 1, value: m.volume ?? '' });
+    const r = await fenetre(`Volume prévu · ${m.nom}`, h('div', { class: 'formulaire' }, h('label', { class: 'large' }, 'Nombre d’heures prévues sur toute la formation', champV),
+      h('p', { class: 'aide' }, 'Le total des séances s’affiche en vert quand il correspond, en orange s’il manque plus de 10 %, en rouge s’il dépasse. Laissez vide pour ne rien comparer.')),
+    [{ texte: 'Annuler', valeur: null }, { texte: 'Enregistrer', classe: 'principal', action: () => ({ v: champV.value === '' ? null : Number(champV.value) }) }]);
+    if (!r) return;
+    try { await db.rpc('regler_volume', { m: m.id, h: r.v }); m.volume = r.v; toast('Volume prévu enregistré'); await dessiner(); } catch (e) { erreur(e); }
   }
 
   // ------------------------------------------------------------------------------------- séquence
@@ -63,8 +94,12 @@ export async function pageSequencage(zone, id, ctx) {
     const remplies = seances.filter((x) => x.titre || x.objectif_inter);
     const hrs = remplies.reduce((a, x) => a + (Number(x.duree) || 0), 0);
     const maj = (col) => (v) => db.modifier('sequences', s.id, { [col]: v });
-    return h('section', { class: 'sequence', 'data-seq': s.id, style: { '--couleur': m.couleur } },
+    const repliee = repliees.has(s.id);
+    return h('section', { class: 'sequence' + (repliee ? ' repliee' : ''), 'data-seq': s.id, style: { '--couleur': m.couleur } },
       h('div', { class: 'tete-sequence' },
+        h('button', { class: 'replier ecran', type: 'button', title: repliee ? 'Déplier la séquence' : 'Replier la séquence', 'aria-expanded': String(!repliee),
+          onclick: (e) => { const sec = e.currentTarget.closest('.sequence'); const r = sec.classList.toggle('repliee'); r ? repliees.add(s.id) : repliees.delete(s.id); memoRepliees();
+            e.currentTarget.title = r ? 'Déplier la séquence' : 'Replier la séquence'; e.currentTarget.setAttribute('aria-expanded', String(!r)); if (!r) ajusterTout(sec); } }, '▾'),
         h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero),
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),
         h('div', { class: 'resume' }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
@@ -82,7 +117,7 @@ export async function pageSequencage(zone, id, ctx) {
         h('tbody', {}, seances.map((x) => ligneSeance(s, x, seances.length))))),
       modif ? h('div', { class: 'ajout-seance ecran' },
         h('button', { class: 'btn petit', title: `Ajouter une séance à la fin de la séquence ${s.numero}`, onclick: () => insererSeance(s, { numero: seances.length }) }, `＋  Ajouter une séance (${s.numero}.${seances.length + 1})`),
-        h('span', { class: 'aide' }, 'Pour insérer une séance entre deux autres : survolez une séance et cliquez sur « ＋ » sous son numéro.')) : null);
+        h('span', { class: 'aide' }, 'Pour insérer une séance entre deux autres : « ＋ » sous le numéro d’une séance (✖ la supprime).')) : null);
   }
 
   // ------------------------------------------------------------------------------------- séance
@@ -316,7 +351,12 @@ export async function pageSequencage(zone, id, ctx) {
 
   // ------------------------------------------------------------------------------------- structure
   async function ajouterSequence() {
-    try { await db.rpc('ajouter_sequence', { m: m.id, p: ctx.promo.id }); toast('Séquence ajoutée'); await dessiner(); window.scrollTo(0, document.body.scrollHeight); }
+    try {
+      const sid = await db.rpc('ajouter_sequence', { m: m.id, p: ctx.promo.id });
+      const [x] = sid ? await db.lire('seances', `sequence_id=eq.${sid}&order=numero&limit=1`) : [];
+      if (x && x.duree == null) await db.modifier('seances', x.id, { duree: DUREE_DEFAUT }).catch(() => {});
+      toast('Séquence ajoutée'); await dessiner(); window.scrollTo(0, document.body.scrollHeight);
+    }
     catch (e) { erreur(e); }
   }
   async function supprimerSequence(s, seances) {
@@ -471,7 +511,11 @@ Savoirs : S11-1, S21-2
   }
 
   async function insererSeance(s, x) {
-    try { await db.rpc('inserer_seance', { s: s.id, apres: x.numero }); toast(`Séance ${s.numero}.${x.numero + 1} insérée`); await dessiner(); } catch (e) { erreur(e); }
+    try {
+      const id = await db.rpc('inserer_seance', { s: s.id, apres: x.numero });
+      if (id) await db.modifier('seances', id, { duree: DUREE_DEFAUT }).catch(() => {});
+      toast(`Séance ${s.numero}.${x.numero + 1} insérée`); await dessiner();
+    } catch (e) { erreur(e); }
   }
   async function supprimerSeance(s, x) {
     if (!(await confirmer('Supprimer la séance', `Supprimer définitivement la séance ${s.numero}.${x.numero}${x.titre ? ' « ' + x.titre + ' »' : ''} ? Les suivantes seront renumérotées.`, 'Supprimer'))) return;

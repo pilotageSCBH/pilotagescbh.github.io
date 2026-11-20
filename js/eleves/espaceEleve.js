@@ -164,7 +164,7 @@ const entete = (titre, sous, ...actions) => h('header', { class: 'entete-page' }
   actions.length ? h('div', { class: 'actions-page' }, actions) : null);
 
 // documents mobilisés dans une séance (publiés)
-const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie', href: baseDoc(d) + '/' + d.id }, ICONE_DOC + ' ' + d.titre); });
+const puceDocs = (x) => (x.cours_lies || []).filter((c) => D.docs.has(c.id)).map((c) => { const d = D.docs.get(c.id); return h('a', { class: 'cours-lie' + (d.espace === 'divers' ? ' ressource' : ''), href: baseDoc(d) + '/' + d.id, title: d.espace === 'divers' ? 'Ressource' : 'Cours' }, (d.espace === 'divers' ? '🗂 ' : ICONE_DOC + ' ') + d.titre, pastilleNouveau(d.id)); });
 
 // ---- ma semaine : séances prévues et prochaines évaluations
 async function pageSemaine(zone, arg) {
@@ -268,6 +268,26 @@ function blocAFaire() {
       h('span', { class: 'date-afaire' }, quand(o.echeance)),
       h('a', { href: '#/seance/' + x.id }, h('b', {}, etiquette(x)), ' · ', cle === 'avant' ? 'Travail préparatoire' : 'À rendre', ' — ', resumeT(o.consignes || o.objectif || x.titre))))));
 }
+
+// ---- documents pas encore ouverts sur cet appareil : pastille « nouveau » (les documents présents à la 1re visite n'en ont pas)
+const cleOuverts = () => 'pilotage-scbh-eleve-ouverts-' + (sessionEleve()?.identifiant || '');
+let ouvertsDocs = null;
+function etatOuverts() {
+  if (ouvertsDocs) return ouvertsDocs;
+  try { ouvertsDocs = JSON.parse(localStorage.getItem(cleOuverts()) || 'null'); } catch { ouvertsDocs = null; }
+  if (!ouvertsDocs || !Array.isArray(ouvertsDocs.base)) {
+    ouvertsDocs = { base: [...(D?.docs?.keys() || [])], vus: [] };
+    try { localStorage.setItem(cleOuverts(), JSON.stringify(ouvertsDocs)); } catch { /* sans stockage */ }
+  }
+  return ouvertsDocs;
+}
+const estNouveau = (id) => { if (apercu) return false; const o = etatOuverts(); return !o.base.includes(id) && !o.vus.includes(id); };
+function marquerOuvert(id) {
+  if (apercu) return;
+  const o = etatOuverts(); if (o.vus.includes(id) || o.base.includes(id)) return;
+  o.vus.push(id); try { localStorage.setItem(cleOuverts(), JSON.stringify(o)); } catch { /* sans stockage */ }
+}
+const pastilleNouveau = (id) => (estNouveau(id) ? h('span', { class: 'pastille-nouveau', title: 'Pas encore ouvert' }, 'nouveau') : null);
 
 // ---- nouveautés depuis la dernière visite (mémorisées sur cet appareil) : cours, QCM ouverts, travaux
 const cleVu = () => 'pilotage-scbh-eleve-vu-' + (sessionEleve()?.identifiant || '');
@@ -492,7 +512,7 @@ async function pageDocuments(zone, arg, divers = false) {
 function ligneDocument(d) {
   return h('div', { class: 'ligne-doc' },
     h('span', { class: 'icone-doc' }, ICONE_DOC),
-    h('a', { class: 'titre-doc', href: baseDoc(d) + '/' + d.id }, d.titre || 'Document'),
+    h('a', { class: 'titre-doc', href: baseDoc(d) + '/' + d.id }, d.titre || 'Document', pastilleNouveau(d.id)),
     h('span', { class: 'details-doc' }, d.auteur || ''),
     h('span', { class: 'actions-doc' }, d.fichier ? boutonsFichier(d, 'btn mini') : null));
 }
@@ -518,6 +538,7 @@ function boutonsFichier(d, classe) {
     h('button', { class: classe, type: 'button', onclick: (e) => ouvrir(e, true), title: 'Enregistrer le fichier sur cet appareil' }, '⬇ Télécharger')];
 }
 function ficheDocument(zone, d) {
+  marquerOuvert(d.id);
   const lignes = d.sommaire || [];
   const seances = [...D.seances.values()].filter((x) => (x.cours_lies || []).some((c) => c.id === d.id));
   vider(zone, h('nav', { class: 'ariane-biblio' }, h('a', { href: baseDoc(d) }, d.espace === 'divers' ? 'Mes ressources diverses' : 'Mes cours'), ' › ', h('b', {}, d.titre)),

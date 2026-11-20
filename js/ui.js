@@ -69,6 +69,19 @@ export const confirmer = (titre, texte, ok = 'Confirmer') =>
 
 // ------------------------------------------------------------------------------------------- champs
 // champ de saisie enregistré automatiquement quand on le quitte (ou après une pause de frappe)
+// petit repère « ✓ Enregistré » à côté d'une case qui vient d'être enregistrée
+let repere = null, minuterieRepere = null;
+export function repereEnregistre(el) {
+  try {
+    const r = el.getBoundingClientRect(); if (!r.width) return;
+    if (!repere) { repere = document.createElement('div'); repere.className = 'repere-enregistre'; repere.textContent = '✓ Enregistré'; }
+    document.body.append(repere);
+    repere.style.top = Math.max(4, r.top + window.scrollY - 22) + 'px';
+    repere.style.left = Math.min(window.innerWidth - 110, r.right + window.scrollX - 96) + 'px';
+    repere.classList.remove('parti'); void repere.offsetWidth; repere.classList.add('visible');
+    clearTimeout(minuterieRepere); minuterieRepere = setTimeout(() => repere.classList.remove('visible'), 1300);
+  } catch { /* simple confort */ }
+}
 export function champ(valeur, enregistrer, { multi = false, lecture = false, placeholder = '', type = 'text', classe = '', options = null } = {}) {
   let initial = valeur ?? '';
   let el;
@@ -97,6 +110,7 @@ export function champ(valeur, enregistrer, { multi = false, lecture = false, pla
       initial = v;
       el.classList.remove('envoi', 'echec');
       el.classList.add('ok');
+      repereEnregistre(el);
       setTimeout(() => el.classList.remove('ok'), 900);
     } catch (e) {
       el.classList.remove('envoi');

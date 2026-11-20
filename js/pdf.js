@@ -363,10 +363,12 @@ export async function creerPDF(doc, logoOctets, { pied = true } = {}) {
     if (!B[b.t]) throw new Error('Version du site incomplète dans le navigateur : rechargez la page avec Ctrl+F5.');
     B[b.t](b);
   }
-  // pied de page : titre du document et numéro de page
+  // pied de page : titre du document, date d'édition (sert de version) et numéro de page
+  const maintenant = new Date();
+  const edite = `${maintenant.toLocaleDateString('fr-FR')} à ${maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   if (pied) pages.forEach((p, i) => {
-    p.drawText(nettoyer(doc.pied || doc.titre).slice(0, 110), { x: MARGE, y: 22, size: 7, font: F, color: GRIS });
-    const n = `${i + 1} / ${pages.length}`;
+    p.drawText(nettoyer(doc.pied || doc.titre).slice(0, 95), { x: MARGE, y: 22, size: 7, font: F, color: GRIS });
+    const n = `Édité le ${edite} · page ${i + 1} / ${pages.length}`;
     p.drawText(n, { x: A4[0] - MARGE - F.widthOfTextAtSize(n, 7), y: 22, size: 7, font: F, color: GRIS });
   });
   return pdf.save();

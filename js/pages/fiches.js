@@ -60,16 +60,34 @@ export async function pageFiches(zone, arg, ctx) {
   const sousOnglets = () => {
     if (libre) return null;
     const tab = (k, t, titre = '') => h('a', { href: lien(k), class: k === onglet ? 'actif' : '', title: titre }, t);
-    if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, `Séance ${numSeance(sq, x)}`, x.titre || '')));
+    if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, [`Séance ${numSeance(sq, x)}`, h('span', { class: 'etat-fiche ' + (remplie.has(x.id) ? 'pleine' : 'vide'), title: remplie.has(x.id) ? 'Fiche commencée' : 'Fiche vide' }, remplie.has(x.id) ? '✓' : '○')], x.titre || '')));
     if (groupe === 'contrats') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiche contrat sommatif :'), tab('sommatif', `Séquence ${sq.numero}`),
       h('span', { class: 'lib-sous sep' }, 'Fiches contrats formatifs :'),
       seances.map((x) => tab(`formatif-${x.id}`, `Séance ${numSeance(sq, x)}`, `Fiche contrat formatif · séance ${numSeance(sq, x)}${x.titre ? ' · ' + x.titre : ''}`)));
     return null;
   };
 
+  // fiches de déroulement commencées (phases ou rubriques remplies) : ✓ / ○ sur les onglets
+  const remplie = new Set(libre || !seances.length ? [] : (await db.lire('fiches_seance', `seance_id=in.(${seances.map((x) => x.id).join(',')})`).catch(() => []))
+    .filter((f) => (Array.isArray(f.phases) && f.phases.some((p) => p.phase || p.activite || p.enseignant || p.eleves)) || f.evaluation || f.bilan).map((f) => f.seance_id));
+  const prepaRemplie = ['activites', 'situation', 'modalites', 'ressources'].some((k) => String(ficheSeq[k] || '').trim());
+  // séance précédente / suivante (fiche de déroulement ou contrat formatif), en passant d'une séquence à l'autre
+  const naviSeances = () => {
+    if (!idSeance) return null;
+    const i = seances.findIndex((x) => String(x.id) === idSeance);
+    const pref = onglet.split('-')[0] === 'formatif' ? 'formatif' : 'seance';
+    const qi = toutes.findIndex((s) => s.id === sq.id);
+    const prec = i > 0 ? { href: lien(`${pref}-${seances[i - 1].id}`), t: `Séance ${numSeance(sq, seances[i - 1])}` } : !libre && qi > 0 ? { href: `#/fiches/${toutes[qi - 1].id}:${pref === 'formatif' ? 'formatifs' : 'deroulement'}`, t: `Séquence ${toutes[qi - 1].numero}` } : null;
+    const suiv = i >= 0 && i < seances.length - 1 ? { href: lien(`${pref}-${seances[i + 1].id}`), t: `Séance ${numSeance(sq, seances[i + 1])}` } : !libre && qi >= 0 && qi < toutes.length - 1 ? { href: `#/fiches/${toutes[qi + 1].id}:${pref === 'formatif' ? 'formatifs' : 'deroulement'}`, t: `Séquence ${toutes[qi + 1].numero}` } : null;
+    if (!prec && !suiv) return null;
+    return h('div', { class: 'navi-seances ecran' },
+      prec ? h('a', { class: 'btn petit', href: prec.href, title: 'Précédente' }, '◀  ' + prec.t) : h('span', {}),
+      suiv ? h('a', { class: 'btn petit', href: suiv.href, title: 'Suivante' }, suiv.t + '  ▶') : h('span', {}));
+  };
+
   // ------------------------------------------------------------------------------------- en-tête et onglets
   const onglets = libre ? [[`seance-${libre.id}`, '📝  Fiche de déroulement', 'deroulement'], [`formatif-${libre.id}`, '✅  Fiche contrat formatif', 'contrats']]
-    : [['preparation', '📋  Fiche de préparation', 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
+    : [['preparation', `📋  Fiche de préparation ${prepaRemplie ? '✓' : '○'}`, 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
       ['sommatif', `✅  Fiches contrats (${seances.length + 1})`, 'contrats']];
   vider(zone,
     h('header', { class: 'entete-page ecran' },
@@ -85,9 +103,15 @@ export async function pageFiches(zone, arg, ctx) {
         libre ? h('a', { class: 'btn', href: '#/seances-hors' }, '☰  Séances hors séquence') : h('a', { class: 'btn', href: '#/sequencage/' + m.id }, 'Séquençage'))),
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t, g]) => h('a', { href: lien(k), class: g === groupe ? 'actif' : '' }, t))),
     sousOnglets(),
+    naviSeances(),
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
     h('div', { id: 'fiche' }, h('div', { class: 'chargement' }, 'Chargement…')));
   const fiche = zone.querySelector('#fiche');
+  // mémoires de navigation : retour au séquençage sur cette séance, et « reprendre » depuis la liste des fiches
+  try {
+    if (!libre) sessionStorage.setItem('pilotage-scbh-retour-seq', JSON.stringify({ m: m.id, seance: idSeance ? Number(idSeance) : null, seq: sq.id }));
+    localStorage.setItem('pilotage-scbh-derniere-fiche-' + ctx.promo.id, JSON.stringify({ hash: location.hash, lib: (libre ? `Séance hors séquence · ${libre.titre || ''}` : `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`) + (idSeance && !libre ? ` · séance ${numSeance(sq, seances.find((x) => String(x.id) === idSeance) || { numero: '?' })}` : ''), mat: m.nom }));
+  } catch { /* sans stockage */ }
 
   const entete = (titre, sous) => h('div', { class: 'tete-fiche', style: { '--couleur': m.couleur } },
     h('img', { src: 'img/logo.jpg', alt: '' }), h('div', {}, h('h2', {}, titre), h('p', {}, sous)));
@@ -205,7 +229,7 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
       h('button', { class: 'inserer-phase', type: 'button', title: n === 0 ? 'Insérer une phase au début' : `Insérer une phase entre la phase ${n} et la phase ${n + 1}`, onclick: () => inserer(n) }, '＋ insérer une phase ici')));
     // une phase = deux lignes : à gauche n°, durée et ✖ ; l'intitulé ; l'activité sur toute la largeur, puis rôle de l'enseignant | rôle des élèves
     const dessinerPhases = () => {
-      const c = (i, k, opts = {}) => champ(phases[i][k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); },
+      const c = (i, k, opts = {}) => champ(phases[i][k] || '', async (v) => { phases[i] = { ...phases[i], [k]: v }; await sauverPhases(); if (k === 'duree') majTotalPhases(); },
         { multi: k !== 'duree', lecture: !modif, ...opts });
       const lignes = [];
       phases.forEach((p, i) => {
@@ -230,7 +254,25 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
       });
       vider(tablePhases, lignes);
       ajusterTout(tablePhases);
+      majTotalPhases();
     };
+    // durée totale des phases comparée à la durée de la séance (« 30 min », « 1 h », « 1h30 », « 45 » = minutes)
+    const totalPhases = h('p', { class: 'total-phases' });
+    const enHeures = (t) => {
+      const s = String(t || '').toLowerCase().replace(',', '.').trim(); if (!s) return 0;
+      const hm = s.match(/(\d+(?:\.\d+)?)\s*h\s*(\d{1,2})?/); if (hm) return Number(hm[1]) + (hm[2] ? Number(hm[2]) / 60 : 0);
+      const mn = s.match(/(\d+)\s*(?:min|mn|')/); if (mn) return Number(mn[1]) / 60;
+      const n = parseFloat(s); return Number.isFinite(n) ? (n > 8 ? n / 60 : n) : 0;
+    };
+    const hm = (v) => { const t = Math.round(v * 60); return `${Math.floor(t / 60)} h${t % 60 ? ' ' + String(t % 60).padStart(2, '0') : ''}`; };
+    function majTotalPhases() {
+      const tot = phases.reduce((a, p) => a + enHeures(p.duree), 0), d = Number(x.duree) || 0;
+      if (!tot) { vider(totalPhases, h('span', { class: 'gris' }, 'Durée des phases : à renseigner')); totalPhases.className = 'total-phases'; return; }
+      const etat = !d ? '' : Math.abs(tot - d) < 0.01 ? 'ok' : tot > d ? 'depasse' : 'sous';
+      totalPhases.className = 'total-phases ' + etat;
+      vider(totalPhases, `Durée des phases : ${hm(tot)}`, d ? ` / ${hm(d)} de séance` : '',
+        etat === 'depasse' ? ` (${hm(tot - d)} de trop)` : etat === 'sous' ? ` (il reste ${hm(d - tot)})` : etat === 'ok' ? ' ✓' : '');
+    }
     const corps = h('div', {});
     const titre = `Séance ${numSeance(sq, x)} · ${x.titre || ''}`;
     // séances prérequises (séquençage), toutes matières
@@ -315,7 +357,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
-            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, ''), h('th', { colspan: 2 }, 'Intitulé de la phase · activité · rôle de l’enseignant et des élèves'))), tablePhases),
+            h('thead', {}, h('tr', {}, h('th', { class: 'num-phase' }, ''), h('th', { colspan: 2 }, 'Intitulé de la phase · activité · rôle de l’enseignant et des élèves'))), tablePhases), totalPhases,
           modif ? h('div', { class: 'ajout-phases ecran' },
             h('button', { class: 'btn petit', onclick: () => inserer(0) }, '＋ phase au début'),
             h('button', { class: 'btn petit', onclick: () => inserer(phases.length) }, '＋ phase à la fin'),
@@ -646,6 +688,8 @@ async function index(zone, ctx, mode = 'preparation') {
     h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, `${icone}  ${titre}`),
       h('p', { class: 'sous-titre' }, `Documents pédagogiques · ${groupe}  ·  Promotion ${ctx.promo.libelle}  ·  choisir une séquence`))),
     h('nav', { class: 'onglets' }, Object.entries(MODES).map(([k, [t, , ic]]) => h('a', { href: '#/fiches/' + k, class: k === mode ? 'actif' : '' }, `${ic}  ${t}`))),
+    (() => { let d = null; try { d = JSON.parse(localStorage.getItem('pilotage-scbh-derniere-fiche-' + ctx.promo.id) || 'null'); } catch { /* sans stockage */ }
+      return d?.hash ? h('a', { class: 'reprendre-fiche', href: d.hash }, '↩  Reprendre là où vous étiez : ', h('b', {}, d.lib), d.mat ? h('span', { class: 'gris' }, ' · ' + d.mat) : null) : null; })(),
     (mode === 'formatifs' || mode === 'sommatif') && ctx.matieres.some((m) => ctx.peutMatiere(m.id)) ? bandeauCreation(ctx) : null,
     mode === 'formatifs' || mode === 'sommatif' ? h('p', { class: 'aide' }, h('a', { href: '#/contrats' }, '📌 Voir tous les contrats hors séquence de la promotion →')) : null,
     mode === 'deroulement' || mode === 'formatifs' ? h('p', { class: 'aide' }, h('a', { href: '#/seances-hors' }, '🧩 Séances hors séquence (cas particuliers) : leurs fiches de déroulement et contrats formatifs →')) : null,

@@ -119,7 +119,7 @@ select.champ { border-color: var(--ligne); background: #fff; }
 .formulaire p { grid-column: 1 / -1; margin: 0; }
 
 /* ------------------------------------------------------------------ séquençage */
-.sequence { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); margin-bottom: 22px; overflow: hidden; border-top: 5px solid var(--couleur); }
+.sequence { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); margin-bottom: 22px; overflow: clip; border-top: 5px solid var(--couleur); }
 .tete-sequence { display: flex; align-items: center; gap: 12px; padding: 12px 16px 4px; }
 .num-sequence { background: var(--couleur); color: #fff; font-weight: 800; padding: 6px 12px; border-radius: 6px; white-space: nowrap; font-size: 13px; letter-spacing: .04em; }
 .tete-sequence .intitule { font-size: 17px; font-weight: 700; color: var(--fonce); }
@@ -136,7 +136,7 @@ table.seances tr.cible td { box-shadow: inset 0 3px 0 var(--anis); }
 .poignee-cell { text-align: center; }
 .poignee { cursor: grab; color: var(--gris); font-size: 18px; display: inline-block; padding: 6px 2px; user-select: none; }
 .poignee:hover { color: var(--fonce); }
-.mini-actions { display: flex; justify-content: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .2s; }
+.mini-actions { display: flex; justify-content: center; gap: 2px; margin-top: 6px; opacity: .55; transition: opacity .2s; }
 tr:hover .mini-actions, tr:focus-within .mini-actions { opacity: 1; }
 .codes { display: flex; flex-direction: column; gap: 3px; padding: 4px; }
 .code { font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
@@ -2488,3 +2488,35 @@ table.decisions select.champ { min-width: 220px; }
 /* fiche de déroulement : prérequis repris du séquençage (non modifiables ici) */
 .rubrique .pre.auto-seq { background: var(--auto, #EEF1F0); border-radius: 6px; padding: 6px 9px; margin: 0; }
 .docs-ressources { margin-bottom: 4px; }
+
+/* séquençage : ergonomie */
+@media (min-width: 1300px) { .sequence .tableau-defile { overflow-x: visible; } }
+table.seances thead th { position: sticky; top: 0; z-index: 3; }
+.replier { border: 0; background: transparent; color: var(--gris); font-size: 16px; cursor: pointer; padding: 2px 4px; transition: transform .2s; }
+.replier:hover { color: var(--fonce); }
+.sequence.repliee .replier { transform: rotate(-90deg); }
+.sequence.repliee .objectif-sequence, .sequence.repliee .tableau-defile, .sequence.repliee .ajout-seance { display: none; }
+.sequence.repliee .tete-sequence { padding-bottom: 12px; }
+.volume-total { font-weight: 700; }
+.volume-total.ok { color: #2E7D32; } .volume-total.sous { color: #C77700; } .volume-total.depasse { color: #C62828; }
+.volume-total .lien { font-weight: 400; }
+
+/* fiches : état, navigation, durée des phases */
+.etat-fiche { margin-left: 5px; font-size: 11px; }
+.etat-fiche.pleine { color: #2E7D32; } .etat-fiche.vide { color: #9AA6A4; }
+.navi-seances { display: flex; justify-content: space-between; gap: 10px; margin: 6px 0 10px; }
+.total-phases { margin: 6px 2px 0; font-size: 13px; font-weight: 600; color: var(--gris); }
+.total-phases.ok { color: #2E7D32; } .total-phases.sous { color: #C77700; } .total-phases.depasse { color: #C62828; }
+
+/* repère « Enregistré », retour sur une séance, reprendre une fiche */
+.repere-enregistre { position: absolute; z-index: 9999; background: #2E7D32; color: #fff; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); opacity: 0; transform: translateY(4px); transition: opacity .25s, transform .25s; pointer-events: none; }
+.repere-enregistre.visible { opacity: 1; transform: none; }
+tr.retour-ici td, section.retour-ici { animation: retourIci 2.2s ease-out; }
+@keyframes retourIci { 0%, 40% { background-color: #FFF3C4; } 100% { background-color: transparent; } }
+.reprendre-fiche { display: inline-block; margin: 4px 0 12px; padding: 8px 14px; border-radius: 10px; background: #EEF7F6; border: 1px solid #CFE5E2; color: var(--fonce); text-decoration: none; }
+.reprendre-fiche:hover { background: #E2F1EF; }
+@media print { .repere-enregistre { display: none !important; } }
+
+/* espace élève : pastille « nouveau » */
+.pastille-nouveau { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; background: #E8893A; color: #fff; font-size: 10.5px; font-weight: 700; vertical-align: middle; letter-spacing: .02em; }

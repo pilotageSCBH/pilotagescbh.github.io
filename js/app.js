@@ -338,8 +338,8 @@ function menu(route) {
     return el;
   });
   // recherche dans le menu
-  const recherche = h('input', { class: 'recherche-menu', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher une page ou dans tout le site',
-    title: 'Filtre les pages du menu ; Entrée cherche dans tout le site (séquençages, fiches, contrats, bibliothèque, cours)',
+  const recherche = h('input', { class: 'recherche-menu', type: 'search', placeholder: 'Rechercher… (Ctrl+K)', 'aria-label': 'Rechercher une page ou dans tout le site',
+    title: 'Filtre les pages du menu ; Entrée cherche dans tout le site (séquençages, fiches, contrats, bibliothèque, cours). Raccourci : Ctrl+K',
     oninput: () => {
       const q = sansAccent(recherche.value.trim());
       nav.classList.toggle('en-recherche', !!q);
@@ -562,6 +562,14 @@ function boutonRetour() {
   h('span', { class: 'fleche' }, '←'), possible ? 'Page précédente' : 'Ma page d’accueil');
 }
 window.addEventListener('hashchange', afficher);
+// Ctrl+K (⌘K sur Mac) : curseur dans la recherche du menu (le menu réduit est d'abord déplié)
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'k') return;
+  const champR = document.querySelector('.recherche-menu'); if (!champR) return;
+  e.preventDefault();
+  if (lireL(CLE_MENU_REDUIT, 'non') === 'oui') { ecrireL(CLE_MENU_REDUIT, 'non'); rafraichirMenu(); setTimeout(() => document.querySelector('.recherche-menu')?.focus(), 50); return; }
+  champR.focus(); champR.select();
+});
 window.addEventListener(SESSION_EXPIREE, () => { ctx.profil = null; ecranConnexion('Votre session a expiré : reconnectez-vous.'); });
 window.addEventListener('unhandledrejection', (e) => erreur(e.reason));
 document.title = NOM_APPLI;
