@@ -64,6 +64,12 @@ export async function pageCompte(zone, _arg, ctx) {
           h('li', {}, 'Code oublié ? Écran de connexion → « Code oublié ? ».'),
           h('li', {}, 'Saisissez votre identifiant, le code de secours et votre nouveau code.')),
         h('button', { class: 'btn ' + (ctx.profil.a_secours ? '' : 'principal'), onclick: creerSecours }, ctx.profil.a_secours ? 'Remplacer mon code de secours' : 'Créer mon code de secours'))),
+    h('section', { class: 'bloc carte-compte-bloc affichage-compte' }, h('div', { class: 'tete-carte' }, h('span', { class: 'kpi-icone' }, '🖥'), h('h2', {}, 'Affichage')),
+      h('label', { class: 'case' }, h('input', { type: 'checkbox', checked: document.documentElement.classList.contains('compact'), onchange: (e) => {
+        document.documentElement.classList.toggle('compact', e.target.checked);
+        try { localStorage.setItem('pilotage-scbh-compact', e.target.checked ? 'oui' : 'non'); } catch { /* sans stockage */ }
+        toast(e.target.checked ? 'Affichage compact activé' : 'Affichage normal'); } }), ' Affichage compact (cases, marges et textes plus petits : pratique sur les petits écrans du lycée)'),
+      h('p', { class: 'aide' }, 'Réglage mémorisé sur cet ordinateur seulement.')),
     blocInstallation());
 
   async function creerSecours() {

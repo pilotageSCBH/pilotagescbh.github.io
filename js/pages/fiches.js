@@ -63,7 +63,8 @@ export async function pageFiches(zone, arg, ctx) {
     if (groupe === 'deroulement') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiches de déroulement :'), seances.map((x) => tab(`seance-${x.id}`, [`Séance ${numSeance(sq, x)}`, h('span', { class: 'etat-fiche ' + (remplie.has(x.id) ? 'pleine' : 'vide'), title: remplie.has(x.id) ? 'Fiche commencée' : 'Fiche vide' }, remplie.has(x.id) ? '✓' : '○')], x.titre || '')));
     if (groupe === 'contrats') return h('nav', { class: 'sous-onglets ecran' }, h('span', { class: 'lib-sous' }, 'Fiche contrat sommatif :'), tab('sommatif', `Séquence ${sq.numero}`),
       h('span', { class: 'lib-sous sep' }, 'Fiches contrats formatifs :'),
-      seances.map((x) => tab(`formatif-${x.id}`, `Séance ${numSeance(sq, x)}`, `Fiche contrat formatif · séance ${numSeance(sq, x)}${x.titre ? ' · ' + x.titre : ''}`)));
+      seances.map((x) => tab(`formatif-${x.id}`, [`Séance ${numSeance(sq, x)}`, h('span', { class: 'etat-fiche ' + (contratRedige.has(x.id) ? 'pleine' : 'vide') }, contratRedige.has(x.id) ? '✓' : '○')],
+        `Fiche contrat formatif · séance ${numSeance(sq, x)}${x.titre ? ' · ' + x.titre : ''}${contratRedige.has(x.id) ? '' : ' · aucun critère rédigé'}`)));
     return null;
   };
 
@@ -71,6 +72,15 @@ export async function pageFiches(zone, arg, ctx) {
   const remplie = new Set(libre || !seances.length ? [] : (await db.lire('fiches_seance', `seance_id=in.(${seances.map((x) => x.id).join(',')})`).catch(() => []))
     .filter((f) => (Array.isArray(f.phases) && f.phases.some((p) => p.phase || p.activite || p.enseignant || p.eleves)) || f.evaluation || f.bilan).map((f) => f.seance_id));
   const prepaRemplie = ['activites', 'situation', 'modalites', 'ressources'].some((k) => String(ficheSeq[k] || '').trim());
+  // contrats formatifs avec au moins un critère rédigé
+  const contratRedige = new Set();
+  if (!libre && seances.length && groupe === 'contrats') {
+    try {
+      const cs = await db.lire('contrats', `type=eq.formatif&seance_id=in.(${seances.map((x) => x.id).join(',')})`);
+      const ks = cs.length ? await db.lire('criteres', `contrat_id=in.(${cs.map((c) => c.id).join(',')})&actif=is.true`) : [];
+      for (const c of cs) if (ks.some((k) => k.contrat_id === c.id && String(k.texte || '').trim())) contratRedige.add(c.seance_id);
+    } catch { /* simple indicateur */ }
+  }
   // séance précédente / suivante (fiche de déroulement ou contrat formatif), en passant d'une séquence à l'autre
   const naviSeances = () => {
     if (!idSeance) return null;
@@ -236,13 +246,17 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
         if (modif && i > 0) lignes.push(ligneInsertion(i));
         const L = liensPhase(i);
         lignes.push(
-          h('tr', { class: 'ligne-phase' },
+          h('tr', { class: 'ligne-phase', 'data-phase': i },
             h('td', { class: 'num-phase', rowspan: 3 },
+              modif ? h('span', { class: 'poignee poignee-phase ecran', draggable: 'true', title: 'Glisser pour déplacer la phase',
+                ondragstart: (e) => { phaseGlissee = i; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'phase-' + i); } catch { /* ancien navigateur */ } } }, '⠿') : null,
               h('span', { class: 'lib-num' }, 'Phase'), h('span', { class: 'n' }, i + 1),
               h('span', { class: 'lib-duree' }, 'durée'), c(i, 'duree', { placeholder: modif ? '…' : '', classe: 'duree-phase' }),
               modif ? h('button', { class: 'icone petit retirer-phase ecran', title: 'Retirer cette phase', onclick: async () => {
                 if ((p.activite || p.enseignant || p.eleves || p.phase) && !(await confirmer('Retirer la phase', `Retirer la phase ${i + 1}${p.phase ? ' « ' + p.phase + ' »' : ''} et son contenu ?`, 'Retirer'))) return;
-                phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖') : null),
+                phases.splice(i, 1); try { await sauverPhases(); dessinerPhases(); } catch (e) { erreur(e); } } }, '✖') : null,
+              modif ? h('button', { class: 'icone petit dupliquer-phase ecran', title: 'Dupliquer cette phase (copie placée juste après)', onclick: async () => {
+                phases.splice(i + 1, 0, { ...phases[i], id: idPhase() }); try { await sauverPhases(); dessinerPhases(); toast(`Phase ${i + 1} dupliquée`); } catch (e) { erreur(e); } } }, '⧉') : null),
             h('td', { class: 'phase', colspan: 2 }, h('div', { class: 'ligne-intitule' },
               c(i, 'phase', { multi: false, placeholder: modif ? 'Intitulé de la phase' : '', classe: 'intitule-phase' })))),
           h('tr', { class: 'ligne-activite' },
@@ -256,6 +270,19 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
       ajusterTout(tablePhases);
       majTotalPhases();
     };
+    // déplacement d'une phase : on la lâche sur une autre phase (elle prend sa place)
+    let phaseGlissee = null;
+    const phaseSous = (e) => { const tr = e.target.closest('tr'); let t = tr; while (t && !t.dataset.phase) t = t.previousElementSibling; return t ? Number(t.dataset.phase) : null; };
+    tablePhases.addEventListener('dragover', (e) => { if (phaseGlissee === null) return; const j = phaseSous(e); if (j === null) return; e.preventDefault();
+      tablePhases.querySelectorAll('.cible-phase').forEach((x) => x.classList.remove('cible-phase')); tablePhases.querySelector(`tr[data-phase="${j}"]`)?.classList.add('cible-phase'); });
+    tablePhases.addEventListener('dragend', () => { phaseGlissee = null; tablePhases.querySelectorAll('.cible-phase').forEach((x) => x.classList.remove('cible-phase')); });
+    tablePhases.addEventListener('drop', async (e) => {
+      if (phaseGlissee === null) return; e.preventDefault();
+      const i = phaseGlissee, j = phaseSous(e); phaseGlissee = null;
+      if (j === null || j === i) { dessinerPhases(); return; }
+      const [p] = phases.splice(i, 1); phases.splice(j, 0, p);
+      try { await sauverPhases(); dessinerPhases(); toast(`Phase déplacée en position ${j + 1}`); } catch (x) { erreur(x); }
+    });
     // durée totale des phases comparée à la durée de la séance (« 30 min », « 1 h », « 1h30 », « 45 » = minutes)
     const totalPhases = h('p', { class: 'total-phases' });
     const enHeures = (t) => {

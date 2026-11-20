@@ -32,6 +32,10 @@ export async function pageSequencage(zone, id, ctx) {
   let repliees; try { repliees = new Set(JSON.parse(localStorage.getItem(CLE_REPLI) || '[]')); } catch { repliees = new Set(); }
   let retourFait = false;
   const memoRepliees = () => { try { localStorage.setItem(CLE_REPLI, JSON.stringify([...repliees])); } catch { /* sans stockage */ } };
+  // autres séquences de la matière où la compétence c est déjà développée (« séquence 3 »)
+  const autresSequences = (x, c) => [...new Set([...toutes.values()].filter((y) => y.mat?.id === m.id && y.sequence_id !== x.sequence_id && (y.competences || []).includes(c)).map((y) => 'séquence ' + y.seq.numero))];
+  // autres séances (toutes matières) qui mobilisent déjà le même document de « Mes cours »
+  const autresSeancesCours = (x, id) => [...toutes.values()].filter((y) => y.id !== x.id && (y.cours_lies || []).some((k) => k.id === id && k.espace !== 'divers')).map((y) => etiquette(y));
   const etiquette = (y) => `${ctx.codeMat(y.mat)} ${y.seq.numero}.${y.numero}`;
   const rangMat = (y) => ctx.matieres.findIndex((z) => z.id === y.mat?.id);
   const trier = (a, b) => rangMat(a) - rangMat(b) || a.seq.numero - b.seq.numero || a.numero - b.numero;
@@ -51,6 +55,12 @@ export async function pageSequencage(zone, id, ctx) {
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  `, volumeTotal(totH))),
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
+          sequences.length > 1 ? h('button', { class: 'btn', title: 'Replier ou déplier toutes les séquences', onclick: () => {
+            const tout = repliees.size < sequences.length;
+            sequences.forEach((q) => (tout ? repliees.add(q.id) : repliees.delete(q.id))); memoRepliees();
+            zone.querySelectorAll('section.sequence').forEach((sec) => sec.classList.toggle('repliee', tout));
+            if (!tout) ajusterTout(zone);
+          } }, '▾  Tout replier / déplier') : null,
           h('button', { class: 'btn', onclick: () => imprimer('A4 landscape') }, '🖶  Imprimer'),
           sequences.length ? h('button', { class: 'btn', title: 'Un seul PDF : page de garde, sommaire, séquençage, fiches et contrats de la matière', onclick: async () => {
             const { telechargerClasseur } = await import('../classeur.js'); await telechargerClasseur(m, ctx); } }, '📘  Classeur PDF') : null,
@@ -129,6 +139,7 @@ export async function pageSequencage(zone, id, ctx) {
     const tr = h('tr', { 'data-id': x.id },
       h('td', { class: 'poignee-cell' }, modif ? h('span', { class: 'poignee', title: 'Glisser pour déplacer la séance' }, '⠿') : null),
       h('td', { class: 'num' }, `${s.numero}.${x.numero}`,
+        h('a', { class: 'lien-fiche-seance ecran', href: `#/fiches/${s.id}:seance-${x.id}`, title: 'Ouvrir la fiche de déroulement de cette séance' }, '📝'),
         mesMatieres.length ? h('button', { class: 'icone petit dupliquer', title: 'Dupliquer la séance (avec sa fiche et son contrat formatif) à la fin d’une autre séquence', onclick: () => dupliquerSeance(s, x) }, '⧉') : null,
         modif ? h('div', { class: 'mini-actions' },
           h('button', { class: 'icone petit', title: 'Insérer une séance après celle-ci', onclick: () => insererSeance(s, x) }, '＋'),
@@ -154,8 +165,11 @@ export async function pageSequencage(zone, id, ctx) {
     // savoirs repris d'un cours relié (« Cours mobilisés ») : marqués 📘
     const viaCours = (c) => (col === 'savoirs' ? (x.cours_lies || []).filter((k) => (k.savoirs || []).includes(c)).map((k) => k.titre) : []);
     const afficher = () => vider(zoneC,
-      (x[col] || []).map((c) => { const v = viaCours(c); return h('div', { class: 'code' + (v.length ? ' via-cours' : ''), title: (index[c]?.libelle || 'Code absent du référentiel') + (v.length ? `\nRepris du cours : ${v.join(', ')}` : '') },
-        h('b', { class: index[c] ? '' : 'inconnu' }, c), h('span', {}, index[c]?.libelle_court || index[c]?.libelle || ''), v.length ? h('i', { class: 'marque-cours' }, ' 📘') : null); }),
+      (x[col] || []).map((c) => { const v = viaCours(c); const ailleurs = col === 'competences' ? autresSequences(x, c) : [];
+        return h(col === 'competences' ? 'a' : 'div', { class: 'code' + (v.length ? ' via-cours' : '') + (ailleurs.length ? ' doublon' : ''),
+          ...(col === 'competences' ? { href: '#/referentiel/competences:' + encodeURIComponent(c) } : {}),
+          title: (index[c]?.libelle || 'Code absent du référentiel') + (ailleurs.length ? `\n⚠ Déjà développée en ${ailleurs.join(', ')} (une compétence = une séquence)` : '') + (col === 'competences' ? '\nCliquer : voir la compétence dans le référentiel' : '') + (v.length ? `\nRepris du cours : ${v.join(', ')}` : '') },
+        h('b', { class: index[c] ? '' : 'inconnu' }, c), h('span', {}, index[c]?.libelle_court || index[c]?.libelle || ''), v.length ? h('i', { class: 'marque-cours' }, ' 📘') : null, ailleurs.length ? h('i', { class: 'marque-doublon' }, ' ⚠') : null); }),
       modif ? h('button', { class: 'lien petit', onclick: choisir }, (x[col] || []).length ? '✎ modifier' : '＋ choisir') : null);
     async function choisir() {
       const choix = new Set(x[col] || []);
@@ -194,10 +208,10 @@ export async function pageSequencage(zone, id, ctx) {
     const liste = () => (x.cours_lies || []).filter((c) => (c.espace === 'divers') === (esp === 'divers'));
     const col = esp === 'divers' ? 'ressources' : 'cours';
     const dessinerC = () => vider(td,
-      liste().length ? h('div', { class: 'cours-lies' }, liste().map((c) => h('div', { class: 'ligne-cours-lie' },
+      liste().length ? h('div', { class: 'cours-lies' }, liste().map((c) => h('div', { class: 'ligne-cours-lie' + (esp === 'cours' && autresSeancesCours(x, c.id).length ? ' doublon' : ''), title: esp === 'cours' && autresSeancesCours(x, c.id).length ? `⚠ Ce cours est aussi mobilisé en ${autresSeancesCours(x, c.id).join(', ')} (un cours = une séance)` : '' },
         h('a', { class: 'cours-lie', href: baseEspace(c.espace) + '/l-' + c.id, title: (c.savoirs || []).length ? 'Savoirs associés : ' + c.savoirs.join(', ') : 'Ouvrir la fiche du document' }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
         /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
-      esp === 'divers' && !('ressources' in x) ? null : champ(x[col] || '', async (v) => { await maj(col)(v); x[col] = v; }, { multi: true, lecture: !modif,
+      esp === 'divers' && !('ressources' in x) ? null : champ(x[col] || '', async (v) => { await maj(col)(v); x[col] = v; }, { multi: true, lecture: !modif, max: esp === 'divers' ? 4000 : 0,
         placeholder: modif ? (esp === 'divers' ? (liste().length ? 'autres ressources…' : 'ressources…') : (liste().length ? 'autres cours…' : 'cours mobilisés…')) : '' }),
       modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }, esp) },
         esp === 'divers' ? (liste().length ? '✎ ressources de la liste' : '＋ depuis mes ressources') : (liste().length ? '✎ cours de la liste' : '＋ depuis mes cours')) : null);

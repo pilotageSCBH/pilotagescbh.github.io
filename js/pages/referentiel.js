@@ -14,6 +14,8 @@ const NIVEAUX = [['Information', '« l’étudiant en a entendu parler et sait o
 
 export async function pageReferentiel(zone, onglet, ctx) {
   const ref = await ctx.referentiel();
+  const cibleCode = String(onglet || '').includes(':') ? decodeURIComponent(String(onglet).split(':')[1]) : null;   // ex. « competences:C2-2a »
+  if (cibleCode) onglet = String(onglet).split(':')[0];
   onglet = ['savoirs', 'taches'].includes(onglet) ? onglet : 'competences';
   const titres = { competences: 'Compétences et indicateurs de performance', savoirs: 'Savoirs associés', taches: 'Activités et tâches professionnelles' };
   const recherche = h('input', { class: 'champ recherche', type: 'search', placeholder: 'Rechercher un code ou un mot…' });
@@ -28,7 +30,7 @@ export async function pageReferentiel(zone, onglet, ctx) {
       for (const c of ref.competences) {
         if (!ok(q, c.code, c.libelle, c.famille_libelle, ...(c.indicateurs || []))) continue;
         if (c.famille !== groupe) { groupe = c.famille; out.push(h('h3', { class: 'groupe-ref' }, `${c.famille} – ${c.famille_libelle}`, h('span', { class: 'type' }, c.type))); }
-        out.push(h('div', { class: 'item-ref' }, h('div', { class: 'code-ref' }, c.code), h('div', {},
+        out.push(h('div', { class: 'item-ref' + (c.code === cibleCode ? ' cible-ref' : ''), id: 'ref-' + c.code }, h('div', { class: 'code-ref' }, c.code), h('div', {},
           h('div', { class: 'lib-ref' }, c.libelle),
           (c.indicateurs || []).length ? h('ul', { class: 'indicateurs' }, c.indicateurs.map((i) => h('li', {}, i))) : null)));
       }
@@ -69,4 +71,6 @@ export async function pageReferentiel(zone, onglet, ctx) {
       h('span', { class: 'taxo-jauge mini' }, [1, 2, 3, 4].map((k) => h('i', { class: k <= i + 1 ? 'plein' : '' }))), ` ${i + 1} ${t}`))) : null,
     liste);
   remplir();
+  const cible = cibleCode && zone.querySelector('#' + CSS.escape('ref-' + cibleCode));
+  if (cible) requestAnimationFrame(() => cible.scrollIntoView({ block: 'center' }));
 }

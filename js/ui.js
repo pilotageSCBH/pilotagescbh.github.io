@@ -82,7 +82,7 @@ export function repereEnregistre(el) {
     clearTimeout(minuterieRepere); minuterieRepere = setTimeout(() => repere.classList.remove('visible'), 1300);
   } catch { /* simple confort */ }
 }
-export function champ(valeur, enregistrer, { multi = false, lecture = false, placeholder = '', type = 'text', classe = '', options = null } = {}) {
+export function champ(valeur, enregistrer, { multi = false, lecture = false, placeholder = '', type = 'text', classe = '', options = null, max = 0 } = {}) {
   let initial = valeur ?? '';
   let el;
   if (options && lecture) {   // consultation : la valeur choisie en texte (pas de liste déroulante grisée)
@@ -99,6 +99,15 @@ export function champ(valeur, enregistrer, { multi = false, lecture = false, pla
     el.value = initial;
   }
   if (lecture) { el.classList.add('lecture'); return el; }
+  el.dataset.initial = String(initial);   // valeur enregistrée (alerte « quitter la page » si on tape sans quitter la case)
+  // taille maximale : compteur discret quand on approche de la limite (80 %)
+  if (max) {
+    el.maxLength = max;
+    const compteur = document.createElement('span'); compteur.className = 'compteur-car';
+    const majC = () => { const n = el.value.length; compteur.textContent = `${n} / ${max}`; compteur.hidden = n < max * 0.8; compteur.classList.toggle('plein', n >= max); };
+    el.addEventListener('input', majC);
+    setTimeout(() => { if (el.isConnected && !compteur.isConnected) { el.after(compteur); majC(); } }, 0);
+  }
   let attente = null;
   const valider = async () => {
     clearTimeout(attente);
@@ -107,7 +116,7 @@ export function champ(valeur, enregistrer, { multi = false, lecture = false, pla
     el.classList.add('envoi');
     try {
       await enregistrer(v);
-      initial = v;
+      initial = v; el.dataset.initial = v;
       el.classList.remove('envoi', 'echec');
       el.classList.add('ok');
       repereEnregistre(el);

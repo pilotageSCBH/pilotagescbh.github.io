@@ -562,6 +562,17 @@ function boutonRetour() {
   h('span', { class: 'fleche' }, '←'), possible ? 'Page précédente' : 'Ma page d’accueil');
 }
 window.addEventListener('hashchange', afficher);
+// enregistrement en cours (case en train d'être envoyée) : confirmation avant de fermer ou recharger la page
+window.addEventListener('beforeunload', (e) => {
+  const actif = document.activeElement;
+  if (document.querySelector('.champ.envoi') || (actif?.classList?.contains('champ') && !actif.readOnly && actif.dataset.initial !== undefined && actif.value !== actif.dataset.initial)) { e.preventDefault(); e.returnValue = ''; }
+});
+// lien « Haut de page » sur les pages longues
+const hautDePage = h('button', { class: 'haut-de-page ecran', type: 'button', title: 'Revenir en haut de la page', hidden: true, onclick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) }, '↑');
+document.body.append(hautDePage);
+window.addEventListener('scroll', () => { hautDePage.hidden = window.scrollY < 900; }, { passive: true });
+// affichage compact (petits écrans), réglé dans « Mon compte »
+try { document.documentElement.classList.toggle('compact', localStorage.getItem('pilotage-scbh-compact') === 'oui'); } catch { /* sans stockage */ }
 // Ctrl+K (⌘K sur Mac) : curseur dans la recherche du menu (le menu réduit est d'abord déplié)
 document.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'k') return;

@@ -2499,7 +2499,7 @@ table.seances thead th { position: sticky; top: 0; z-index: 3; }
 .sequence.repliee .tete-sequence { padding-bottom: 12px; }
 .volume-total { font-weight: 700; }
 .volume-total.ok { color: #2E7D32; } .volume-total.sous { color: #C77700; } .volume-total.depasse { color: #C62828; }
-.volume-total .lien { font-weight: 400; }
+.volume-total .lien { font-weight: 400; margin-left: 6px; }
 
 /* fiches : état, navigation, durée des phases */
 .etat-fiche { margin-left: 5px; font-size: 11px; }
@@ -2520,3 +2520,43 @@ tr.retour-ici td, section.retour-ici { animation: retourIci 2.2s ease-out; }
 
 /* espace élève : pastille « nouveau » */
 .pastille-nouveau { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; background: #E8893A; color: #fff; font-size: 10.5px; font-weight: 700; vertical-align: middle; letter-spacing: .02em; }
+
+/* séquençage : compteur, doublons, lien fiche */
+.compteur-car { display: block; text-align: right; font-size: 10.5px; color: #8A7A45; margin-top: 1px; }
+.compteur-car.plein { color: #C62828; font-weight: 700; }
+.compteur-car[hidden] { display: none; }
+a.code { text-decoration: none; color: inherit; cursor: pointer; }
+a.code:hover b { text-decoration: underline; }
+.code.doublon b, .ligne-cours-lie.doublon .cours-lie { box-shadow: 0 0 0 2px #E8A23A; }
+.marque-doublon { color: #C77700; font-style: normal; }
+.lien-fiche-seance { display: block; text-decoration: none; font-size: 13px; margin-top: 4px; opacity: .7; }
+.lien-fiche-seance:hover { opacity: 1; }
+.item-ref.cible-ref { animation: retourIci 2.5s ease-out; border-radius: 8px; }
+
+/* fiche de déroulement : déplacer / dupliquer une phase */
+.poignee-phase { display: block; cursor: grab; font-size: 16px; padding: 0 0 2px; }
+tr.cible-phase td { box-shadow: inset 0 3px 0 var(--anis); }
+.dupliquer-phase { display: block; margin: 2px auto 0; }
+
+/* progression : semaine en cours */
+tr.auj-ligne td.col-sem { box-shadow: inset 4px 0 0 #D2483B; background: #FDECEA; }
+tr.auj-ligne td.col-sem b { color: #D2483B; }
+/* haut de page */
+.haut-de-page { position: fixed; right: 22px; bottom: 80px; z-index: 20; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--teal); color: #fff;
+  font-size: 19px; font-weight: 800; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.2); }
+.haut-de-page:hover { background: var(--fonce); }
+/* affichage compact */
+html.compact { font-size: 14px; }
+html.compact body { font-size: 13px; }
+html.compact .champ { padding: 3px 5px; }
+html.compact table.seances td { padding: 2px 1px; font-size: 12px; }
+html.compact table.seances th { padding: 5px 4px; font-size: 11px; }
+html.compact .entete-page h1 { font-size: 22px; }
+html.compact .bloc, html.compact .sequence { margin-bottom: 14px; }
+html.compact .tete-sequence { padding: 8px 12px 2px; }
+html.compact .feuille { padding: 18px 22px; }
+html.compact .lien-menu { padding-top: 4px; padding-bottom: 4px; }
+
+/* espace élève : classement des documents */
+.choix-tri { display: inline-flex; gap: 4px; margin-right: 8px; }
+.choix-tri .btn.actif { background: var(--teal); color: #fff; border-color: var(--teal); }

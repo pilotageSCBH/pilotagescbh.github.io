@@ -262,6 +262,13 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
   // ------------------------------------------------------------------------------------- dessin
   let glisse = null;
   const garde = { x: 0, y: 0, t: 0 };
+  const estAujourdhui = (w) => { const t = new Date(); return t >= lundi(w) && t < jourDe(w, 7); };
+  let premierDessin = true;   // à l'ouverture : la page se place sur la semaine en cours
+  const allerAujourdhui = () => {
+    if (!premierDessin) return; premierDessin = false;
+    const c = zone.querySelector('tr.auj-ligne, .frise-sem.auj');
+    if (c) requestAnimationFrame(() => c.scrollIntoView({ block: 'center', inline: 'center' }));
+  };
   function dessiner() {
     const conteneur = zone.querySelector('.tableau-progression, .frise-defile');
     if (conteneur) { garde.x = conteneur.scrollLeft; garde.t = conteneur.scrollTop; garde.y = window.scrollY; }
@@ -312,7 +319,7 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       }
       const sem = semaines.get(w) || {};
       const vac = sem.vacances || '';
-      const tr = h('tr', { class: 'semaine' + (vac ? ' vac-' + cls(vac) : '') },
+      const tr = h('tr', { class: 'semaine' + (vac ? ' vac-' + cls(vac) : '') + (estAujourdhui(w) ? ' auj-ligne' : ''), title: estAujourdhui(w) ? 'Semaine en cours' : null },
         h('td', { class: 'col-sem' }, h('b', {}, 'S' + semaineIso(lundi(w))), h('span', {}, `${jj(lundi(w))} → ${jj(jourDe(w, 4))}`)),
         h('td', { class: 'col-jours' }, h('div', { class: 'jours' }, JOURS.map((l, k) => {
           const j = w * 7 + k, ev = jours.get(j) || '';
@@ -338,11 +345,13 @@ export async function pageProgression(zone, arg, ctx, opts = {}) {
       vider(zone, entete, legendeFrise(detail), detail && !eleve ? aPlacer(mats[0]) : null, f);
       f.scrollLeft = garde.x; f.scrollTop = garde.t;
       window.scrollTo(0, garde.y);
+      allerAujourdhui();
       return;
     }
     vider(zone, entete, legende, detail && !eleve ? aPlacer(mats[0]) : null, tableau);
     tableau.scrollLeft = garde.x; tableau.scrollTop = garde.t;
     window.scrollTo(0, garde.y);
+    allerAujourdhui();
   }
 
   // ------------------------------------------------------------------------------------- PDF A3 paysage

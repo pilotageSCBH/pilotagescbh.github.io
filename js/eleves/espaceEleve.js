@@ -487,9 +487,16 @@ async function pageDocuments(zone, arg, divers = false) {
     const racines = enfants(null).map((x) => noeud(x, 0)).filter(Boolean), libres = docsDe(null);
     return [...racines, libres.length ? h('div', { class: 'contenu-dossier racine' }, libres.map(ligneDocument)) : null];
   };
-  const outils = () => h('div', { class: 'outils-arbre' },
-    h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier'),
-    h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier'));
+  // classement : par dossiers ou les plus récents d'abord (ordre d'ajout), mémorisé sur cet appareil
+  const CLE_TRI = 'pilotage-scbh-eleve-tri-docs';
+  let recents = false; try { recents = localStorage.getItem(CLE_TRI) === 'recents'; } catch { /* sans stockage */ }
+  const outils = (avecDossiers) => h('div', { class: 'outils-arbre' },
+    h('div', { class: 'choix-tri', role: 'group', 'aria-label': 'Classement' },
+      h('button', { class: 'btn petit' + (!recents ? ' actif' : ''), type: 'button', onclick: () => { recents = false; try { localStorage.setItem(CLE_TRI, 'dossiers'); } catch { /* */ } dessiner(); } }, '📁 Par dossiers'),
+      h('button', { class: 'btn petit' + (recents ? ' actif' : ''), type: 'button', onclick: () => { recents = true; try { localStorage.setItem(CLE_TRI, 'recents'); } catch { /* */ } dessiner(); } }, '🕒 Plus récents')),
+    avecDossiers && !recents ? h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = true; }); } }, '▾ Tout déplier') : null,
+    avecDossiers && !recents ? h('button', { class: 'btn petit', type: 'button', onclick: () => { liste.querySelectorAll('details').forEach((d) => { d.open = false; }); } }, '▸ Tout replier') : null,
+    !apercu && [...ici.keys()].some(estNouveau) ? h('button', { class: 'btn petit', type: 'button', title: 'Retirer toutes les pastilles « nouveau »', onclick: () => { [...ici.keys()].forEach(marquerOuvert); dessiner(); } }, '✓ Marquer tout comme vu') : null);
   const nav = groupes.length ? ongletsMatieres(groupes, g?.cle, (x) => base + '/m-' + x.cle, (x) => x.ids.size) : null;
   const dessiner = () => {
     const t = sansAccent(champ.value).split(/\s+/).filter(Boolean);
@@ -498,7 +505,8 @@ async function pageDocuments(zone, arg, divers = false) {
     if (!t.length) {   // l'onglet de la matière choisie
       const docs = g ? [...g.ids].map((id) => ici.get(id)) : [];
       if (!docs.length) return vider(liste, h('p', { class: 'vide' }, `Aucun document publié en ${g?.nom || 'cette matière'} pour l’instant.`));
-      return vider(liste, D.dossiers.size ? outils() : null, arbre(docs, t));
+      if (recents) return vider(liste, outils(false), h('div', { class: 'contenu-dossier racine liste-recents' }, docs.slice().sort((a, b) => b.id - a.id).map(ligneDocument)));
+      return vider(liste, outils(D.dossiers.size > 0), arbre(docs, t));
     }
     // recherche : dans toutes les matières, résultats rangés par matière
     const blocs = groupes.map((x) => { const docs = [...x.ids].map((id) => ici.get(id)).filter((d) => trouve(d, t)); return docs.length ? h('section', { class: 'matiere-docs', style: x.couleur ? { '--couleur': x.couleur } : null }, h('h2', { class: 'titre-matiere-docs' }, x.nom), arbre(docs, t)) : null; }).filter(Boolean);
