@@ -2,7 +2,7 @@
 // - contrats sommatifs : une rubrique par compétence des séances de la séquence (ajout des nouvelles, retrait des anciennes) ;
 // - contrats formatifs : une rubrique par objectif opérationnel de la séance (critères = résultats attendus de la tâche citée) ;
 // - fiches de préparation : « Activités et tâches visées » = tâches citées dans les séances [A1-T1] (si elles en citent) ;
-// - en option, prérequis des fiches (préparation et déroulement) = séances prérequises du séquençage.
+// - en option, prérequis des fiches de préparation = séances prérequises du séquençage (les fiches de déroulement les lisent directement).
 // Une rubrique devenue inutile est supprimée, sauf si des notes y sont saisies ou si un QCM est couplé au contrat :
 // elle est alors seulement « retirée » (masquée, récupérable avec « Voir les critères retirés »).
 import { db } from './api.js';
@@ -105,11 +105,7 @@ async function analyser(m, ctx, ref) {
     const autresSeq = [...new Set(xs.map((x) => x.prerequis_texte).filter(Boolean))];
     const txtSeq = [...preSeq.map((v) => '- ' + v.txt), ...autresSeq.map((t) => '- ' + t)].join('\n');
     if (txtSeq && txtSeq !== (fs.prerequis || '')) p.prerequis.push({ lib: `Fiche de préparation ${s.numero}`, faire: () => db.enregistrer('fiches_sequence', [{ sequence_id: s.id, prerequis: txtSeq }], 'sequence_id') });
-    for (const x of xs) {
-      const fx = fichesX.find((f) => f.seance_id === x.id) || {};
-      const txt = [...(x.prerequis || []).map(libPre).filter(Boolean).map((v) => '- ' + v.txt), ...(x.prerequis_texte ? ['- ' + x.prerequis_texte] : [])].join('\n');
-      if (txt && txt !== (fx.prerequis || '')) p.prerequis.push({ lib: `Fiche de déroulement ${s.numero}.${x.numero}`, faire: () => db.enregistrer('fiches_seance', [{ seance_id: x.id, prerequis: txt }], 'seance_id') });
-    }
+    // (fiches de déroulement : les prérequis sont lus directement dans le séquençage)
     plan.push(p);
   }
   return plan;
@@ -139,7 +135,7 @@ export async function mettreAJourFiches(m, ctx, { apresImport = false } = {}) {
       h('small', {}, 'Fiches de préparation : remplacées par les tâches citées entre crochets dans les objectifs opérationnels, ex. [A1-T1].'
         + (sansTaches.length ? ` Séquence(s) ${sansTaches.join(', ')} : aucune tâche citée, rubrique laissée telle quelle.` : '')))),
     h('label', { class: 'case-maj' }, cPre, h('span', {}, h('b', {}, `Prérequis (${nbPre})`),
-      h('small', {}, 'Fiches de préparation et de déroulement : remplacés par les séances prérequises du séquençage (ce que vous y avez écrit est remplacé).'))),
+      h('small', {}, 'Fiches de préparation : remplacés par les séances prérequises du séquençage (ce que vous y avez écrit est remplacé). Les fiches de déroulement reprennent toujours le séquençage.'))),
     retenus.length ? h('p', { class: 'avert-import' }, `⚠ ${retenus.length} rubrique(s) notée(s) ou liée(s) à un QCM ne sont pas supprimées mais retirées (récupérables) : ${retenus.join(' · ')}`) : null,
     h('p', { class: 'aide' }, 'Situation, modalités, ressources, phases de déroulement et bilans ne sont pas modifiés. Les contrats pas encore ouverts seront créés d’après le nouveau séquençage à leur ouverture.')),
   [{ texte: apresImport ? 'Plus tard' : 'Annuler', valeur: false }, { texte: '↻  Mettre à jour', classe: 'principal', valeur: true }], { large: true });

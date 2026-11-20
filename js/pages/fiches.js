@@ -35,6 +35,7 @@ export async function pageFiches(zone, arg, ctx) {
   const m = ctx.matieres.find((x) => x.id === sq.matiere_id);
   const ref = await ctx.referentiel();
   const modif = ctx.peutMatiere(m.id);
+  const modifSeance = ctx.enseigne(m.id);   // le séquençage (prérequis, ressources) : enseignants de la matière
   const [seances, toutes, eleves, fs] = await Promise.all([
     libre ? [libre] : db.lire('seances', `sequence_id=eq.${sq.id}&order=numero`),
     libre ? [] : db.lire('sequences', `matiere_id=eq.${m.id}&promotion_id=eq.${sq.promotion_id}&order=numero`),
@@ -240,7 +241,10 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
       return { t: `${ctx.codeMat(mm)} ${q?.numero}.${y.numero} · ${y.titre || 'sans titre'}`, r: [ctx.matieres.indexOf(mm), q?.numero, y.numero] }; })
       .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.r[2] - b.r[2]).map((l) => l.t);
     if (x.prerequis_texte) lignesPre.push(x.prerequis_texte);
-    const CHAMPS_F = [['salle', 'Salle', 'salle ou atelier'], ['prerequis', 'Prérequis', 'prérequis des étudiants'], ['materiel', 'Matériel et ressources', 'matériel, documents, logiciels'],
+    // « Matériel et ressources » = la colonne Ressources du séquençage (même séance) quand le script 42 est installé
+    const partage = 'ressources' in x && modifSeance;
+    const valeurF = (k) => (k === 'materiel' && 'ressources' in x ? x.ressources : f[k]);
+    const CHAMPS_F = [['salle', 'Salle', 'salle ou atelier'], ['materiel', 'Matériel et ressources', 'matériel, documents, logiciels'],
       ['evaluation', 'Évaluation', 'comment les acquis sont vérifiés pendant ou en fin de séance'], ['differenciation', 'Différenciation', 'adaptations scolaires / apprentis, aides, approfondissements']];
     const phasesVides = () => phases.every((p) => !(p.phase || p.activite || p.enseignant || p.eleves || p.duree));
     const ia = modif ? boutonIA(() => ({
@@ -265,7 +269,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         const fb = B.find((b) => b.nom === 'FICHE');
         if (fb) {
           const c = champs(fb.corps, Object.fromEntries(CHAMPS_F.map(([k, n]) => [k, [n, n.replace(/ .*/, ''), k]])));
-          for (const [k, n] of CHAMPS_F) if (c[k]) { data.fiche[k] = c[k]; items.push({ cle: 'f-' + k, titre: n, detail: resume(c[k]) + (f[k] ? ' (déjà rempli)' : '') }); }
+          for (const [k, n] of CHAMPS_F) if (c[k]) { data.fiche[k] = c[k]; items.push({ cle: 'f-' + k, titre: n, detail: resume(c[k]) + (valeurF(k) ? ' (déjà rempli)' : '') }); }
         }
         B.filter((b) => b.nom === 'PHASE').forEach((b) => {
           const c = champs(b.corps, { phase: ['Intitulé', 'Intitulé de la phase', 'Titre', 'Phase'], duree: ['Durée'], activite: ['Activité', 'Activités', 'Activité proposée'],
@@ -279,7 +283,9 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
       },
       appliquer: async (d, coches, remplacer) => {
         const patch = { seance_id: x.id };
-        for (const [k] of CHAMPS_F) if (coches.has('f-' + k) && aEcrire(f[k], d.fiche[k], remplacer)) patch[k] = d.fiche[k];
+        for (const [k] of CHAMPS_F) if (coches.has('f-' + k) && aEcrire(valeurF(k), d.fiche[k], remplacer)) {
+          if (k === 'materiel' && partage) { await db.modifier('seances', x.id, { ressources: d.fiche[k] }); x.ressources = d.fiche[k]; } else patch[k] = d.fiche[k];
+        }
         const nouvelles = d.phases.filter((_, i) => coches.has('p-' + i));
         // phases : remplacent un déroulement vide (ou tout le déroulement si « Remplacer » est coché), sinon s'ajoutent à la suite
         if (nouvelles.length) {
@@ -302,12 +308,10 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         h('div', { class: 'rubrique' }, h('h3', {}, 'Cours mobilisés'), h('p', { class: 'pre' }, coursMobilises(x) || '—')),
         h('div', { class: 'deux' }, h('div', { class: 'rubrique' }, h('h3', {}, 'Compétences'), codes(x.competences, ref.comp)),
           h('div', { class: 'rubrique' }, h('h3', {}, 'Savoirs associés'), codes(x.savoirs, ref.sav))),
-        lignesPre.length ? h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis (séquençage)'), h('p', { class: 'pre' }, lignesPre.join('\n'))) : null,
-        h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), ressourcesSeance(x)
-          ? h('div', { class: 'rubrique' }, h('h3', {}, 'Matériel et ressources'),
-              h('div', { class: 'ressources-seq' }, h('span', { class: 'lib-auto' }, 'Ressources du séquençage'), h('p', { class: 'pre' }, ressourcesSeance(x))),
-              champ(f.materiel || '', maj('materiel'), { multi: true, lecture: !modif, placeholder: modif ? 'autre matériel, documents, logiciels…' : '' }))
-          : zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
+        h('div', { class: 'deux' },
+          h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis'), h('p', { class: 'pre auto-seq' }, [...lignesPre, ...(f.prerequis ? [f.prerequis] : [])].join('\n') || '—'),
+            h('p', { class: 'aide ecran' }, 'Repris du séquençage (séances prérequises et autres prérequis) : à modifier dans le séquençage.')),
+          rubriqueRessources(x, f)),
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
@@ -323,6 +327,27 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
       h('p', { class: 'aide ecran' }, libre ? 'La fiche contrat formatif de cette séance est dans l’onglet « Fiche contrat formatif ».' : 'La fiche contrat formatif de cette séance est dans l’onglet « Fiches contrats ».'));
     dessinerPhases();
     ajusterTout(fiche);
+  }
+
+  // « Matériel et ressources » : même contenu que la colonne Ressources du séquençage (documents de Mes ressources diverses
+  // cochés + saisie libre) ; modifier ici modifie le séquençage (et le partage aux élèves des documents Nuage)
+  function rubriqueRessources(x, f) {
+    if (!('ressources' in x)) return zoneTexte('Matériel et ressources', f.materiel, (v) => db.enregistrer('fiches_seance', [{ seance_id: x.id, materiel: v }], 'seance_id'));
+    const zone = h('div', { class: 'rubrique' });
+    const docs = () => (x.cours_lies || []).filter((c) => c.espace === 'divers');
+    const dessinerR = () => vider(zone, h('h3', {}, 'Matériel et ressources'),
+      docs().length ? h('div', { class: 'cours-lies docs-ressources' }, docs().map((c) => h('div', { class: 'ligne-cours-lie' },
+        h('a', { class: 'cours-lie', href: '#/divers/l-' + c.id, title: 'Ouvrir la fiche du document' }, '📄 ' + c.titre)))) : null,
+      champ(x.ressources || '', async (v) => { await db.modifier('seances', x.id, { ressources: v }); x.ressources = v; },
+        { multi: true, lecture: !modifSeance, placeholder: modifSeance ? 'matériel, documents, vidéos, liens, logiciels…' : '' }),
+      f.materiel ? h('p', { class: 'pre' }, f.materiel) : null,
+      modifSeance ? h('button', { class: 'lien petit ecran', onclick: async () => {
+        const { choisirDocuments } = await import('../choixDocuments.js');
+        if (await choisirDocuments(ctx, ref, x, 'divers')) { dessinerR(); ajusterTout(zone); }
+      } }, docs().length ? '✎ ressources de la liste' : '＋ depuis mes ressources') : null,
+      h('p', { class: 'aide ecran' }, 'Identique à la colonne « Ressources » du séquençage : une modification ici s’y reporte (et les documents cochés sont partagés avec les élèves).'));
+    dessinerR();
+    return zone;
   }
 
   // ------------------------------------------------------------------------------------- séance : travail à la maison (option)
@@ -589,7 +614,7 @@ export async function modelesSequence(S, ctx, choisis) {
           ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
         R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', coursMobilises(x), { gris: true }),
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
-        lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', [ressourcesSeance(x), f.materiel].filter((t) => t && String(t).trim()).join('\n')),
+        R('Prérequis', [...lPre, ...(f.prerequis ? [f.prerequis] : [])].join('\n') || '—', { gris: true }), R('Matériel et ressources', [ressourcesSeance(x), f.materiel].filter((t) => t && String(t).trim()).join('\n')),
         maison(f.maison_avant, 'avant'),
         { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'Activité', part: 52 }, { titre: 'Rôle de l’enseignant', part: 24 }, { titre: 'Rôle des élèves', part: 24 }],
         lignes: (f.phases || []).flatMap((p, i) => [{ groupe: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''}${p.duree ? '   (' + p.duree + ')' : ''}` },

@@ -2484,3 +2484,7 @@ table.decisions select.champ { min-width: 220px; }
 .ressources-seq { background: var(--auto, #EEF1F0); border-radius: 6px; padding: 6px 9px; margin-bottom: 6px; }
 .ressources-seq .lib-auto { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #6B7A78; margin-bottom: 2px; }
 .ressources-seq p { margin: 0; }
+
+/* fiche de déroulement : prérequis repris du séquençage (non modifiables ici) */
+.rubrique .pre.auto-seq { background: var(--auto, #EEF1F0); border-radius: 6px; padding: 6px 9px; margin: 0; }
+.docs-ressources { margin-bottom: 4px; }

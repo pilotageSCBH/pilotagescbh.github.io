@@ -4,6 +4,7 @@
 -- reliés, dans cours_lies avec l'espace « divers » : ils sont donc partagés automatiquement avec les élèves de la
 -- promotion, rubrique « Mes ressources diverses », selon le réglage de partage automatique de leur propriétaire).
 -- Les copies (reprise d'une promotion, duplication d'une séquence ou d'une séance) gardent les ressources.
+-- Fiches de déroulement : leur matériel et leurs prérequis écrits à la main sont reportés dans le séquençage.
 -- À exécuter une fois dans Supabase (SQL Editor → New query → Run), après le script 41. Relancer ne casse rien.
 -- =====================================================================================================
 
@@ -13,6 +14,16 @@ do $$ begin
     alter table public.seances add constraint seances_ressources_taille check (length(ressources) <= 4000);
   end if;
 end $$;
+
+-- fiches de déroulement : « Matériel et ressources » = colonne Ressources de la séance (modifiable des deux côtés) et
+-- « Prérequis » = prérequis du séquençage (non modifiables dans la fiche). Ce qui avait été écrit dans les fiches est
+-- reporté dans le séquençage (à la suite de ce qui y est déjà), puis retiré de la fiche : rien n'est perdu.
+update public.seances x set ressources = left(concat_ws(E'\n', nullif(x.ressources, ''), trim(f.materiel)), 4000)
+  from public.fiches_seance f where f.seance_id = x.id and trim(f.materiel) <> '';
+update public.fiches_seance set materiel = '' where trim(materiel) <> '';
+update public.seances x set prerequis_texte = concat_ws(E'\n', nullif(x.prerequis_texte, ''), trim(f.prerequis))
+  from public.fiches_seance f where f.seance_id = x.id and trim(f.prerequis) <> '';
+update public.fiches_seance set prerequis = '' where trim(prerequis) <> '';
 
 -- copies de séances : la colonne ressources suit (fonctions du script 24, complétées)
 create or replace function public.copier_promotion(source bigint, cible bigint, sequencages boolean, calendrier boolean,
