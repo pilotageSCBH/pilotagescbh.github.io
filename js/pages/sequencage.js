@@ -6,6 +6,7 @@ import { boutonIA, champs, codesDans, enListe, nombreDe, listeCompetences, liste
 import { h, vider, champ, toast, erreur, confirmer, fenetre, nombre, heures, ajusterTout, imprimer } from '../ui.js';
 
 const DUREE_DEFAUT = 4;   // durée d'une nouvelle séance (h)
+const SEUIL_SEANCES = 8;  // au-delà, le nombre de séances de la séquence est signalé
 
 export async function pageSequencage(zone, id, ctx) {
   const m = ctx.matieres.find((x) => String(x.id) === String(id));
@@ -16,6 +17,7 @@ export async function pageSequencage(zone, id, ctx) {
 
   // toutes les séances de la promotion (toutes matières) : pour choisir et afficher les prérequis
   let toutes = new Map();
+  let fichesDer = new Map();   // fiches de déroulement des séances de la matière (aperçu au survol du 📝)
   async function charger() {
     const tousSeq = await db.lire('sequences', `promotion_id=eq.${ctx.promo.id}&order=matiere_id,numero`);
     const ids = tousSeq.map((s) => s.id);
@@ -25,6 +27,11 @@ export async function pageSequencage(zone, id, ctx) {
     const sequences = tousSeq.filter((s) => s.matiere_id === m.id).sort((a, b) => a.numero - b.numero);
     const mes = new Set(sequences.map((s) => s.id));
     const seances = tout.filter((x) => mes.has(x.sequence_id)).sort((a, b) => a.numero - b.numero);
+    fichesDer = new Map();
+    for (let i = 0; i < seances.length; i += 150) {
+      const lot = seances.slice(i, i + 150).map((x) => x.id);
+      for (const f of await db.lire('fiches_seance', `seance_id=in.(${lot.join(',')})`).catch(() => [])) fichesDer.set(f.seance_id, f);
+    }
     return { sequences, seances };
   }
   // séquences repliées : mémorisées sur cet appareil, par promotion et matière
@@ -39,6 +46,29 @@ export async function pageSequencage(zone, id, ctx) {
   const etiquette = (y) => `${ctx.codeMat(y.mat)} ${y.seq.numero}.${y.numero}`;
   const rangMat = (y) => ctx.matieres.findIndex((z) => z.id === y.mat?.id);
   const trier = (a, b) => rangMat(a) - rangMat(b) || a.seq.numero - b.seq.numero || a.numero - b.numero;
+
+  // recherche dans la page : séances contenant tous les mots (titre, objectifs, cours, ressources, codes…)
+  const compteRech = h('span', { class: 'compte-recherche' });
+  const champRecherche = h('label', { class: 'recherche-seq' }, '🔎', h('input', { type: 'search', placeholder: 'Chercher dans le séquençage…', 'aria-label': 'Chercher dans le séquençage',
+    oninput: () => surligner(), onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); suivante(); } } }), compteRech);
+  let rangTrouvee = -1;
+  function surligner(defiler = true) {
+    const q = sansAccent(champRecherche.querySelector('input').value).split(/\s+/).filter(Boolean);
+    const lignes = [...zone.querySelectorAll('table.seances tbody tr[data-id]')];
+    let n = 0; rangTrouvee = -1;
+    for (const tr of lignes) {
+      const t = sansAccent([tr.textContent, ...[...tr.querySelectorAll('textarea, input, select')].map((c) => c.value)].join(' '));
+      const ok = q.length && q.every((m) => t.includes(m));
+      tr.classList.toggle('trouvee', !!ok); tr.classList.toggle('estompee', q.length > 0 && !ok);
+      if (ok) { n++; tr.closest('.sequence')?.classList.remove('repliee'); }
+    }
+    compteRech.textContent = q.length ? `${n} séance(s)` : '';
+    if (n && defiler) suivante();
+  }
+  function suivante() {
+    const l = [...zone.querySelectorAll('tr.trouvee')]; if (!l.length) return;
+    rangTrouvee = (rangTrouvee + 1) % l.length; l[rangTrouvee].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 
   async function dessiner() {
     const { sequences, seances } = await charger();
@@ -55,6 +85,7 @@ export async function pageSequencage(zone, id, ctx) {
             `  ·  ${sequences.length} séquence(s)  ·  ${tot.length} séance(s)  ·  `, volumeTotal(totH))),
         h('div', { class: 'actions-page' },
           modif ? boutonAnnuler(ctx, 'sequencage') : null,
+          sequences.length ? champRecherche : null,
           sequences.length > 1 ? h('button', { class: 'btn', title: 'Replier ou déplier toutes les séquences', onclick: () => {
             const tout = repliees.size < sequences.length;
             sequences.forEach((q) => (tout ? repliees.add(q.id) : repliees.delete(q.id))); memoRepliees();
@@ -73,6 +104,7 @@ export async function pageSequencage(zone, id, ctx) {
       sequences.length === 0 ? await videPromotion() : null);
     ajusterTout(zone);
     window.scrollTo(0, garde);
+    if (champRecherche.querySelector('input').value.trim()) surligner(false);   // la recherche en cours reste surlignée
     // retour depuis une fiche : la page se place sur la séance (ou la séquence) qu'on venait de quitter
     let r = null; try { r = JSON.parse(sessionStorage.getItem('pilotage-scbh-retour-seq') || 'null'); if (r?.m === m.id) sessionStorage.removeItem('pilotage-scbh-retour-seq'); } catch { /* sans stockage */ }
     if (r && r.m === m.id && !retourFait) {
@@ -112,7 +144,7 @@ export async function pageSequencage(zone, id, ctx) {
             e.currentTarget.title = r ? 'Déplier la séquence' : 'Replier la séquence'; e.currentTarget.setAttribute('aria-expanded', String(!r)); if (!r) ajusterTout(sec); } }, '▾'),
         h('div', { class: 'num-sequence' }, 'SÉQUENCE ' + s.numero),
         champ(s.intitule, maj('intitule'), { lecture: !modif, placeholder: 'Intitulé de la séquence', classe: 'intitule' }),
-        h('div', { class: 'resume' }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
+        h('div', { class: 'resume' + (remplies.length > SEUIL_SEANCES ? ' trop' : ''), title: remplies.length > SEUIL_SEANCES ? `Plus de ${SEUIL_SEANCES} séances : séquence peut-être trop longue (à découper ?)` : null }, `${remplies.length} séance(s) · ${heures(hrs) || '0 h'}`),
         h('a', { class: 'btn petit fiches', href: `#/fiches/${s.id}` }, '▶ Fiches'),
         modif ? boutonIA(iaSequence(s, seances), 'btn petit') : null,
         mesMatieres.length ? h('button', { class: 'btn petit', title: 'Dupliquer la séquence (séances, fiches et contrats) vers une de vos matières, dans cette promotion ou une autre', onclick: () => dupliquerSequence(s) }, '⧉ Dupliquer') : null,
@@ -139,7 +171,11 @@ export async function pageSequencage(zone, id, ctx) {
     const tr = h('tr', { 'data-id': x.id },
       h('td', { class: 'poignee-cell' }, modif ? h('span', { class: 'poignee', title: 'Glisser pour déplacer la séance' }, '⠿') : null),
       h('td', { class: 'num' }, `${s.numero}.${x.numero}`,
-        h('a', { class: 'lien-fiche-seance ecran', href: `#/fiches/${s.id}:seance-${x.id}`, title: 'Ouvrir la fiche de déroulement de cette séance' }, '📝'),
+        (() => {
+          const f = fichesDer.get(x.id), ph = (Array.isArray(f?.phases) ? f.phases : []).filter((p) => p.phase || p.activite);
+          const t = ph.length ? `Fiche de déroulement · ${ph.length} phase(s) :\n${ph.map((p, i) => `${i + 1}. ${p.phase || 'sans intitulé'}${p.duree ? ' (' + p.duree + ')' : ''}`).join('\n')}` : 'Fiche de déroulement vide : cliquer pour la rédiger';
+          return h('a', { class: 'lien-fiche-seance ecran' + (ph.length ? ' pleine' : ' vide'), href: `#/fiches/${s.id}:seance-${x.id}`, title: t }, '📝');
+        })(),
         mesMatieres.length ? h('button', { class: 'icone petit dupliquer', title: 'Dupliquer la séance (avec sa fiche et son contrat formatif) à la fin d’une autre séquence', onclick: () => dupliquerSeance(s, x) }, '⧉') : null,
         modif ? h('div', { class: 'mini-actions' },
           h('button', { class: 'icone petit', title: 'Insérer une séance après celle-ci', onclick: () => insererSeance(s, x) }, '＋'),

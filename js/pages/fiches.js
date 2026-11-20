@@ -99,7 +99,24 @@ export async function pageFiches(zone, arg, ctx) {
   const onglets = libre ? [[`seance-${libre.id}`, '📝  Fiche de déroulement', 'deroulement'], [`formatif-${libre.id}`, '✅  Fiche contrat formatif', 'contrats']]
     : [['preparation', `📋  Fiche de préparation ${prepaRemplie ? '✓' : '○'}`, 'preparation'], [premiereSeance, `📝  Fiches de déroulement (${seances.length})`, 'deroulement'],
       ['sommatif', `✅  Fiches contrats (${seances.length + 1})`, 'contrats']];
+  // contrats de la séquence sans date d'évaluation
+  let sansDate = [];
+  if (!libre) {
+    try {
+      const cs = [...await db.lire('contrats', `type=eq.sommatif&sequence_id=eq.${sq.id}`),
+        ...(seances.length ? await db.lire('contrats', `type=eq.formatif&seance_id=in.(${seances.map((x) => x.id).join(',')})`) : [])];
+      sansDate = cs.filter((c) => !c.date_eval).map((c) => (c.type === 'sommatif' ? { lib: 'sommatif', o: 'sommatif' } : { lib: numSeance(sq, seances.find((x) => x.id === c.seance_id) || { numero: '?' }), o: 'formatif-' + c.seance_id }));
+    } catch { /* simple rappel */ }
+  }
+  const ongletLib = groupe === 'preparation' ? 'Fiche de préparation' : groupe === 'deroulement' ? 'Fiche de déroulement' : 'Fiches contrats';
+  const seanceCourante = idSeance ? seances.find((x) => String(x.id) === idSeance) : null;
   vider(zone,
+    h('nav', { class: 'ariane-fiches ecran', 'aria-label': 'Fil d’Ariane' },
+      h('a', { href: '#/fiches/' + (groupe === 'contrats' ? 'formatifs' : groupe) }, 'Documents pédagogiques'), ' › ',
+      h('a', { href: libre ? '#/seances-hors' : '#/sequencage/' + m.id }, m.nom), ' › ',
+      libre ? h('span', {}, 'Séance hors séquence') : h('a', { href: lien('preparation') }, `Séquence ${sq.numero}`),
+      seanceCourante && !libre ? [' › ', h('span', {}, `Séance ${numSeance(sq, seanceCourante)}`)] : null,
+      ' › ', h('b', {}, ongletLib)),
     h('header', { class: 'entete-page ecran' },
       h('div', {}, h('h1', {}, h('span', { class: 'pastille', style: { background: m.couleur } }), libre ? `Séance hors séquence · ${libre.titre || 'sans titre'}` : `Séquence ${sq.numero} · ${sq.intitule || 'sans intitulé'}`),
         h('p', { class: 'sous-titre' }, `${m.nom}  ·  Promotion ${promo}  ·  ${volume}`)),
@@ -114,6 +131,8 @@ export async function pageFiches(zone, arg, ctx) {
     h('nav', { class: 'onglets ecran' }, onglets.map(([k, t, g]) => h('a', { href: lien(k), class: g === groupe ? 'actif' : '' }, t))),
     sousOnglets(),
     naviSeances(),
+    sansDate.length && modif ? h('p', { class: 'rappel-dates ecran' }, `📅 ${sansDate.length} fiche(s) contrat sans date d’évaluation : `,
+      sansDate.map((d, i) => [i ? ', ' : '', h('a', { href: lien(d.o) }, d.lib)])) : null,
     !modif ? h('p', { class: 'badge-lecture ecran' }, 'Consultation seule : vous n’enseignez pas cette matière.') : null,
     h('div', { id: 'fiche' }, h('div', { class: 'chargement' }, 'Chargement…')));
   const fiche = zone.querySelector('#fiche');
@@ -270,6 +289,28 @@ ${seances.map((x) => `- Séance ${numSeance(sq, x)} · ${x.titre || 'sans titre'
       ajusterTout(tablePhases);
       majTotalPhases();
     };
+    // reprendre les phases d'une autre séance de la matière (toutes promotions) dans une fiche vide
+    async function reprendreDeroulement() {
+      try {
+        const seqs = await db.lire('sequences', `matiere_id=eq.${m.id}&order=promotion_id.desc,numero`);
+        const xs = seqs.length ? await db.lire('seances', `sequence_id=in.(${seqs.map((q) => q.id).join(',')})&order=numero`) : [];
+        const fs = xs.length ? await db.lire('fiches_seance', `seance_id=in.(${xs.filter((y) => y.id !== x.id).map((y) => y.id).join(',') || 0})`) : [];
+        const pleines = fs.filter((f) => Array.isArray(f.phases) && f.phases.some((p) => p.phase || p.activite));
+        if (!pleines.length) { toast('Aucune autre fiche de déroulement rédigée dans cette matière'); return; }
+        const choix = h('select', { class: 'champ' }, pleines.map((f) => { const y = xs.find((z) => z.id === f.seance_id), q = seqs.find((z) => z.id === y?.sequence_id);
+          const pr = ctx.promotions.find((p) => p.id === q?.promotion_id)?.libelle || '';
+          return { f, lib: `${q?.promotion_id !== sq.promotion_id ? pr + ' · ' : ''}Séance ${q?.numero}.${y?.numero} · ${y?.titre || 'sans titre'} (${f.phases.filter((p) => p.phase || p.activite).length} phases)`, cle: (q?.promotion_id === sq.promotion_id ? 0 : 1) * 1e6 + (q?.numero || 0) * 100 + (y?.numero || 0) }; })
+          .sort((a, b) => a.cle - b.cle).map((o) => h('option', { value: o.f.seance_id }, o.lib)));
+        const ok = await fenetre('Reprendre le déroulement d’une autre séance', h('div', { class: 'formulaire' },
+          h('label', { class: 'large' }, 'Séance dont on copie les phases', choix),
+          h('p', { class: 'aide' }, 'Les phases (intitulés, durées, activités, rôles, liens) sont copiées dans cette fiche ; vous pourrez ensuite les adapter. La fiche d’origine ne change pas.')),
+        [{ texte: 'Annuler', valeur: false }, { texte: '⧉  Copier les phases', classe: 'principal', valeur: true }]);
+        if (!ok) return;
+        const src = pleines.find((f) => String(f.seance_id) === choix.value);
+        phases = src.phases.filter((p) => p.phase || p.activite || p.enseignant || p.eleves).map((p) => ({ ...phaseVide(), ...p, id: idPhase() }));
+        await sauverPhases(); await seance(x); toast(`${phases.length} phase(s) reprise(s)`);
+      } catch (e) { erreur(e); }
+    }
     // déplacement d'une phase : on la lâche sur une autre phase (elle prend sa place)
     let phaseGlissee = null;
     const phaseSous = (e) => { const tr = e.target.closest('tr'); let t = tr; while (t && !t.dataset.phase) t = t.previousElementSibling; return t ? Number(t.dataset.phase) : null; };
@@ -388,6 +429,7 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
           modif ? h('div', { class: 'ajout-phases ecran' },
             h('button', { class: 'btn petit', onclick: () => inserer(0) }, '＋ phase au début'),
             h('button', { class: 'btn petit', onclick: () => inserer(phases.length) }, '＋ phase à la fin'),
+            phasesVides() ? h('button', { class: 'btn petit', title: 'Copier ici les phases d’une autre séance (de cette promotion ou d’une précédente)', onclick: reprendreDeroulement }, '⧉ Reprendre le déroulement de…') : null,
             h('span', { class: 'aide' }, 'ou « ＋ insérer une phase ici » entre deux phases.')) : null),
         cadreMaison(x, f, 'apres'),
         zoneTexte('Évaluation', f.evaluation, maj('evaluation')),

@@ -134,6 +134,14 @@ export async function pageAccueil(zone, _arg, ctx) {
         h('label', { class: 'hero-promo' }, h('span', {}, 'Promotion affichée'), choixPromotion('grand')))),
 
     blocSauvegarde, blocPremiersPas,
+    // ---------------------------------------------------------------- récemment ouverts (mémorisés sur cet appareil)
+    (() => {
+      let l = []; try { l = JSON.parse(localStorage.getItem('pilotage-scbh-recents-' + P.id) || '[]').slice(0, 5); } catch { /* sans stockage */ }
+      if (!l.length) return null;
+      const ic = { sequencage: '📘', fiches: '📝', 'seances-hors': '🧩', contrats: '📌', progression: '▦', cours: '🎓', divers: '🗂', biblio: '📖', qcm: '📝' };
+      return h('section', { class: 'bloc-accueil recents-accueil' }, h('h2', { class: 'titre-accueil' }, 'Récemment ouverts'),
+        h('div', { class: 'liste-recents-accueil' }, l.map((x) => h('a', { href: x.hash }, h('span', {}, ic[x.page] || '•'), x.titre))));
+    })(),
     // ---------------------------------------------------------------- accès rapides
     h('section', { class: 'bloc-accueil' },
       h('h2', { class: 'titre-accueil' }, 'Accès rapides'),

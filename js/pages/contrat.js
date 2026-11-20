@@ -177,14 +177,31 @@ export async function dessinerContrat(zone, opts) {
     const classe = (x) => 'note-sel n' + (x === '' ? 'vide' : x === 'NE' ? 'ne' : x);
     if (!v && !concerne(e, contrat.date_eval)) return h('td', { class: 'note hors', title: `${e.nom} ${e.prenom} est arrivé(e) dans la promotion après cette évaluation : non concerné(e)` }, 'n.c.');
     if (!modif || !k.actif) return h('td', { class: 'note' }, h('span', { class: classe(v) }, v));
-    const s = h('select', { class: classe(v), title: `${e.nom} ${e.prenom}` }, ['', '0', '1', '2', '3', '4', '5', 'NE'].map((o) => h('option', { value: o, selected: o === v }, o)));
+    const s = h('select', { class: classe(v), title: `${e.nom} ${e.prenom} · au clavier : 0 à 5, N = non évalué, Suppr = vider, Entrée = élève suivant`, 'data-cle': cle },
+      ['', '0', '1', '2', '3', '4', '5', 'NE'].map((o) => h('option', { value: o, selected: o === v }, o)));
+    // saisie au clavier : 0 à 5, N (non évalué), Suppr / Retour arrière (vider), Entrée (élève suivant), Maj+Entrée (précédent)
+    s.addEventListener('keydown', (ev) => {
+      const k2 = ev.key;
+      const choisir = (val) => { ev.preventDefault(); if (s.value !== val) { s.value = val; s.dispatchEvent(new Event('change')); } };
+      if (/^[0-5]$/.test(k2)) return choisir(k2);
+      if (k2 === 'n' || k2 === 'N') return choisir('NE');
+      if (k2 === 'Delete' || k2 === 'Backspace') return choisir('');
+      if (k2 === 'Enter') {
+        ev.preventDefault();
+        const toutes = [...zone.querySelectorAll('select[data-cle]')];
+        const i = toutes.findIndex((x) => x.dataset.cle === cle);
+        toutes[i + (ev.shiftKey ? -1 : 1)]?.focus();
+      }
+    });
     s.addEventListener('change', async () => {
       const nv = s.value;
       try {
         if (nv === '') await db.supprimer('notes', k.id, `eleve_id=eq.${e.id}&critere_id`).catch(() => {});
         else await db.enregistrer('notes', [{ critere_id: k.id, eleve_id: e.id, valeur: nv }], 'critere_id,eleve_id');
         if (nv === '') notes.delete(cle); else notes.set(cle, nv);
+        const avaitFocus = document.activeElement === s;
         dessiner();
+        if (avaitFocus) zone.querySelector(`select[data-cle="${cle}"]`)?.focus();   // la saisie au clavier continue
       } catch (x) { erreur(x); s.value = v; }
     });
     return h('td', { class: 'note' }, s);

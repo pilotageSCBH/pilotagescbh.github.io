@@ -2560,3 +2560,26 @@ html.compact .lien-menu { padding-top: 4px; padding-bottom: 4px; }
 /* espace élève : classement des documents */
 .choix-tri { display: inline-flex; gap: 4px; margin-right: 8px; }
 .choix-tri .btn.actif { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+/* séquençage : la durée s'affiche en entier dans sa case */
+table.seances td select.champ { padding: 4px 0 4px 4px; font-size: 12.5px; text-overflow: clip; min-width: 0; }
+
+/* séquençage : recherche dans la page, fiche vide, séquence longue */
+.recherche-seq { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--ligne); border-radius: 8px; padding: 0 8px; background: #fff; height: 38px; }
+.recherche-seq input { border: 0; outline: none; font: inherit; width: 190px; background: transparent; }
+.compte-recherche { font-size: 12px; color: var(--gris); white-space: nowrap; }
+table.seances tr.trouvee td { background: #FFF6D6; }
+table.seances tr.estompee { opacity: .35; }
+.lien-fiche-seance.vide { filter: grayscale(1); opacity: .45; }
+.tete-sequence .resume.trop { color: #C77700; font-weight: 700; background: #FFF1DD; }
+
+/* fil d'Ariane des fiches, rappel des dates, récemment ouverts */
+.ariane-fiches { font-size: 12.5px; color: var(--gris); margin: 0 0 6px; }
+.ariane-fiches a { color: var(--teal); text-decoration: none; }
+.ariane-fiches a:hover { text-decoration: underline; }
+.rappel-dates { font-size: 13px; background: #FFF6E5; border: 1px solid #F0D49A; border-radius: 8px; padding: 6px 12px; margin: 4px 0 10px; }
+.liste-recents-accueil { display: flex; flex-wrap: wrap; gap: 8px; }
+.liste-recents-accueil a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; background: var(--carte); box-shadow: var(--ombre); color: var(--fonce); text-decoration: none; font-weight: 600; font-size: 13.5px; }
+.liste-recents-accueil a:hover { background: #EEF7F6; }
+
+.sans-docs { margin: 4px 0 0; font-size: 12px; color: #8A9694; font-style: italic; }

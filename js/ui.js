@@ -149,7 +149,13 @@ export const nombre = (v) => {
 // cours mobilisés (documents de « Mes cours » + saisie libre) et ressources (documents de « Mes ressources diverses » + saisie libre)
 export const coursMobilises = (x) => [...(x?.cours_lies || []).filter((c) => c.espace !== 'divers').map((c) => c.titre), x?.cours].filter((t) => t && String(t).trim()).join('\n');
 export const ressourcesSeance = (x) => [...(x?.cours_lies || []).filter((c) => c.espace === 'divers').map((c) => c.titre), x?.ressources].filter((t) => t && String(t).trim()).join('\n');
-export const heures = (n) => (n == null ? '' : (Number.isInteger(n) ? n : String(n).replace('.', ',')) + ' h');
+// 4 → « 4 h » ; 1.5 → « 1 h 30 » ; 0.75 → « 0 h 45 »
+export const heures = (n) => {
+  if (n == null || n === '' || !Number.isFinite(Number(n))) return '';
+  const v = Number(n); if (Number.isInteger(v)) return v + ' h';
+  const t = Math.round(v * 60), hh = Math.floor(t / 60), mm = t % 60;
+  return mm ? `${hh} h ${String(mm).padStart(2, '0')}` : hh + ' h';
+};
 export const dateFr = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('fr-FR') : '');
 
 // ------------------------------------------------------------------------------------------- impression

@@ -479,10 +479,25 @@ async function afficher() {
     if (r[0] !== 'aide' && n === rendu) zone.append(h('a', { class: 'aide-flottante ecran', href: '#/aide/' + (SECTION_AIDE[r[0]] || ''), title: 'Aide sur cette page' }, '?'));
     if (n === rendu && !(r[0] === 'accueil' && profondeur() === 0)) zone.append(boutonRetour());
     if (n === rendu) suivreLegendeSaisie(zone);
+    if (n === rendu) nommerOnglet(zone, r);
   } catch (e) {
     if (n === rendu) vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Problème de chargement'), h('p', {}, e.message),
       h('button', { class: 'btn', onclick: afficher }, 'Réessayer')));
   }
+}
+// titre de l'onglet du navigateur = titre de la page ; les fiches, séquençages et séances hors séquence ouverts
+// sont mémorisés (sur cet appareil) pour « Récemment ouverts » de Ma page d'accueil
+const PAGES_RECENTES = ['sequencage', 'fiches', 'seances-hors', 'contrats', 'progression', 'cours', 'divers', 'biblio', 'qcm'];
+function nommerOnglet(zone, r) {
+  const t = (zone.querySelector('.entete-page h1, h1')?.textContent || '').replace(/\s+/g, ' ').trim();
+  document.title = t ? `${t} · Pilotage BTS SCBH` : 'Pilotage BTS SCBH';
+  if (!t || !PAGES_RECENTES.includes(r[0]) || !r[1] || /^(preparation|deroulement|formatifs|sommatif)$/.test(r[1])) return;
+  try {
+    const cle = 'pilotage-scbh-recents-' + (ctx.promo?.id || '');
+    const l = JSON.parse(localStorage.getItem(cle) || '[]').filter((x) => x.hash !== location.hash && x.titre !== t);
+    l.unshift({ hash: location.hash, titre: t, page: r[0], le: Date.now() });
+    localStorage.setItem(cle, JSON.stringify(l.slice(0, 8)));
+  } catch { /* sans stockage */ }
 }
 // légende « à remplir / calculé automatiquement » sous le titre des pages où l'on saisit quelque chose
 const CHAMP_SAISIE = '.champ:not(.lecture):not([readonly]):not(:disabled):not([type=search])';

@@ -201,7 +201,7 @@ async function pageSemaine(zone, arg) {
         seances.filter((x) => x.mat?.id === m.id).map((x) => h('div', { class: 'seance-eleve' },
           h('div', { class: 'tete' }, h('b', {}, etiquette(x)), ' ', x.titre || 'Séance', x.duree ? h('small', { class: 'gris' }, ' · ' + heures(x.duree)) : null),
           x.objectif_inter ? h('p', { class: 'objectif' }, x.objectif_inter) : null,
-          puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : null)))))
+          puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : h('p', { class: 'sans-docs' }, 'Pas encore de document pour cette séance.'))))))
         : h('p', { class: 'vide' }, sem.vacances ? 'Vacances : pas de séance.' : 'Aucune séance placée cette semaine dans la progression.')),
     h('section', {}, h('h2', { class: 'titre-section' }, 'Prochaines évaluations'), listeEvaluations()));
 }
@@ -359,7 +359,7 @@ async function pageFormation(zone, arg) {
             h('div', { class: 'tete' }, h('a', { class: 'lien-seance', href: '#/seance/' + x.id }, h('b', {}, `${s.numero}.${x.numero}`), ' ', x.titre || 'Séance'), x.duree ? h('small', { class: 'gris' }, ' · ' + heures(x.duree)) : null,
               (semainesDe.get(x.id) || []).length ? h('small', { class: 'quand' }, ' · ' + (semainesDe.get(x.id) || []).sort((a, b) => a - b).map((w) => 'semaine du ' + lundi(Y, w).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })).join(', ')) : null),
             x.objectif_inter ? h('p', { class: 'objectif' }, x.objectif_inter) : null,
-            puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : null))) : h('p', { class: 'vide' }, 'Séances à venir.'));
+            puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : h('p', { class: 'sans-docs' }, 'Pas encore de document pour cette séance.')))) : h('p', { class: 'vide' }, 'Séances à venir.'));
       }));
   const cible = argSeance && zone.querySelector('#seance-' + CSS.escape(argSeance));
   if (cible) requestAnimationFrame(() => cible.scrollIntoView({ block: 'center', behavior: 'smooth' }));
