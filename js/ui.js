@@ -123,7 +123,9 @@ export const nombre = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 // cours mobilisés d'une séance : cours reliés (« Mes cours ressources ») puis saisie libre
-export const coursMobilises = (x) => [...(x?.cours_lies || []).map((c) => c.titre), x?.cours].filter((t) => t && String(t).trim()).join('\n');
+// cours mobilisés (documents de « Mes cours » + saisie libre) et ressources (documents de « Mes ressources diverses » + saisie libre)
+export const coursMobilises = (x) => [...(x?.cours_lies || []).filter((c) => c.espace !== 'divers').map((c) => c.titre), x?.cours].filter((t) => t && String(t).trim()).join('\n');
+export const ressourcesSeance = (x) => [...(x?.cours_lies || []).filter((c) => c.espace === 'divers').map((c) => c.titre), x?.ressources].filter((t) => t && String(t).trim()).join('\n');
 export const heures = (n) => (n == null ? '' : (Number.isInteger(n) ? n : String(n).replace('.', ',')) + ' h');
 export const dateFr = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('fr-FR') : '');
 

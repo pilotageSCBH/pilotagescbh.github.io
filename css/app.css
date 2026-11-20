@@ -2479,3 +2479,8 @@ table.decisions select.champ { min-width: 220px; }
 /* séquençage en consultation (matière d'un collègue) : même présentation que le séquençage modifiable,
    cases en gris clair au lieu du crème « à remplir » */
 .sequence .champ.lecture { background: #F6F8F8; border: 1px solid #E3E9E8; }
+
+/* fiche de déroulement : ressources reprises du séquençage */
+.ressources-seq { background: var(--auto, #EEF1F0); border-radius: 6px; padding: 6px 9px; margin-bottom: 6px; }
+.ressources-seq .lib-auto { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #6B7A78; margin-bottom: 2px; }
+.ressources-seq p { margin: 0; }

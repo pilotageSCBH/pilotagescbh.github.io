@@ -2,7 +2,7 @@
 // et son contrat formatif. Sans séquence choisie : liste des séquences de chaque matière.
 import { db } from '../api.js';
 import { boutonAnnuler } from '../annuler.js';
-import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, toast, fenetre, coursMobilises } from '../ui.js';
+import { h, vider, champ, erreur, heures, ajusterTout, imprimer, confirmer, toast, fenetre, coursMobilises, ressourcesSeance } from '../ui.js';
 import { dessinerContrat, moyenne, niveau, arrondi } from './contrat.js';
 import { telecharger, nomFichier, exportSequence } from '../echange.js';
 import { qrSVG, liensLibelles } from '../qr.js';
@@ -251,6 +251,7 @@ Objectifs opérationnels :\n${x.objectifs_ops || '—'}
 Compétences : ${libCodes(x.competences, ref.comp)}
 Savoirs associés : ${libCodes(x.savoirs, ref.sav)}
 Cours mobilisés : ${coursMobilises(x).replace(/\n/g, ' / ') || '—'}
+Ressources (séquençage) : ${ressourcesSeance(x).replace(/\n/g, ' / ') || '—'}
 Prérequis (séquençage) : ${lignesPre.join(' / ') || '—'}
 
 CONTEXTE :\n${contexteSequence()}
@@ -302,7 +303,11 @@ TÂCHE : propose le déroulement détaillé de la séance en phases successives 
         h('div', { class: 'deux' }, h('div', { class: 'rubrique' }, h('h3', {}, 'Compétences'), codes(x.competences, ref.comp)),
           h('div', { class: 'rubrique' }, h('h3', {}, 'Savoirs associés'), codes(x.savoirs, ref.sav))),
         lignesPre.length ? h('div', { class: 'rubrique' }, h('h3', {}, 'Prérequis (séquençage)'), h('p', { class: 'pre' }, lignesPre.join('\n'))) : null,
-        h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
+        h('div', { class: 'deux' }, zoneTexte(lignesPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis, maj('prerequis')), ressourcesSeance(x)
+          ? h('div', { class: 'rubrique' }, h('h3', {}, 'Matériel et ressources'),
+              h('div', { class: 'ressources-seq' }, h('span', { class: 'lib-auto' }, 'Ressources du séquençage'), h('p', { class: 'pre' }, ressourcesSeance(x))),
+              champ(f.materiel || '', maj('materiel'), { multi: true, lecture: !modif, placeholder: modif ? 'autre matériel, documents, logiciels…' : '' }))
+          : zoneTexte('Matériel et ressources', f.materiel, maj('materiel'))),
         cadreMaison(x, f, 'avant'),
         h('div', { class: 'rubrique' }, h('h3', {}, 'Déroulement'),
           h('table', { class: 'table-fiche phases' }, h('colgroup', {}, h('col', { class: 'c-num' }), h('col', { class: 'c-ens' }), h('col', { class: 'c-elv' })),
@@ -584,7 +589,7 @@ export async function modelesSequence(S, ctx, choisis) {
           ['Durée', heures(x.duree == null ? null : Number(x.duree))], ['Salle / atelier', f.salle]] },
         R('Objectif intermédiaire', x.objectif_inter, { gras: true, gris: true }), R('Objectifs opérationnels', x.objectifs_ops, { gris: true }), R('Cours mobilisés', coursMobilises(x), { gris: true }),
         R('Compétences', codes(x.competences, ref.comp), { gris: true }), R('Savoirs associés', codes(x.savoirs, ref.sav), { gris: true }),
-        lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', f.materiel),
+        lPre.length ? R('Prérequis (séquençage)', lPre.join('\n'), { gris: true }) : null, R(lPre.length ? 'Autres prérequis' : 'Prérequis', f.prerequis), R('Matériel et ressources', [ressourcesSeance(x), f.materiel].filter((t) => t && String(t).trim()).join('\n')),
         maison(f.maison_avant, 'avant'),
         { t: 'table', titre: 'Déroulement', colonnes: [{ titre: 'Activité', part: 52 }, { titre: 'Rôle de l’enseignant', part: 24 }, { titre: 'Rôle des élèves', part: 24 }],
         lignes: (f.phases || []).flatMap((p, i) => [{ groupe: `Phase ${i + 1}${p.phase ? ' · ' + p.phase : ''}${p.duree ? '   (' + p.duree + ')' : ''}` },

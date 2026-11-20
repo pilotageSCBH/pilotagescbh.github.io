@@ -75,9 +75,9 @@ export async function pageSequencage(zone, id, ctx) {
       h('div', { class: 'objectif-sequence' }, h('label', {}, 'Objectif principal'),
         champ(s.objectif, maj('objectif'), { multi: true, lecture: !modif, placeholder: 'Objectif principal de la séquence' })),
       h('div', { class: 'tableau-defile' }, h('table', { class: 'seances' },
-        h('colgroup', {}, [3, 4, 11, 5, 10, 11, 25, 10, 10.5, 10.5].map((w) => h('col', { style: { width: w + '%' } }))),
+        h('colgroup', {}, [3, 4, 10, 5, 9.5, 10, 19.5, 9.5, 9.5, 10, 10].map((w) => h('col', { style: { width: w + '%' } }))),
         h('thead', {}, h('tr', {},
-          ['', 'N°', 'Séance', 'Durée', 'Prérequis (antériorités)', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Compétences', 'Savoirs associés']
+          ['', 'N°', 'Séance', 'Durée', 'Prérequis (antériorités)', 'Objectif intermédiaire', 'Objectifs opérationnels', 'Cours mobilisés', 'Ressources', 'Compétences', 'Savoirs associés']
             .map((t) => h('th', {}, t)))),
         h('tbody', {}, seances.map((x) => ligneSeance(s, x, seances.length))))),
       modif ? h('div', { class: 'ajout-seance ecran' },
@@ -106,6 +106,7 @@ export async function pageSequencage(zone, id, ctx) {
       h('td', {}, champ(x.objectifs_ops, maj('objectifs_ops'), { multi: true, lecture: !modif, placeholder: '- un objectif par ligne' }),
         modif ? h('button', { class: 'lien petit', onclick: (e) => choisirTaches(x, e.target.closest('td').querySelector('textarea')) }, '＋ depuis les tâches') : null),
       celluleCours(x, maj, () => zSav.maj()),
+      celluleCours(x, maj, () => zSav.maj(), 'divers'),
       h('td', {}, codes(x, 'competences', ref.competences, ref.comp)),
       h('td', {}, zSav));
     if (modif) glisser(tr, s, x);
@@ -152,28 +153,35 @@ export async function pageSequencage(zone, id, ctx) {
   }
 
   // cours mobilisés : documents cochés dans « Mes cours » (titre + savoirs repris) et saisie libre
-  function celluleCours(x, maj, apres) {
-    const td = h('td', { class: 'cell-cours' });
+  // esp = 'cours' (colonne « Cours mobilisés », Mes cours) ou 'divers' (colonne « Ressources », Mes ressources diverses)
+  function celluleCours(x, maj, apres, esp = 'cours') {
+    const td = h('td', { class: 'cell-cours' + (esp === 'divers' ? ' cell-ressources' : '') });
+    const liste = () => (x.cours_lies || []).filter((c) => (c.espace === 'divers') === (esp === 'divers'));
+    const col = esp === 'divers' ? 'ressources' : 'cours';
     const dessinerC = () => vider(td,
-      (x.cours_lies || []).length ? h('div', { class: 'cours-lies' }, x.cours_lies.map((c) => h('div', { class: 'ligne-cours-lie' },
+      liste().length ? h('div', { class: 'cours-lies' }, liste().map((c) => h('div', { class: 'ligne-cours-lie' },
         h('a', { class: 'cours-lie', href: baseEspace(c.espace) + '/l-' + c.id, title: (c.savoirs || []).length ? 'Savoirs associés : ' + c.savoirs.join(', ') : 'Ouvrir la fiche du document' }, iconeDoc({ type: 'cours', genre: c.genre }) + ' ', c.titre || 'Document sans titre'),
         /^https?:\/\//i.test(c.lien || '') ? h('a', { class: 'lien-externe', href: c.lien, target: '_blank', rel: 'noopener', title: 'Ouvrir le cours en ligne : ' + c.lien }, '🔗') : null))) : null,
-      champ(x.cours, maj('cours'), { multi: true, lecture: !modif, placeholder: modif ? ((x.cours_lies || []).length ? 'autres cours…' : 'cours mobilisés…') : '' }),
-      modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }) }, (x.cours_lies || []).length ? '✎ cours de la liste' : '＋ depuis mes cours') : null);
+      esp === 'divers' && !('ressources' in x) ? null : champ(x[col] || '', async (v) => { await maj(col)(v); x[col] = v; }, { multi: true, lecture: !modif,
+        placeholder: modif ? (esp === 'divers' ? (liste().length ? 'autres ressources…' : 'ressources…') : (liste().length ? 'autres cours…' : 'cours mobilisés…')) : '' }),
+      modif ? h('button', { class: 'lien petit', onclick: () => choisirCours(x, () => { dessinerC(); apres(); ajusterTout(td); }, esp) },
+        esp === 'divers' ? (liste().length ? '✎ ressources de la liste' : '＋ depuis mes ressources') : (liste().length ? '✎ cours de la liste' : '＋ depuis mes cours')) : null);
     dessinerC();
     return td;
   }
-  async function choisirCours(x, apres) {
+  async function choisirCours(x, apres, esp = 'cours') {
+    const divers = esp === 'divers';
     let rows, collegues = [];
     try {
       let themes, livres;
-      [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', 'espace=in.(cours,divers)&order=ordre,id'), db.lire('biblio_livres', 'espace=in.(cours,divers)&order=ordre,id'), db.rpc('collegues').catch(() => [])]);
+      [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', `espace=eq.${esp}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${esp}&order=ordre,id`), db.rpc('collegues').catch(() => [])]);
       // dossiers et documents de « Mes cours » sous une forme commune (les dossiers ont un identifiant « d… »)
       rows = [...themes.map((t) => ({ id: 'd' + t.id, type: 'dossier', parent_id: t.parent_id ? 'd' + t.parent_id : null, titre: t.nom, proprietaire: t.proprietaire, ordre: t.ordre, espace: t.espace })),
         ...livres.map((l) => ({ id: l.id, type: 'cours', parent_id: l.theme_id ? 'd' + l.theme_id : null, titre: l.titre, proprietaire: l.proprietaire, ordre: 1e6 + l.ordre, savoirs: l.savoirs || [], lien: l.lien || '', genre: l.genre || 'cours', espace: l.espace }))];
     } catch { erreur(new Error('« Mes cours » n’est pas encore installé : l’administrateur doit exécuter le script SQL 26.')); return; }
     const R = new Map(rows.map((r) => [r.id, r]));
-    const anciens = x.cours_lies || [];
+    const autres = (x.cours_lies || []).filter((c) => (c.espace === 'divers') !== divers);   // l'autre colonne : inchangée
+    const anciens = (x.cours_lies || []).filter((c) => (c.espace === 'divers') === divers);
     const choix = new Set(anciens.map((c) => c.id));
     const moi = ctx.profil.id;
     const nomDe = (u) => collegues.find((c) => c.id === u)?.nom || 'Un collègue';
@@ -183,11 +191,11 @@ export async function pageSequencage(zone, id, ctx) {
     const parcourir = (parent, proprio) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio)
       .forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, proprio); });
     const proprios = [moi, ...new Set(rows.filter((r) => r.proprietaire !== moi).map((r) => r.proprietaire))];
-    const ESP = ['cours', 'divers'], parcourirE = (parent, proprio, esp) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio && (parent !== null || (r.espace || 'cours') === esp))
+    const ESP = [esp], parcourirE = (parent, proprio, esp) => rows.filter((r) => (r.parent_id ?? null) === parent && r.proprietaire === proprio && (parent !== null || (r.espace || 'cours') === esp))
       .forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, proprio); });
     for (const u of proprios) for (const esp of ESP) { parcourirE(null, u, esp); rows.filter((r) => r.proprietaire === u && (r.espace || 'cours') === esp && r.parent_id && !R.has(r.parent_id)).forEach((r) => { if (r.type === 'cours') ordre.push(r); else parcourir(r.id, u); }); }
     const disparus = anciens.filter((c) => !R.has(c.id));
-    const rech = h('input', { class: 'champ', placeholder: 'Rechercher un cours (titre, savoir)…' });
+    const rech = h('input', { class: 'champ', placeholder: divers ? 'Rechercher une ressource (titre)…' : 'Rechercher un cours (titre, savoir)…' });
     const corps = h('div', { class: 'liste-choix' });
     const sans = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const remplir = () => {
@@ -202,13 +210,14 @@ export async function pageSequencage(zone, id, ctx) {
         out.push(h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(r.id), onchange: (e) => (e.target.checked ? choix.add(r.id) : choix.delete(r.id)) }),
           iconeDoc(r) + ' ', h('b', {}, r.titre || 'Document sans titre'), (r.savoirs || []).length ? h('small', { class: 'detail-choix' }, 'Savoirs : ' + r.savoirs.join(', ')) : h('small', { class: 'detail-choix' }, 'aucun savoir associé')));
         return out;
-      }), disparus.length ? [h('div', { class: 'groupe' }, 'Cours plus disponibles (supprimés ou plus partagés)'),
+      }), disparus.length ? [h('div', { class: 'groupe' }, divers ? 'Ressources plus disponibles (supprimées ou plus partagées)' : 'Cours plus disponibles (supprimés ou plus partagés)'),
         disparus.map((c) => h('label', { class: 'option' }, h('input', { type: 'checkbox', checked: choix.has(c.id), onchange: (e) => (e.target.checked ? choix.add(c.id) : choix.delete(c.id)) }), '📘 ', h('b', {}, c.titre)))] : null,
-      !ordre.length ? h('p', { class: 'vide' }, 'Aucun document renseigné : ajoutez vos cours, exercices, évaluations… dans « Mes ressources → Mes cours » ou « Mes ressources diverses ».') : null);
+      !ordre.length ? h('p', { class: 'vide' }, divers ? 'Aucune ressource : ajoutez vos documents dans « Mes ressources → Mes ressources diverses ».' : 'Aucun document renseigné : ajoutez vos cours, exercices, évaluations… dans « Mes ressources → Mes cours ».') : null);
     };
     rech.addEventListener('input', remplir); remplir();
-    const ok = await fenetre(`Cours mobilisés · séance ${x.titre || ''}`, h('div', {},
-      h('p', { class: 'aide' }, 'Cochez les documents de « Mes cours » ou de « Mes ressources diverses » (cours, exercices, TD/TP, évaluations… : les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés automatiquement à la séance. La saisie libre reste possible sous la liste.'),
+    const ok = await fenetre(divers ? `Ressources · séance ${x.titre || ''}` : `Cours mobilisés · séance ${x.titre || ''}`, h('div', {},
+      h('p', { class: 'aide' }, divers ? 'Cochez les documents de « Mes ressources diverses » (les vôtres et ceux partagés avec vous) utiles à cette séance : ils s’affichent dans la colonne « Ressources », dans la fiche de déroulement (Matériel et ressources) et, s’ils sont sur Nuage, dans « Mes ressources diverses » de l’espace élève.'
+        : 'Cochez les documents de « Mes cours » (cours, exercices, TD/TP, évaluations… : les vôtres et ceux partagés avec vous) mobilisés dans cette séance : leurs savoirs associés sont ajoutés à la séance.'),
       rech, corps), [{ texte: 'Annuler', valeur: false }, { texte: 'Valider', classe: 'principal', valeur: true }], { large: true });
     if (!ok) return;
     const savDe = (id) => R.get(id)?.savoirs || anciens.find((c) => c.id === id)?.savoirs || [];
@@ -221,15 +230,16 @@ export async function pageSequencage(zone, id, ctx) {
       const r = R.get(id), a = anciens.find((c) => c.id === id);
       const savoirs = r ? (r.savoirs || []) : (a?.savoirs || []);
       const ajoutes = savoirs.filter((c) => auto.has(c) && sav.includes(c));
-      for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
-      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || ''), genre: r ? (r.genre || 'cours') : (a?.genre || 'cours'), espace: r ? (r.espace || 'cours') : (a?.espace || 'cours') };
+      if (!divers) for (const c of savoirs) if (!sav.includes(c)) { sav.push(c); ajoutes.push(c); auto.add(c); }
+      return { id, titre: r ? r.titre : a.titre, savoirs, ajoutes, lien: r ? (r.lien || '') : (a?.lien || ''), genre: r ? (r.genre || 'cours') : (a?.genre || 'cours'), espace: r ? (r.espace || esp) : (a?.espace || esp) };
     });
     const rang = ref.savoirs.map((y) => y.code);
     sav.sort((a, b) => rang.indexOf(a) - rang.indexOf(b));
     try {
-      await db.modifier('seances', x.id, { cours_lies: lies, savoirs: sav });
-      x.cours_lies = lies; x.savoirs = sav;
-      toast(lies.length ? `${lies.length} cours relié(s) · savoirs mis à jour` : 'Cours retirés');
+      const tous = divers ? [...autres, ...lies] : [...lies, ...autres];
+      await db.modifier('seances', x.id, { cours_lies: tous, savoirs: sav });
+      x.cours_lies = tous; x.savoirs = sav;
+      toast(divers ? (lies.length ? `${lies.length} ressource(s) reliée(s)` : 'Ressources retirées') : (lies.length ? `${lies.length} cours relié(s) · savoirs mis à jour` : 'Cours retirés'));
       apres();
     } catch (e) { erreur(e); }
   }
@@ -520,7 +530,7 @@ Savoirs : S11-1, S21-2
         for (const [j, x] of q.seances.entries()) {
           const pre = (x.prerequisRefs || []).map((r) => ids.get(r)).filter((i) => i && i !== xs[j].id);
           await db.modifier('seances', xs[j].id, { titre: x.titre, duree: x.duree, objectif_inter: x.objectif_inter, objectifs_ops: x.objectifs_ops,
-            cours: x.cours, cours_lies: [], competences: x.competences, savoirs: x.savoirs, prerequis: [...new Set(pre)], prerequis_texte: x.prerequis_texte });
+            cours: x.cours, cours_lies: [], ...('ressources' in (xs[j] || {}) ? { ressources: x.ressources } : {}), competences: x.competences, savoirs: x.savoirs, prerequis: [...new Set(pre)], prerequis_texte: x.prerequis_texte });
         }
       }
       toast(`Séquençage importé : ${lu.sequences.length} séquence(s), ${nbS} séance(s)`);
@@ -574,6 +584,7 @@ export function lireSequencageExcel(feuilles, ref) {
           else if (/prerequis/.test(t)) col.pre ??= i;
           else if (/^duree/.test(t)) col.duree ??= i;
           else if (/^cours/.test(t)) col.cours ??= i;
+          else if (/^ressources?$|^ressources /.test(t)) col.res ??= i;
           else if (/competence/.test(t)) col.comps ??= i;
           else if (/savoir/.test(t)) col.savs ??= i;
           else if (/^seance|^titre|^intitule/.test(t)) col.titre ??= i;
@@ -595,7 +606,7 @@ export function lireSequencageExcel(feuilles, ref) {
       const tC = plage('comps'), tS = plage('savs');
       const x = {
         ref: num, titre: cel('titre'), duree: nombreDe(cel('duree')), objectif_inter: cel('inter'),
-        objectifs_ops: enListe(cel('ops')), cours: cel('cours'),
+        objectifs_ops: enListe(cel('ops')), cours: cel('cours'), ressources: cel('res'),
         competences: codesDans(tC, codesC), savoirs: codesDans(tS, codesS),
         prerequisRefs: refs, prerequis_texte: reste ? preTexte : '',
       };

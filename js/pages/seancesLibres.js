@@ -60,6 +60,7 @@ async function formulaire(ctx, x, matiereId) {
   const comps = h('input', { class: 'champ', value: (x?.competences || []).join(' '), placeholder: 'ex. C2-2a C4-1' });
   const savs = h('input', { class: 'champ', value: (x?.savoirs || []).join(' '), placeholder: 'ex. S21-2 S26-4' });
   const cours = h('textarea', { class: 'champ', rows: 2 }, x?.cours || '');
+  const ress = h('textarea', { class: 'champ', rows: 2, placeholder: 'documents, vidéos, liens, matériel…' }, x?.ressources || '');
   const codesC = ref.competences.map((c) => c.code), codesS = ref.savoirs.map((c) => c.code);
   return fenetre(x ? 'Modifier la séance hors séquence' : 'Nouvelle séance hors séquence', h('div', { class: 'formulaire' },
     x ? null : h('label', {}, 'Matière', mat),
@@ -70,11 +71,13 @@ async function formulaire(ctx, x, matiereId) {
     h('label', {}, 'Compétences (codes)', comps),
     h('label', {}, 'Savoirs associés (codes)', savs),
     h('label', { class: 'large' }, 'Cours mobilisés', cours),
+    h('label', { class: 'large' }, 'Ressources', ress),
     h('p', { class: 'aide large' }, 'Seuls les codes présents dans le référentiel sont gardés. La fiche contrat formatif reprend une rubrique par objectif opérationnel.')),
   [{ texte: 'Annuler', valeur: null }, { texte: x ? 'Enregistrer' : '＋  Créer', classe: 'principal', action: () => {
     if (!titre.value.trim()) throw new Error('Donnez un titre à la séance.');
     return { matiere_id: Number(mat.value), titre: titre.value.trim(), duree: duree.value ? Number(duree.value) : null, objectif_inter: inter.value.trim(),
-      objectifs_ops: enListe(ops.value), competences: codesDans(comps.value, codesC), savoirs: codesDans(savs.value, codesS), cours: cours.value.trim() };
+      objectifs_ops: enListe(ops.value), competences: codesDans(comps.value, codesC), savoirs: codesDans(savs.value, codesS), cours: cours.value.trim(),
+      ...(ress.value.trim() || (x && 'ressources' in x) ? { ressources: ress.value.trim() } : {}) };
   } }], { large: true });
 }
 

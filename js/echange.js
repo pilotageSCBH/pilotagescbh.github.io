@@ -1,6 +1,6 @@
 // Téléchargement de fichiers et lecture complète des fiches d'une séquence (utilisée pour les PDF).
 import { db } from './api.js';
-import { coursMobilises } from './ui.js';
+import { coursMobilises, ressourcesSeance } from './ui.js';
 
 export const FORMAT = 'pilotage-scbh-fiches';
 
@@ -37,7 +37,7 @@ export async function exportSequence(sq) {
       return {
         numero: x.numero,
         sequencage: { titre: x.titre, duree: x.duree, objectif_intermediaire: x.objectif_inter, objectifs_operationnels: x.objectifs_ops,
-          cours: coursMobilises(x), competences: x.competences, savoirs: x.savoirs, autres_prerequis: x.prerequis_texte || '' },
+          cours: coursMobilises(x), ressources: ressourcesSeance(x), competences: x.competences, savoirs: x.savoirs, autres_prerequis: x.prerequis_texte || '' },
         fiche: { salle: texteVide(f.salle), prerequis: texteVide(f.prerequis), materiel: texteVide(f.materiel),
           phases: Array.isArray(f.phases) ? f.phases.map((p) => ({ ...(p.id ? { id: p.id } : {}), phase: p.phase || '', activite: p.activite || '', enseignant: p.enseignant || '', eleves: p.eleves || '', duree: p.duree || '', liens: p.liens || '' })) : [],
           evaluation: texteVide(f.evaluation), differenciation: texteVide(f.differenciation), bilan: texteVide(f.bilan),
