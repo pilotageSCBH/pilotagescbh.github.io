@@ -841,7 +841,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     let fichiers = lus.filter((x) => x.c && !ignore(x.c));
     // les images de tuiles « illustration.* » ne sont pas des fiches
     const images = new Map(fichiers.filter((x) => /(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c)).map((x) => [dirDe(x.c), x]));
-    fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(html?|js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));
+    fichiers = fichiers.filter((x) => !/(^|\/)illustration\.(jpe?g|png|webp)$/i.test(x.c) && !/\.(js|py|bat|command|sh|ini|db|tmp|lnk)$/i.test(x.c));   // pages .html comprises : ce sont des ressources
     const mesT = [...T.values()].filter(aMoi), parDossier = new Map(mesT.filter((t) => t.dossier).map((t) => [nfc(t.dossier), t]));
     const connus = new Set(mesFichesTout().filter((l) => l.chemin).map((l) => nfc(l.chemin)));
     let nouveaux = fichiers.filter((x) => !connus.has(nfc(x.c)));
