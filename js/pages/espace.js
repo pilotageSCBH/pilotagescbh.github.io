@@ -846,11 +846,13 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const connus = new Set(mesFichesTout().filter((l) => l.chemin).map((l) => nfc(l.chemin)));
     let nouveaux = fichiers.filter((x) => !connus.has(nfc(x.c)));
     const presents = new Set(fichiers.map((x) => nfc(x.c)));
-    let disparus = mesFichesTout().filter((l) => l.chemin && !presents.has(nfc(l.chemin)));
+    // fiches dont le fichier n'est pas dans le dossier partagé (ou qui n'y sont rattachées par aucun chemin)
+    let disparus = mesFichesTout().filter((l) => !l.chemin || !presents.has(nfc(l.chemin)));
     // fichiers déplacés ou renommés de dossier (même nom de fichier, un seul candidat) : la fiche suit le fichier
     // (sommaire, savoirs, partages, publications et liens du séquençage sont gardés)
     const deplaces = [], pris = new Set();
     for (const l of disparus) {
+      if (!l.chemin) continue;
       const c = nouveaux.filter((x) => nomDe(x.c) === nomDe(l.chemin) && !pris.has(x.c));
       if (c.length === 1 && disparus.filter((y) => nomDe(y.chemin) === nomDe(l.chemin)).length === 1) { deplaces.push({ l, x: c[0] }); pris.add(c[0].c); }
     }
@@ -869,7 +871,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const themeFinal = new Map(mesFichesTout().map((l) => [l, l.theme_id ?? null]));
     for (const { l, x } of deplaces) themeFinal.set(l, parDossier.get(dirDe(x.c))?.id ?? -1);   // -1 : dossier qui va être créé
     const contientPresent = (t) => { const ids = new Set([t.id, ...descendants(t.id).map((x) => x.id)]);
-      return mesFichesTout().some((l) => ids.has(themeFinal.get(l)) && (presents.has(nfc(l.chemin)) || !l.chemin) && !disparus.includes(l)); };
+      return mesFichesTout().some((l) => ids.has(themeFinal.get(l)) && presents.has(nfc(l.chemin)) && !disparus.includes(l)); };
     const sansNumero = (c) => c.split('/').map((x) => x.replace(/^\d+\s*-\s*/, '').toLowerCase()).join('/');
     const presentsNoms = new Set([...presentsD].map(sansNumero));
     const surNuage = (t) => (t.dossier ? presentsD.has(nfc(t.dossier)) : presentsNoms.has(sansNumero(cheminEff(t))));
@@ -877,7 +879,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     // tuiles déjà créées : image « illustration.* » ajoutée depuis dans le dossier Nuage
     const illus = mesT.filter((t) => !t.image && images.has(nfc(t.dossier)));
     // prudence : un dossier vide ou presque tout « introuvable » fait penser à un mauvais lien
-    const suspect = !fichiers.length || (disparus.length > 3 && disparus.length > mesFichesTout().length / 2);
+    const suspect = !fichiers.length;   // dossier lu vide : sans doute une lecture ratée de Nuage, rien n'est supprimé
     const lire = h('input', { type: 'checkbox', checked: true });
     const retirer = h('input', { type: 'checkbox', checked: !suspect }), retirerD = h('input', { type: 'checkbox', checked: !suspect });
     if (auto && (suspect || !(nouveaux.length || deplaces.length || aCreer.length || illus.length || disparus.length || dossiersPartis.length))) return false;

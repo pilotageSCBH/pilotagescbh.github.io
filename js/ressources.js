@@ -230,7 +230,8 @@ export const oublierListesNuage = () => listesNuage.clear();
 // lien de partage fonctionne. L'enseignant connecté vérifie SES dossiers (au plus toutes les 10 minutes) et met à jour
 // les repères absent_nuage (par fiche) et coupes (espaces dont le partage ne fonctionne plus) : rien n'est supprimé.
 export const LIENS_ESPACES = { biblio: 'lien_bibliotheque', cours: 'lien_cours', divers: 'lien_divers' };
-export const masqueeNuage = (l) => !!l?.absent_nuage || (reglagesDe(l?.proprietaire).coupes || []).includes(l?.espace);
+// visible seulement si le fichier est dans le dossier partagé (chemin), présent lors de la dernière lecture, et le partage actif
+export const masqueeNuage = (l) => !String(l?.chemin || '').trim() || !!l?.absent_nuage || (reglagesDe(l?.proprietaire).coupes || []).includes(l?.espace);
 // réponse de Nuage elle-même (lien supprimé, expiré, protégé…) — pas une panne du relais ou du réseau
 const PARTAGE_FERME = /refuse l.acc[eè]s|ne trouve pas ce dossier|comme pr[eé]vu \(code 4\d\d\)|non reconnu/i;
 let verifEnCours = null;
@@ -253,11 +254,10 @@ export function verifierPartagesNuage(moi, { espaces = Object.keys(LIENS_ESPACES
         catch (e) { if (PARTAGE_FERME.test(e.message || '') && !coupes.has(esp)) { coupes.add(esp); change = true; } continue; }   // relais ou réseau en panne : on ne change rien
         if (coupes.delete(esp)) change = true;
         const presents = new Set(liste.filter((x) => !x.dossier).map((x) => String(x.c).normalize('NFC')));
-        const docs = await db.lire('biblio_livres', `proprietaire=eq.${moi}&espace=eq.${esp}&chemin=neq.&select=id,chemin,absent_nuage`);
-        const absents = new Set(docs.filter((d) => !presents.has(String(d.chemin).normalize('NFC'))).map((d) => d.id));
-        // prudence (comme « Mettre à jour ») : un dossier lu vide, ou presque tout introuvable, fait penser à une lecture
-        // incomplète de Nuage plutôt qu'à un retrait : on ne masque rien de plus cette fois-ci (on démasque seulement)
-        const suspect = docs.length && (!presents.size || (absents.size > 3 && absents.size > docs.length / 2));
+        const docs = await db.lire('biblio_livres', `proprietaire=eq.${moi}&espace=eq.${esp}&select=id,chemin,absent_nuage`);
+        const absents = new Set(docs.filter((d) => !d.chemin || !presents.has(String(d.chemin).normalize('NFC'))).map((d) => d.id));
+        // prudence : un dossier lu vide fait penser à une lecture ratée de Nuage : on ne masque rien de plus cette fois-ci
+        const suspect = docs.length && !presents.size;
         for (const d of docs) {
           const absent = absents.has(d.id);
           if (suspect && absent && !d.absent_nuage) continue;
