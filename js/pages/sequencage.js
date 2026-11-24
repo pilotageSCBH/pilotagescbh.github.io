@@ -556,8 +556,21 @@ Savoirs : S11-1, S21-2
       }
       toast(`Séquençage importé : ${lu.sequences.length} séquence(s), ${nbS} séance(s)`);
     } finally { attente.remove(); await dessiner(); }
+    await lierCours(true);
     const { mettreAJourFiches } = await import('../majFiches.js');
     await mettreAJourFiches(m, ctx, { apresImport: true });
+  }
+
+  // cours cités en texte dans « Cours mobilisés » → reliés au document de « Mes cours » qui correspond (code et titre) :
+  // le document devient consultable et téléchargeable par les élèves, comme un cours coché depuis la liste
+  async function lierCours(signaler) {
+    try {
+      const { lierCoursCites } = await import('../lierCours.js');
+      const { seances } = await charger();
+      const n = await lierCoursCites(seances, ref);
+      if (n) { toast(`${n} cours cité(s) relié(s) à vos documents de « Mes cours » : consultables par les élèves`); await dessiner(); }
+      else if (signaler) toast('Aucun cours cité ne correspond à un document de « Mes cours »');
+    } catch { /* Mes cours indisponible : rien à relier */ }
   }
 
   async function insererSeance(s, x) {
@@ -573,6 +586,7 @@ Savoirs : S11-1, S21-2
   }
 
   await dessiner();
+  if (modif) lierCours(false);   // cours cités en texte : reliés à « Mes cours » (et donc visibles des élèves)
 }
 
 // ------------------------------------------------------------------------------------------- lecture d'un séquençage Excel
