@@ -231,8 +231,10 @@ export const oublierListesNuage = () => listesNuage.clear();
 // les repères absent_nuage (par fiche) et coupes (espaces dont le partage ne fonctionne plus) : rien n'est supprimé.
 export const LIENS_ESPACES = { biblio: 'lien_bibliotheque', cours: 'lien_cours', divers: 'lien_divers' };
 export const masqueeNuage = (l) => !!l?.absent_nuage || (reglagesDe(l?.proprietaire).coupes || []).includes(l?.espace);
-const PARTAGE_FERME = /refuse l’accès|ne trouve pas ce dossier/i;
+// réponse de Nuage elle-même (lien supprimé, expiré, protégé…) — pas une panne du relais ou du réseau
+const PARTAGE_FERME = /refuse l.acc[eè]s|ne trouve pas ce dossier|comme pr[eé]vu \(code 4\d\d\)|non reconnu/i;
 let verifEnCours = null;
+// force : sans le délai de 10 minutes (ouverture de Mes ressources) ; Nuage est toujours relu (la liste lue sert ensuite à la synchronisation)
 export function verifierPartagesNuage(moi, { espaces = Object.keys(LIENS_ESPACES), force = false } = {}) {
   if (verifEnCours) return verifEnCours;
   verifEnCours = (async () => {

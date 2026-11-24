@@ -201,7 +201,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     h('header', { class: 'entete-biblio', style: { '--fond-biblio': grainDeBois('entete-' + E.cle + '-' + moi) + ' center/cover' } },
       h('div', { class: 'tete-biblio' },
         h('div', {}, h('h1', {}, E.titre),
-          h('p', { class: 'sous-titre' }, `${pluriel(mesLivres.length, E.fiche, E.fiches)} · ${pluriel([...T.values()].filter(aMoi).length, E.theme, E.themes)}${sesLivres.length ? ` · ${sesLivres.length} partagé(s) avec moi` : ''} · fichiers sur votre Nuage`)),
+          h('p', { class: 'sous-titre' }, `${pluriel(mesLivres.length, E.fiche, E.fiches)} · ${pluriel([...T.values()].filter((t) => aMoi(t) && !t.masque_nuage).length, E.theme, E.themes)}${sesLivres.length ? ` · ${sesLivres.length} partagé(s) avec moi` : ''} · fichiers sur votre Nuage`)),
         h('div', { class: 'actions-page' },
           h('button', { class: 'btn principal', onclick: () => ajouterLivres(themeCourant && aMoi(themeCourant) ? themeCourant.id : null) }, '＋  ' + E.ajouter),
           h('button', { class: 'btn', title: `Relire votre dossier « ${E.nomDossierNuage} » sur Nuage : nouveaux fichiers, fichiers déplacés, dossiers et fichiers disparus`, onclick: () => mettreAJour() }, '↻  Mettre à jour depuis mon dossier'),
@@ -1237,14 +1237,27 @@ ${listeSavoirs(ref)}`,
       vider(bandeauNuage, coupe ? h('div', { class: 'bandeau-nuage alerte' }, h('span', { class: 'icone-bandeau' }, '⚠'),
         h('div', { class: 'texte-bandeau' }, h('b', {}, `Le lien de partage de votre dossier « ${E.nomDossierNuage} » ne fonctionne plus`),
           h('small', {}, `${pluriel(masquees.length, E.fiche + ' masqué', E.fiches + ' masqués')} sur le site et pour les élèves, jusqu’à ce que le partage fonctionne à nouveau.`)),
-        h('button', { class: 'btn petit principal', type: 'button', onclick: () => reglagesPuisMaj() }, '⚙ Réglages Nuage'))
+        h('button', { class: 'btn petit principal', type: 'button', onclick: () => reglagesPuisMaj() }, '⚙ Réglages Nuage'),
+        masquees.length ? h('button', { class: 'btn petit danger', type: 'button', title: 'Supprimer définitivement du site toutes les fiches et tous les dossiers de cet espace', onclick: supprimerEspaceCoupe }, '🗑 Tout supprimer du site') : null)
         : null);
     };
+    // lien de partage supprimé volontairement : on peut retirer définitivement toutes les fiches de l'espace
+    async function supprimerEspaceCoupe() {
+      const mesT = [...T.values()].filter(aMoi);
+      if (!(await confirmer('Tout supprimer du site', `Supprimer définitivement ${pluriel(masquees.length, E.fiche, E.fiches)} et ${pluriel(mesT.length, E.theme, E.themes)} de « ${E.titre} » ? Leurs sommaires, savoirs, partages et publications aux élèves sont perdus. (Si vous partagez à nouveau le dossier plus tard, les fiches seront recréées automatiquement, sans ces informations.)`, 'Tout supprimer'))) return;
+      try {
+        for (const l of masquees) await db.supprimer('biblio_livres', l.id);
+        const prof = (t) => chemin(t).length;
+        for (const t of mesT.sort((a, b) => prof(b) - prof(a))) if (T.has(t.id)) { await db.supprimer('biblio_themes', t.id); [t, ...descendants(t.id)].forEach((x) => T.delete(x.id)); }
+        toast('Espace vidé'); oublierEspaces(); recharger();
+      } catch (e) { erreur(e); }
+    }
     dessinerBandeau();
     if (!analyserLien(lienN)) return;
     let change = false;
-    try { change = await mettreAJour({ auto: true }); } catch { /* Nuage injoignable : on réessaiera */ }
-    try { if (await verifierPartagesNuage(moi, { espaces: [E.cle] })) change = true; } catch { /* idem */ }
+    // d'abord l'état du partage (Nuage relu), puis la synchronisation des fiches avec la liste qui vient d'être lue
+    try { if (await verifierPartagesNuage(moi, { espaces: [E.cle], force: true })) change = true; } catch { /* Nuage injoignable : on réessaiera */ }
+    try { if (await mettreAJour({ auto: true })) change = true; } catch { /* idem */ }
     if (change && bandeauNuage.isConnected) { oublierEspaces(); recharger(); }
   }
 
