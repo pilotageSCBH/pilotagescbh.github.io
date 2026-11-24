@@ -554,6 +554,9 @@ async function demarrer() {
     await ctx.chargerBase();
     afficher();
     demarrerPresence();
+    // ressources plus partagées sur Nuage : masquées pour tous (y compris les élèves), vérifié à chaque connexion
+    if (ctx.peutEcrire()) setTimeout(() => import('./ressources.js').then((r) => r.verifierPartagesNuage(ctx.profil.id))
+      .then(async (c) => { if (c) { try { (await import('./pages/espace.js')).oublierEspaces(); } catch { /* */ } } }).catch(() => {}), 5000);
   } catch (e) {
     ctx.profil = null;
     if (!estConnecte()) return ecranConnexion(e.message);

@@ -4,6 +4,7 @@
 import { db } from './api.js';
 import { h, vider, toast, erreur, fenetre } from './ui.js';
 import { iconeDoc } from './pages/cours.js';
+import { chargerReglages, masqueeNuage } from './ressources.js';
 
 export async function choisirDocuments(ctx, ref, x, esp = 'cours') {
   const divers = esp === 'divers';
@@ -11,6 +12,8 @@ export async function choisirDocuments(ctx, ref, x, esp = 'cours') {
   try {
     let themes, livres;
     [themes, livres, collegues] = await Promise.all([db.lire('biblio_themes', `espace=eq.${esp}&order=ordre,id`), db.lire('biblio_livres', `espace=eq.${esp}&order=ordre,id`), db.rpc('collegues').catch(() => [])]);
+    await chargerReglages().catch(() => null);
+    livres = livres.filter((l) => !masqueeNuage(l));   // ressources plus partagées sur Nuage : non proposées
     // dossiers et documents de « Mes cours » sous une forme commune (les dossiers ont un identifiant « d… »)
     rows = [...themes.map((t) => ({ id: 'd' + t.id, type: 'dossier', parent_id: t.parent_id ? 'd' + t.parent_id : null, titre: t.nom, proprietaire: t.proprietaire, ordre: t.ordre, espace: t.espace })),
       ...livres.map((l) => ({ id: l.id, type: 'cours', parent_id: l.theme_id ? 'd' + l.theme_id : null, titre: l.titre, proprietaire: l.proprietaire, ordre: 1e6 + l.ordre, savoirs: l.savoirs || [], lien: l.lien || '', genre: l.genre || 'cours', espace: l.espace }))];

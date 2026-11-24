@@ -225,6 +225,54 @@ export async function nuageFichier(lien, chemin) {
 }
 export const oublierListesNuage = () => listesNuage.clear();
 
+// ------------------------------------------------------------------------------------------- ressources plus partagées sur Nuage
+// Une ressource n'est visible (enseignants et élèves) que si son fichier est encore dans le dossier partagé et que le
+// lien de partage fonctionne. L'enseignant connecté vérifie SES dossiers (au plus toutes les 10 minutes) et met à jour
+// les repères absent_nuage (par fiche) et coupes (espaces dont le partage ne fonctionne plus) : rien n'est supprimé.
+export const LIENS_ESPACES = { biblio: 'lien_bibliotheque', cours: 'lien_cours', divers: 'lien_divers' };
+export const masqueeNuage = (l) => !!l?.absent_nuage || (reglagesDe(l?.proprietaire).coupes || []).includes(l?.espace);
+const PARTAGE_FERME = /refuse l’accès|ne trouve pas ce dossier/i;
+let verifEnCours = null;
+export function verifierPartagesNuage(moi, { espaces = Object.keys(LIENS_ESPACES), force = false } = {}) {
+  if (verifEnCours) return verifEnCours;
+  verifEnCours = (async () => {
+    let change = false;
+    try {
+      await chargerReglages(true);
+      const r = reglages?.get(moi); if (!r || !('coupes' in r)) return false;   // script SQL 45 pas encore exécuté
+      const coupes = new Set(r.coupes || []);
+      for (const esp of espaces) {
+        const lien = r[LIENS_ESPACES[esp]];
+        if (!analyserLien(lien)) continue;
+        const cle = 'pilotage-scbh-verif-nuage-' + esp;
+        try { if (!force && Date.now() - Number(sessionStorage.getItem(cle) || 0) < 600000) continue; sessionStorage.setItem(cle, String(Date.now())); } catch { /* sans stockage */ }
+        let liste;
+        try { liste = await nuageListe(lien, { force: true }); }
+        catch (e) { if (PARTAGE_FERME.test(e.message || '') && !coupes.has(esp)) { coupes.add(esp); change = true; } continue; }   // relais ou réseau en panne : on ne change rien
+        if (coupes.delete(esp)) change = true;
+        const presents = new Set(liste.filter((x) => !x.dossier).map((x) => String(x.c).normalize('NFC')));
+        const docs = await db.lire('biblio_livres', `proprietaire=eq.${moi}&espace=eq.${esp}&chemin=neq.&select=id,chemin,absent_nuage`);
+        const absents = new Set(docs.filter((d) => !presents.has(String(d.chemin).normalize('NFC'))).map((d) => d.id));
+        // prudence (comme « Mettre à jour ») : un dossier lu vide, ou presque tout introuvable, fait penser à une lecture
+        // incomplète de Nuage plutôt qu'à un retrait : on ne masque rien de plus cette fois-ci (on démasque seulement)
+        const suspect = docs.length && (!presents.size || (absents.size > 3 && absents.size > docs.length / 2));
+        for (const d of docs) {
+          const absent = absents.has(d.id);
+          if (suspect && absent && !d.absent_nuage) continue;
+          if (absent !== !!d.absent_nuage) { await db.modifier('biblio_livres', d.id, { absent_nuage: absent }); change = true; }
+        }
+      }
+      if (change || [...coupes].join() !== (r.coupes || []).join()) {
+        await db.enregistrer('ressources_reglages', [{ proprietaire: moi, coupes: [...coupes] }], 'proprietaire');
+        await chargerReglages(true);
+        change = true;
+      }
+    } catch (e) { console.warn('Vérification Nuage', e); }
+    return change;
+  })().finally(() => { verifEnCours = null; });
+  return verifEnCours;
+}
+
 // ------------------------------------------------------------------------------------------- veinage bois (tuiles)
 function hachage(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; }
 const ESSENCES = [['#c9965f', '#a8723f'], ['#d9a86c', '#b98446'], ['#b5703f', '#8f5129'], ['#7a4d31', '#5c3620'],
