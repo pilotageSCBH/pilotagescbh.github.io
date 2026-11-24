@@ -1260,7 +1260,48 @@ ${listeSavoirs(ref)}`,
     // d'abord l'état du partage (Nuage relu), puis la synchronisation des fiches avec la liste qui vient d'être lue
     try { if (await verifierPartagesNuage(moi, { espaces: [E.cle], force: true })) change = true; } catch { /* Nuage injoignable : on réessaiera */ }
     try { if (await mettreAJour({ auto: true })) change = true; } catch { /* idem */ }
-    if (change && bandeauNuage.isConnected) { oublierEspaces(); recharger(); }
+    if (change && bandeauNuage.isConnected) { oublierEspaces(); recharger(); return; }
+    completerCouvertures();
+  }
+  // image de la 1re page (PDF) ou de l'image elle-même : ajoutée en arrière-plan aux fiches qui n'en ont pas encore
+  // (fiches créées automatiquement depuis Nuage), quelques-unes à chaque ouverture, pour que toutes se présentent pareil
+  async function completerCouvertures() {
+    const lienN = reglage[E.lien];
+    if (vue !== 'mes' || !analyserLien(lienN)) return;
+    const CLE = 'pilotage-scbh-couv-essayees';
+    let essayees; try { essayees = new Set(JSON.parse(sessionStorage.getItem(CLE) || '[]')); } catch { essayees = new Set(); }
+    const IMG = /\.(jpe?g|png|webp|gif)$/i;
+    const OFFICE = /\.(docx|pptx|xlsx|odt|odp|ods)$/i;
+    const aFaire = mesFiches().filter((l) => !l.vignette && l.chemin && (/\.pdf$/i.test(l.chemin) || IMG.test(l.chemin) || OFFICE.test(l.chemin)) && !essayees.has(l.id)).slice(0, 8);
+    if (!aFaire.length) return;
+    let n = 0;
+    for (const l of aFaire) {
+      if (!bandeauNuage.isConnected) break;
+      essayees.add(l.id); try { sessionStorage.setItem(CLE, JSON.stringify([...essayees])); } catch { /* sans stockage */ }
+      try {
+        const f = await nuageFichier(lienN, l.chemin);
+        if (f.size > 80 * 1024 * 1024) continue;
+        let v = {};
+        if (IMG.test(l.chemin)) v.vignette = await reduireImage(f, 320, 0.75);
+        else if (OFFICE.test(l.chemin)) {
+          // Word, PowerPoint… : miniature enregistrée dans le fichier (docProps/thumbnail ou Thumbnails/thumbnail), s'il y en a une
+          const P = await import('../pdf.js?v=20261113'); await P.chargerOutils();
+          const zip = await window.JSZip.loadAsync(await f.arrayBuffer());
+          const m = zip.file(/^(docProps\/thumbnail\.(jpe?g|png)|Thumbnails\/thumbnail\.png)$/i)[0];
+          if (m) v.vignette = await reduireImage(new Blob([await m.async('uint8array')]), 320, 0.75);
+        } else {
+          const info = await lirePdf(f);
+          v = { vignette: info.vignette || '' };
+          if (!l.pages && info.pages) v.pages = info.pages;
+          if (!(l.sommaire || []).length && (info.sommaire || []).length) { v.sommaire = info.sommaire; v.source = info.source; }
+        }
+        if (!v.vignette) continue;
+        await db.modifier('biblio_livres', l.id, v); Object.assign(l, v); n++;
+        // la carte affichée prend sa couverture sans recharger la page
+        document.querySelectorAll(`a.lien-couv[href="${lienL(l)}"]`).forEach((a) => vider(a, couverture(l)));
+      } catch { /* fichier illisible : on n'insiste pas pendant cette session */ }
+    }
+    if (n) oublierEspaces();
   }
 
 }
