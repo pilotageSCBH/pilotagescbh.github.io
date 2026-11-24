@@ -823,8 +823,9 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       recharger();
     });
   }
-  // auto : synchronisation silencieuse à l'ouverture (nouveaux fichiers, fichiers déplacés, nouveaux dossiers, images) ;
-  // rien n'est supprimé (les fiches dont le fichier n'est plus partagé sont seulement masquées)
+  // auto : synchronisation silencieuse à l'ouverture : fiches créées pour les nouveaux fichiers, fichiers déplacés suivis,
+  // nouveaux dossiers, images ; fiches et dossiers dont le fichier n'est plus partagé sur Nuage supprimés
+  // (sauf lecture douteuse de Nuage : dossier lu vide ou presque tout introuvable)
   async function mettreAJour({ auto = false } = {}) {
     let lus;
     if (auto) {
@@ -878,8 +879,8 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     // prudence : un dossier vide ou presque tout « introuvable » fait penser à un mauvais lien
     const suspect = !fichiers.length || (disparus.length > 3 && disparus.length > mesFichesTout().length / 2);
     const lire = h('input', { type: 'checkbox', checked: true });
-    const retirer = h('input', { type: 'checkbox', checked: !suspect && !auto }), retirerD = h('input', { type: 'checkbox', checked: !suspect && !auto });
-    if (auto && (suspect || !(nouveaux.length || deplaces.length || aCreer.length || illus.length))) return false;
+    const retirer = h('input', { type: 'checkbox', checked: !suspect }), retirerD = h('input', { type: 'checkbox', checked: !suspect });
+    if (auto && (suspect || !(nouveaux.length || deplaces.length || aCreer.length || illus.length || disparus.length || dossiersPartis.length))) return false;
     if (auto) lire.checked = false;   // ajout rapide : titre et dossier (le sommaire se complète avec « Mettre à jour » ou depuis la fiche)
     const liste = (l, f) => (l.length ? ' : ' + l.slice(0, 8).map(f).join(', ') + (l.length > 8 ? '…' : '') : '');
     const ok = auto || await fenetre('Mettre à jour depuis mon dossier', h('div', {},
@@ -1237,10 +1238,7 @@ ${listeSavoirs(ref)}`,
         h('div', { class: 'texte-bandeau' }, h('b', {}, `Le lien de partage de votre dossier « ${E.nomDossierNuage} » ne fonctionne plus`),
           h('small', {}, `${pluriel(masquees.length, E.fiche + ' masqué', E.fiches + ' masqués')} sur le site et pour les élèves, jusqu’à ce que le partage fonctionne à nouveau.`)),
         h('button', { class: 'btn petit principal', type: 'button', onclick: () => reglagesPuisMaj() }, '⚙ Réglages Nuage'))
-        : masquees.length ? h('div', { class: 'bandeau-nuage' }, h('span', { class: 'icone-bandeau' }, '🙈'),
-          h('div', { class: 'texte-bandeau' }, h('b', {}, `${pluriel(masquees.length, E.fiche + ' masqué', E.fiches + ' masqués')} : leur fichier n’est plus partagé sur Nuage`),
-            h('small', {}, masquees.slice(0, 4).map((l) => l.titre).join(', ') + (masquees.length > 4 ? '…' : '') + ' · ils réapparaîtront si le fichier est de nouveau partagé ; « Mettre à jour » propose de supprimer leurs fiches.')),
-          h('button', { class: 'btn petit', type: 'button', onclick: () => mettreAJour() }, '↻ Mettre à jour')) : null);
+        : null);
     };
     dessinerBandeau();
     if (!analyserLien(lienN)) return;
