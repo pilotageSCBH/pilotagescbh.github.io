@@ -203,6 +203,7 @@ async function pageSemaine(zone, arg) {
           x.objectif_inter ? h('p', { class: 'objectif' }, x.objectif_inter) : null,
           puceDocs(x).length ? h('div', { class: 'docs-seance' }, puceDocs(x)) : h('p', { class: 'sans-docs' }, 'Pas encore de document pour cette séance.'))))))
         : h('p', { class: 'vide' }, sem.vacances ? 'Vacances : pas de séance.' : 'Aucune séance placée cette semaine dans la progression.')),
+    w !== wAuj ? blocTravauxSemaine(w, seances) : null, // la semaine en cours : déjà dans « À faire »
     h('section', {}, h('h2', { class: 'titre-section' }, 'Prochaines évaluations'), listeEvaluations()));
 }
 // ---- mes épreuves : calendrier des épreuves de l'examen et, pour chacune, mon niveau sur les compétences évaluées
@@ -248,14 +249,42 @@ async function pageEpreuvesEleve(zone) {
 }
 // ---- travail à faire : échéances des fiches de travail préparatoire et de travail à la maison (3 semaines à venir)
 const isoJour = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// semaines où la séance est placée dans la progression
+function semainesSeance(id) {
+  return [...new Set((D.progression_cases || []).filter((c) => c.seance_id === id || c.seance2_id === id).map((c) => c.semaine))].sort((a, b) => a - b);
+}
+// échéance d'un travail : la date saisie par l'enseignant, sinon déduite de la progression (travail préparatoire : la
+// semaine de la séance ; devoirs : la semaine suivante). { date (lundi si déduite), fin (dernier jour utile), exacte, w }
+function echeanceDe(x, cle, o) {
+  if (!o) return null;
+  if (o.echeance) return { date: o.echeance, fin: o.echeance, exacte: true };
+  const ws = semainesSeance(x.id); if (!ws.length) return null;
+  const w = cle === 'avant' ? ws[0] : ws[ws.length - 1] + 1;
+  const d = lundi(D.P.annee_debut, w), f = new Date(d); f.setDate(f.getDate() + 6);
+  return { date: isoJour(d), fin: isoJour(f), exacte: false, w };
+}
+const libEcheance = (cle, e) => (e.exacte ? null : cle === 'avant'
+  ? 'avant la séance (semaine du ' + new Date(e.date + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ')'
+  : 'pour la semaine du ' + new Date(e.date + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }));
 function travauxAFaire(jours = 21) {
   const auj = isoJour(new Date()), lim = new Date(); lim.setDate(lim.getDate() + jours);
   const l = [];
   for (const x of D.seances.values()) for (const cle of ['avant', 'apres']) {
-    const o = x['maison_' + cle];
-    if (o?.echeance && o.echeance >= auj && o.echeance <= isoJour(lim)) l.push({ x, cle, o });
+    const o = x['maison_' + cle], e = echeanceDe(x, cle, o);
+    if (e && e.fin >= auj && e.date <= isoJour(lim)) l.push({ x, cle, o, e });
   }
-  return l.sort((a, b) => a.o.echeance.localeCompare(b.o.echeance));
+  return l.sort((a, b) => a.e.date.localeCompare(b.e.date) || (a.cle === 'avant' ? -1 : 1));
+}
+// travaux d'une semaine w de la progression : ceux des séances de la semaine, et ceux dont l'échéance tombe dans la semaine
+function travauxSemaine(w, seancesW) {
+  const d0 = isoJour(lundi(D.P.annee_debut, w)), f = lundi(D.P.annee_debut, w); f.setDate(f.getDate() + 6); const d1 = isoJour(f);
+  const l = [], vus = new Set();
+  for (const x of D.seances.values()) for (const cle of ['avant', 'apres']) {
+    const o = x['maison_' + cle]; if (!o) continue;
+    const e = echeanceDe(x, cle, o);
+    if ((seancesW.includes(x) || (e && e.date <= d1 && e.fin >= d0)) && !vus.has(x.id + cle)) { vus.add(x.id + cle); l.push({ x, cle, o, e: e || { date: d0, fin: d1, exacte: false } }); }
+  }
+  return l.sort((a, b) => a.e.date.localeCompare(b.e.date) || (a.cle === 'avant' ? -1 : 1));
 }
 function blocAFaire() {
   const l = travauxAFaire();
@@ -264,9 +293,20 @@ function blocAFaire() {
   const quand = (d) => (d === auj ? 'aujourd’hui' : d === isoJour(dem) ? 'demain' : new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' }));
   const resumeT = (t) => { const v = String(t || '').replace(/\s+/g, ' ').trim(); return v.length > 110 ? v.slice(0, 109) + '…' : v; };
   return h('section', { class: 'a-faire-eleve' }, h('h2', { class: 'titre-section' }, '🏠 Travail à faire'),
-    h('ul', {}, l.map(({ x, cle, o }) => h('li', { style: { '--couleur': x.mat?.couleur || 'var(--teal)' }, class: o.echeance <= isoJour(dem) ? 'urgent' : '' },
-      h('span', { class: 'date-afaire' }, quand(o.echeance)),
+    h('ul', {}, l.map(({ x, cle, o, e }) => h('li', { style: { '--couleur': x.mat?.couleur || 'var(--teal)' }, class: e.exacte && e.date <= isoJour(dem) ? 'urgent' : '' },
+      h('span', { class: 'date-afaire' }, e.exacte ? quand(e.date) : libEcheance(cle, e)),
       h('a', { href: '#/seance/' + x.id }, h('b', {}, etiquette(x)), ' · ', cle === 'avant' ? 'Travail préparatoire' : 'À rendre', ' — ', resumeT(o.consignes || o.objectif || x.titre))))));
+}
+
+// travail à la maison de la semaine affichée (d'après la progression)
+function blocTravauxSemaine(w, seancesW) {
+  const l = travauxSemaine(w, seancesW);
+  if (!l.length) return null;
+  const resumeT = (t) => { const v = String(t || '').replace(/\s+/g, ' ').trim(); return v.length > 140 ? v.slice(0, 139) + '…' : v; };
+  return h('section', { class: 'a-faire-eleve semaine' }, h('h2', { class: 'titre-section' }, '🏠 Travail à la maison de la semaine'),
+    h('ul', {}, l.map(({ x, cle, o, e }) => h('li', { style: { '--couleur': x.mat?.couleur || 'var(--teal)' } },
+      h('span', { class: 'date-afaire' }, e.exacte ? new Date(e.date + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' }) : libEcheance(cle, e)),
+      h('a', { href: '#/seance/' + x.id }, h('b', {}, etiquette(x)), ' · ', cle === 'avant' ? 'Travail préparatoire' : 'Travail à la maison', ' — ', resumeT(o.consignes || o.objectif || x.titre))))));
 }
 
 // ---- documents pas encore ouverts sur cet appareil : pastille « nouveau » (les documents présents à la 1re visite n'en ont pas)
@@ -416,11 +456,13 @@ const MAISON = {
     rub: [['consignes', 'Travail demandé'], ['ressources', 'Ressources'], ['rendu', 'Modalités de rendu'], ['correction', 'Correction / évaluation']] },
 };
 const dateLongue = (v) => (v ? new Date(v + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '');
+// « À rendre le … » si la date est saisie, sinon la semaine déduite de la progression
+const quandMaison = (x, cle, o) => { const e = echeanceDe(x, cle, o); return !e ? '' : e.exacte ? `${MAISON[cle].echeance} ${dateLongue(e.date)}` : 'À faire ' + libEcheance(cle, e); };
 function boutonMaison(x, cle) {
   const o = x['maison_' + cle]; if (!o) return null;
   const M = MAISON[cle];
   return h('button', { class: 'btn bouton-maison', type: 'button', style: { '--couleur': M.couleur }, onclick: () => ouvrirMaison(x, cle) },
-    M.bouton, o.echeance ? h('small', {}, `${M.echeance} ${dateLongue(o.echeance)}`) : null);
+    M.bouton, quandMaison(x, cle, o) ? h('small', {}, quandMaison(x, cle, o)) : null);
 }
 // fiche de travail : affichée, puis téléchargeable en PDF (même mise en page que celle de l'enseignant)
 async function ouvrirMaison(x, cle) {
@@ -433,13 +475,13 @@ async function ouvrirMaison(x, cle) {
       await envoyerPDF({ fichier: `${codeMat(m)}_S${num}_${cle === 'avant' ? 'travail_preparatoire' : 'travail_a_la_maison'}.pdf`, titre: `${M.titre} · séance ${num}`,
         pied: `${m?.nom || ''} · Séance ${num} · Promotion ${D.P.libelle}`,
         blocs: [{ t: 'titre', texte: cle === 'avant' ? 'TRAVAIL PRÉPARATOIRE À LA MAISON' : 'TRAVAIL À LA MAISON', sous: `${m?.nom || ''} · Séance ${num} · ${x.titre || ''}`, couleur: M.couleur },
-          { t: 'infos', paires: [['Matière', m?.nom || ''], [M.echeance, dateLongue(o.echeance)], ['Durée estimée', o.duree || ''], ['Promotion', D.P.libelle], ['Séance', `${num} · ${x.titre || ''}`]] },
+          { t: 'infos', paires: [['Matière', m?.nom || ''], ['Échéance', quandMaison(x, cle, o)], ['Durée estimée', o.duree || ''], ['Promotion', D.P.libelle], ['Séance', `${num} · ${x.titre || ''}`]] },
           ...M.rub.flatMap(([k, l]) => [o[k] ? { t: 'rubrique', titre: l, texte: o[k] } : null, k === 'ressources' && liens.length ? { t: 'qr', liens } : null]).filter(Boolean),
           { t: 'note', texte: liens.length ? 'Scannez un QR code avec l’appareil photo de votre téléphone pour ouvrir directement la ressource.' : '' }] }, 'pdf');
     } catch (e) { erreur(e); }
   };
   await fenetre(M.titre + ` · ${sq?.numero}.${x.numero}`, h('div', { class: 'fiche-maison', style: { '--couleur': M.couleur } },
-    h('p', { class: 'infos-maison' }, o.echeance ? h('b', {}, `${M.echeance} ${dateLongue(o.echeance)}`) : null, o.duree ? ` · durée estimée : ${o.duree}` : ''),
+    h('p', { class: 'infos-maison' }, quandMaison(x, cle, o) ? h('b', {}, quandMaison(x, cle, o)) : null, o.duree ? ` · durée estimée : ${o.duree}` : ''),
     M.rub.map(([k, l]) => (o[k] ? h('section', {}, h('h3', {}, l), h('p', { class: 'texte-maison' }, lien(o[k]))) : null))),
   [{ texte: '⬇ Télécharger la fiche (PDF)', action: () => { pdf(); return false; } }, { texte: 'Fermer', classe: 'principal', valeur: true }], { large: true });
 }
