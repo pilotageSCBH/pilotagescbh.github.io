@@ -1,8 +1,8 @@
 -- =====================================================================================================
--- 46 · Espace élève : seulement les séances passées, celles de la semaine et la séance suivante de chaque matière.
---   Une séance placée dans la progression plus loin que la prochaine séance de sa matière reste cachée aux élèves :
---   ni son détail, ni son travail préparatoire, ni son travail à la maison ne leur sont envoyés.
---   Une séance qui n'est pas placée dans la progression reste visible (comme avant).
+-- 46 · Espace élève : « Ma semaine » ne montre que les séances passées, celles de la semaine et la séance suivante de
+--   chaque matière. Toutes les séances restent visibles dans « Ma formation » et le calendrier, mais le travail
+--   préparatoire et le travail à la maison d'une séance placée plus loin que la prochaine séance de sa matière ne sont
+--   pas envoyés aux élèves. Une séance qui n'est pas placée dans la progression garde son travail (comme avant).
 -- À exécuter une fois dans Supabase (SQL Editor → New query → Run), après le script 32. Relancer ne casse rien.
 -- Aucune donnée d'élève dans ce script ; rien n'est modifié dans les tables.
 -- =====================================================================================================
@@ -27,7 +27,7 @@ begin
   return 89;
 end $$;
 
--- séances de la promotion p cachées aux élèves : placées seulement après la prochaine séance de leur matière
+-- séances de la promotion p dont le travail est caché aux élèves : placées seulement après la prochaine séance de leur matière
 create or replace function public.seances_futures_eleve(p bigint) returns table (seance_id bigint)
 language sql stable security definer set search_path = public as $$
   with wc as (select public.semaine_promo(annee_debut) w from promotions where id = p),
@@ -42,17 +42,17 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function public.seances_futures_eleve(bigint) from public, anon, authenticated;
 
--- détail des séances pour l'élève (script 32) : sans les séances cachées
+-- détail des séances pour l'élève (script 32) : sans le travail à la maison des séances lointaines
 create or replace function public.details_seances_eleve(p bigint) returns json
 language sql stable security definer set search_path = public as $$
+  with futures as (select seance_id from public.seances_futures_eleve(p))
   select coalesce(json_agg(json_build_object(
       'id', x.id,
       'objectifs_ops', x.objectifs_ops,
-      'maison_avant', f.maison_avant,
-      'maison_apres', f.maison_apres)), '[]')
+      'maison_avant', case when x.id in (select seance_id from futures) then null else f.maison_avant end,
+      'maison_apres', case when x.id in (select seance_id from futures) then null else f.maison_apres end)), '[]')
   from seances x
   join sequences s on s.id = x.sequence_id and s.promotion_id = p
-  left join fiches_seance f on f.seance_id = x.id
-  where x.id not in (select seance_id from public.seances_futures_eleve(p));
+  left join fiches_seance f on f.seance_id = x.id;
 $$;
 revoke all on function public.details_seances_eleve(bigint) from public, anon, authenticated;

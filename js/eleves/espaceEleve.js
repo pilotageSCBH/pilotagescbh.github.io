@@ -56,7 +56,8 @@ async function donnees(force = false) {
   const mats = new Map((r.matieres || []).map((m) => [m.id, m]));
   const seqs = new Map((r.sequences || []).map((s) => [s.id, s]));
   const seances = new Map((r.seances || []).map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: mats.get(seqs.get(x.sequence_id)?.matiere_id) }]));
-  // séances à venir : seulement la prochaine de chaque matière (les suivantes restent cachées, même placées dans la progression)
+  // « Ma semaine » ne montre que les séances passées, celles de la semaine et la prochaine de chaque matière : les suivantes
+  // sont marquées « futur » (toujours visibles dans « Ma formation » et le calendrier, sans leur travail à la maison)
   const P0 = (r.promotions || [])[0];
   if (P0) {
     const wc = semaineActuelle(P0.annee_debut), cases = r.progression_cases || [];
@@ -67,8 +68,7 @@ async function donnees(force = false) {
       places.add(id);
       if (c.semaine <= wc || c.semaine === prochaine.get(c.matiere_id)) ok.add(id);
     }
-    for (const id of places) if (!ok.has(id)) seances.delete(id);
-    r.progression_cases = cases.map((c) => ({ ...c, seance_id: seances.has(c.seance_id) ? c.seance_id : null, seance2_id: seances.has(c.seance2_id) ? c.seance2_id : null }));
+    for (const id of places) if (!ok.has(id) && seances.has(id)) { const x = seances.get(id); x.futur = true; delete x.maison_avant; delete x.maison_apres; }
   }
   D = { ...r, P: P0, mats, seqs, seances, docs: new Map((r.documents || []).map((d) => [d.id, d])),
     dossiers: new Map((r.dossiers || []).map((t) => [t.id, t])) };
@@ -190,7 +190,7 @@ async function pageSemaine(zone, arg) {
   const jours = new Map((D.progression_jours || []).map((j) => [j.jour, j.evenement]));
   const cases = (D.progression_cases || []).filter((c) => c.semaine === w);
   const ids = cases.flatMap((c) => [c.seance_id, c.seance2_id]).filter(Boolean);
-  const seances = ids.map((id) => D.seances.get(id)).filter(Boolean);
+  const seances = ids.map((id) => D.seances.get(id)).filter((x) => x && !x.futur);
   const parMat = [...new Set(seances.map((x) => x.mat?.id))].map((id) => D.mats.get(id)).filter(Boolean).sort((a, b) => a.ordre - b.ordre);
   const evts = Array.from({ length: 7 }, (_, k) => [k, jours.get(w * 7 + k)]).filter(([, e]) => e);
   const apprenti = D.eleve.statut === 'Apprenti';
@@ -461,7 +461,8 @@ async function pageSeance(zone, arg) {
       bloc('🧩 Compétences', codes(x.competences, libC)),
       bloc('📖 Savoirs associés', codes(x.savoirs, libS)),
       bloc('🏠 Travail à la maison', boutonMaison(x, 'avant'), boutonMaison(x, 'apres'),
-        !x.maison_avant && !x.maison_apres ? h('p', { class: 'gris' }, 'Pas de travail préparatoire ni de travail à la maison pour cette séance.') : null)));
+        x.futur ? h('p', { class: 'gris' }, 'Le travail de cette séance sera affiché quand elle sera la prochaine séance de la matière.')
+          : !x.maison_avant && !x.maison_apres ? h('p', { class: 'gris' }, 'Pas de travail préparatoire ni de travail à la maison pour cette séance.') : null)));
 }
 const MAISON = {
   avant: { titre: 'Travail préparatoire (avant la séance)', bouton: '🏠 Fiche de travail préparatoire', echeance: 'À faire pour le', couleur: '#E8893A',
