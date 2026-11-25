@@ -2583,3 +2583,13 @@ table.seances tr.estompee { opacity: .35; }
 .liste-recents-accueil a:hover { background: #EEF7F6; }
 
 .sans-docs { margin: 4px 0 0; font-size: 12px; color: #8A9694; font-style: italic; }
+
+/* QCM : accès des élèves bloqué / débloqué (script 47) */
+.bandeau-acces-qcm { display: flex; align-items: center; gap: 14px; margin: 14px 0; padding: 12px 16px; border-radius: 12px; border: 1px solid; }
+.bandeau-acces-qcm .gros { font-size: 26px; }
+.bandeau-acces-qcm > div { flex: 1; }
+.bandeau-acces-qcm.bloque { background: #FBEDEA; border-color: #EBC3BC; }
+.bandeau-acces-qcm.ouvert { background: #E9F5EB; border-color: #BFE0C5; }
+.petit-select { padding: 3px 6px; font-size: 12.5px; min-height: 0; width: auto; }
+td .btn.petit + .btn.petit, td .btn.petit { margin-left: 6px; }
+.grille-resultats-qcm > .pleine-largeur { grid-column: 1 / -1; }

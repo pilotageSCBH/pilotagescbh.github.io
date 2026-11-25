@@ -43,7 +43,7 @@ export async function pageQcm(zone, arg, ctx) {
   const mats = new Map(ctx.matieres.map((m) => [m.id, m]));
   const miens = liste.filter((q) => q.proprietaire === moi), autres = liste.filter((q) => q.proprietaire !== moi);
   const carte = (q) => {
-    const ss = sessions.filter((s) => s.qcm_id === q.id), ouverte = ss.find((s) => new Date(s.ouverture) <= new Date() && new Date(s.fermeture) > new Date());
+    const ss = sessions.filter((s) => s.qcm_id === q.id), ouverte = ss.find((s) => !enLibreAcces(s) && new Date(s.ouverture) <= new Date() && new Date(s.fermeture) > new Date());
     const partage = q.partage_tous || partages.some((p) => p.qcm_id === q.id) || ss.some(enLibreAcces) || (avecDossiers && q.dossier && dossiersP.some((d) => d.proprietaire === q.proprietaire && d.dossier === q.dossier));
     return h('a', { class: 'carte-qcm', href: '#/qcm/' + q.id, style: { '--couleur': mats.get(q.matiere_id)?.couleur || 'var(--teal)' } },
       h('b', {}, q.titre || 'QCM sans titre'),
@@ -348,7 +348,7 @@ async function editeur(zone, ctx, q, sessions, partages, ref, tous = []) {
     zoneSeries,
     ss.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Passations en ligne'),
       h('ul', { class: 'liste-resultats' }, ss.map((s) => h('li', {}, h('a', { href: '#/qcm/s-' + s.id }, h('b', {}, `Promotion ${ctx.promotions.find((p) => p.id === s.promotion_id)?.libelle || ''}`),
-        h('small', { class: 'gris' }, ` · du ${dateHeure(s.ouverture)} au ${dateHeure(s.fermeture)}`), ' → résultats'))))) : null,
+        h('small', { class: 'gris' }, ` · ${enLibreAcces(s) ? 'libre accès' : 'du ' + dateHeure(s.ouverture) + ' au ' + dateHeure(s.fermeture)} · ${accesOuvert(s) ? '🔓 débloqué' : '🔒 bloqué'}`), ' → résultats et accès'))))) : null,
     h('h2', { class: 'titre-section' }, 'Questions'), zoneQ);
   dessinerQuestions();
 }
@@ -444,15 +444,16 @@ async function ouvrirEnLigne(ctx, lot) {
   const maintenant = new Date(); maintenant.setSeconds(0, 0);
   const fin = new Date(maintenant); fin.setDate(fin.getDate() + 7); fin.setHours(20, 0);
   const ouv = h('input', { class: 'champ', type: 'datetime-local', value: pourLocal(maintenant) }), ferm = h('input', { class: 'champ', type: 'datetime-local', value: pourLocal(fin) });
-  const tent = h('select', { class: 'champ' }, h('option', { value: 1 }, 'Une seule tentative'), h('option', { value: 3 }, '3 tentatives'), h('option', { value: 20 }, 'Illimitées (entraînement)'));
+  const debloquer = h('input', { type: 'checkbox' });
   const melanger = h('input', { type: 'checkbox', checked: true });
   const couples = bons.filter(({ q }) => q.contrat_id);
   const versContrat = couples.length ? h('input', { type: 'checkbox', checked: true }) : null;
   const ok = await fenetre(lot.length > 1 ? `Ouvrir ${pluriel(bons.length, 'QCM', 'QCM')} en ligne` : 'Ouvrir le QCM en ligne', h('div', { class: 'formulaire' },
     lot.length > 1 ? h('p', { class: 'aide large' }, bons.map(({ q }) => q.titre).join(' · ') + (mauvais ? ` — ${pluriel(mauvais, 'QCM incomplet ou vide est laissé', 'QCM incomplets ou vides sont laissés')} de côté.` : '')) : null,
-    h('label', {}, 'Pour (classe entière)', promo), h('label', {}, 'Tentatives', tent),
+    h('label', {}, 'Pour (classe entière)', promo), h('p', { class: 'aide' }, 'Une seule tentative par élève : vous pourrez en accorder d’autres, élève par élève, dans la page des résultats.'),
     h('label', {}, 'Ouvert à partir du', ouv), h('label', {}, 'Fermé le', ferm),
     h('label', { class: 'case large' }, melanger, ' Mélanger l’ordre des questions et des réponses pour chaque élève'),
+    h('label', { class: 'case large' }, debloquer, ' Débloquer l’accès aux élèves tout de suite', h('small', { class: 'gris' }, ' — sinon le QCM reste 🔒 bloqué : vous le débloquez quand vous voulez, pour la classe ou pour un élève, depuis la page des résultats')),
     versContrat ? h('label', { class: 'case large' }, versContrat, ` Remplir automatiquement la fiche contrat couplée dès que l’élève rend ses réponses${couples.length < bons.length ? ` (${pluriel(couples.length, 'QCM couplé', 'QCM couplés')})` : ''}`,
       h('small', { class: 'gris' }, ' — note de 0 à 5 par critère (meilleure tentative) ; réservé aux enseignants de la matière de la fiche')) : null,
     h('p', { class: 'aide large' }, 'Les élèves de la promotion le trouvent dans « Mes QCM » de leur espace pendant cette période. La correction (bonnes réponses et explications) leur est montrée dès qu’ils ont rendu leurs réponses.')),
@@ -460,16 +461,16 @@ async function ouvrirEnLigne(ctx, lot) {
   if (!ok) return;
   let derniere = null, refus = [];
   for (const { q } of bons) {
-    const v = { qcm_id: q.id, promotion_id: Number(promo.value), ouverture: new Date(ouv.value).toISOString(), fermeture: new Date(ferm.value).toISOString(), tentatives: Number(tent.value), melanger: melanger.checked };
+    const v = { qcm_id: q.id, promotion_id: Number(promo.value), ouverture: new Date(ouv.value).toISOString(), fermeture: new Date(ferm.value).toISOString(), tentatives: 1, acces_ouvert: debloquer.checked, melanger: melanger.checked };
     if (q.contrat_id && versContrat?.checked) v.vers_contrat = true;
-    try { derniere = await db.ajouter('qcm_sessions', v); }
+    try { derniere = await db.ajouter('qcm_sessions', v).catch((e) => { if (/acces_ouvert/.test(e.message)) throw new Error('Exécutez d’abord le script 47_qcm_acces_tentatives.sql dans Supabase.'); throw e; }); }
     catch (e) {
       if (v.vers_contrat) { try { delete v.vers_contrat; derniere = await db.ajouter('qcm_sessions', v); refus.push(`${q.titre} : ${e.message}`); continue; } catch (e2) { e = e2; } }
       erreur(e); return;
     }
   }
   if (refus.length) toast('Ouvert, sans remplissage automatique de la fiche contrat : ' + refus.join(' ; '), 'erreur');
-  else toast(bons.length > 1 ? `${bons.length} QCM ouverts aux élèves` : 'QCM ouvert aux élèves');
+  else toast((bons.length > 1 ? `${bons.length} QCM mis en ligne` : 'QCM mis en ligne') + (debloquer.checked ? ' et débloqués' : ' — 🔒 accès bloqué : débloquez-le quand vous voulez'));
   if (bons.length === 1 && derniere) location.hash = '#/qcm/s-' + derniere.id; else ctx.recharger?.();
 }
 
@@ -477,8 +478,24 @@ async function ouvrirEnLigne(ctx, lot) {
 async function pageSession(zone, ctx, sid, liste, sessions, ref) {
   const s = sessions.find((x) => x.id === sid);
   if (!s) { vider(zone, h('p', { class: 'vide' }, 'Passation introuvable.')); return; }
+  const mien = s.proprietaire === ctx.profil.id;
   const q = liste.find((x) => x.id === s.qcm_id) || { titre: 'QCM', questions: [] };
-  const [eleves, reps] = await Promise.all([db.lire('eleves', `promotion_id=eq.${s.promotion_id}&order=nom,prenom`), db.lire('qcm_reponses', `session_id=eq.${s.id}&order=tentative`)]);
+  const [eleves, reps, acces] = await Promise.all([db.lire('eleves', `promotion_id=eq.${s.promotion_id}&order=nom,prenom`), db.lire('qcm_reponses', `session_id=eq.${s.id}&order=tentative`),
+    db.lire('qcm_acces_eleves', `session_id=eq.${s.id}`).catch(() => null)]);   // null : script 47 pas encore exécuté
+  const A = new Map((acces || []).map((a) => [a.eleve_id, a]));
+  const faites = (e) => reps.filter((r) => r.eleve_id === e.id).length;
+  const peutRegler = (mien || ctx.estAdmin()) && acces !== null;
+  // réglage d'un élève : accès forcé (ouvert / bloqué / comme la classe) et tentatives en plus
+  const regler = async (e, v) => {
+    const a = { ...(A.get(e.id) || { session_id: s.id, eleve_id: e.id, acces: null, bonus: 0 }), ...v, maj_le: new Date().toISOString() };
+    try {
+      await db.enregistrer('qcm_acces_eleves', [{ session_id: s.id, eleve_id: e.id, acces: a.acces, bonus: a.bonus, maj_le: a.maj_le }], 'session_id,eleve_id');
+      pageQcm(zone, 's-' + s.id, ctx);
+    } catch (x) { erreur(x); }
+  };
+  const basculerClasse = async () => {
+    try { await db.modifier('qcm_sessions', s.id, { acces_ouvert: !accesOuvert(s) }); toast(accesOuvert(s) ? '🔒 Accès bloqué pour la classe' : '🔓 Accès débloqué pour la classe'); pageQcm(zone, 's-' + s.id, ctx); } catch (x) { erreur(x); }
+  };
   const P = ctx.promotions.find((p) => p.id === s.promotion_id);
   const meilleure = new Map();
   for (const r of reps) { const m = meilleure.get(r.eleve_id); if (!m || r.points > m.points) meilleure.set(r.eleve_id, r); }
@@ -490,12 +507,26 @@ async function pageSession(zone, ctx, sid, liste, sessions, ref) {
   const notes = rendus.map((r) => (r.total ? (r.points / r.total) * 20 : null)).filter((n) => n !== null);
   const moyenne = notes.length ? notes.reduce((a, b) => a + b, 0) / notes.length : null;
   const ouvert = new Date(s.ouverture) <= new Date() && new Date(s.fermeture) > new Date();
-  const mien = s.proprietaire === ctx.profil.id;
   const crits = q.contrat_id ? await criteresDe(q.contrat_id).catch(() => []) : [];
+  const celluleAcces = (e) => {
+    const a = A.get(e.id)?.acces || '', ok = a ? a === 'ouvert' : accesOuvert(s);
+    const lib = h('span', { class: 'etat-compte ' + (ok ? 'vert' : 'rouge') }, ok ? '🔓 débloqué' : '🔒 bloqué');
+    if (!peutRegler) return h('td', {}, lib);
+    return h('td', {}, h('select', { class: 'champ petit-select', 'aria-label': `Accès de ${e.prenom} ${e.nom}`, onchange: (ev) => regler(e, { acces: ev.target.value || null }) },
+      h('option', { value: '', selected: !a }, `${accesOuvert(s) ? '🔓' : '🔒'} comme la classe`),
+      h('option', { value: 'ouvert', selected: a === 'ouvert' }, '🔓 débloqué (cet élève)'),
+      h('option', { value: 'bloque', selected: a === 'bloque' }, '🔒 bloqué (cet élève)')));
+  };
+  const celluleTentatives = (e) => {
+    const bonus = A.get(e.id)?.bonus || 0, total = s.tentatives + bonus, n = faites(e);
+    return h('td', { class: 'petit' }, `${n} / ${total}`, bonus ? h('small', { class: 'gris' }, ` (dont ${bonus} accordée${bonus > 1 ? 's' : ''})`) : null,
+      peutRegler ? h('button', { class: 'btn petit', type: 'button', title: 'Accorder une tentative de plus à cet élève', onclick: () => regler(e, { bonus: bonus + 1 }) }, '＋1') : null,
+      peutRegler && bonus ? h('button', { class: 'btn petit', type: 'button', title: 'Retirer une tentative accordée', onclick: () => regler(e, { bonus: bonus - 1 }) }, '−1') : null);
+  };
   const parCritere = rendus.length ? crits.map((k) => { const l = parQ.filter(({ x }) => Number(x.critere) === k.id); return { k, n: l.length, t: l.length ? l.reduce((a, b) => a + (b.taux ?? 0), 0) / l.length : 0 }; }).filter((c) => c.n) : [];
   vider(zone,
     h('nav', { class: 'ariane-biblio' }, h('a', { href: '#/qcm' }, 'Mes QCM'), ' › ', h('a', { href: '#/qcm/' + q.id }, q.titre), ' › ', h('b', {}, 'Résultats')),
-    h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '📊  ' + q.titre), h('p', { class: 'sous-titre' }, `Promotion ${P?.libelle || ''} · du ${dateHeure(s.ouverture)} au ${dateHeure(s.fermeture)} · ${s.tentatives === 1 ? 'une tentative' : s.tentatives + ' tentatives'}`)),
+    h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '📊  ' + q.titre), h('p', { class: 'sous-titre' }, `Promotion ${P?.libelle || ''} · ${enLibreAcces(s) ? 'libre accès jusqu’au ' + dateHeure(s.fermeture) : 'du ' + dateHeure(s.ouverture) + ' au ' + dateHeure(s.fermeture)} · ${s.tentatives === 1 ? 'une tentative par élève' : s.tentatives + ' tentatives'}`)),
       h('div', { class: 'actions-page' },
         ouvert ? h('span', { class: 'etat-compte vert' }, 'en ligne') : h('span', { class: 'etat-compte' }, new Date(s.ouverture) > new Date() ? 'à venir' : 'fermé'),
         mien && ouvert ? h('button', { class: 'btn', onclick: async () => { try { await db.modifier('qcm_sessions', s.id, { fermeture: new Date().toISOString(), ouverture: new Date(Math.min(new Date(s.ouverture), Date.now() - 60000)).toISOString() }); toast('QCM fermé'); pageQcm(zone, 's-' + s.id, ctx); } catch (e) { erreur(e); } } }, '⏹  Fermer maintenant') : null,
@@ -510,17 +541,25 @@ async function pageSession(zone, ctx, sid, liste, sessions, ref) {
       h('div', { class: 'tuile' }, h('strong', {}, `${rendus.length} / ${eleves.filter((e) => !e.arret).length}`), h('span', {}, 'élèves ont rendu')),
       h('div', { class: 'tuile' }, h('strong', {}, virgule(moyenne)), h('span', {}, 'moyenne / 20')),
       h('div', { class: 'tuile' }, h('strong', {}, notes.length ? virgule(Math.min(...notes)) + ' – ' + virgule(Math.max(...notes)) : '—'), h('span', {}, 'notes extrêmes'))),
+    h('div', { class: 'bandeau-acces-qcm ' + (accesOuvert(s) ? 'ouvert' : 'bloque') },
+      h('span', { class: 'gros' }, accesOuvert(s) ? '🔓' : '🔒'),
+      h('div', {}, h('b', {}, accesOuvert(s) ? 'Accès débloqué pour la classe' : 'Accès bloqué pour la classe'),
+        h('div', { class: 'petit' }, acces === null ? 'Exécutez le script 47_qcm_acces_tentatives.sql dans Supabase pour bloquer / débloquer l’accès et accorder des tentatives.'
+          : (accesOuvert(s) ? 'Les élèves peuvent faire le QCM pendant la période d’ouverture.' : 'Les élèves voient le QCM, mais ne peuvent pas le commencer.')
+            + ' Une tentative par élève ; dans le tableau, vous pouvez bloquer ou débloquer un élève et lui accorder une tentative de plus.')),
+      peutRegler ? h('button', { class: 'btn ' + (accesOuvert(s) ? '' : 'principal'), type: 'button', onclick: basculerClasse }, accesOuvert(s) ? '🔒 Bloquer pour la classe' : '🔓 Débloquer pour la classe') : null),
     s.evaluation_id ? h('p', { class: 'info-partage' }, '➜ Reporté dans les résultats intermédiaires (« Résultats et moyennes »).') : null,
     s.vers_contrat ? h('p', { class: 'info-partage' }, '✅ Chaque copie rendue remplit automatiquement la fiche contrat couplée (note de 0 à 5 par critère).') : null,
     parCritere.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Par critère de la fiche contrat'), h('ul', { class: 'barres-questions' }, parCritere.map(({ k, t, n }) => h('li', {},
       h('div', { class: 'lib' }, libCritere(k), h('small', { class: 'gris' }, ` · ${pluriel(n, 'question', 'questions')}`)), h('div', { class: 'barre' }, h('span', { style: { width: Math.round(t * 100) + '%', background: t < 0.4 ? 'var(--g-na, #C0392B)' : t < 0.8 ? '#D4A017' : 'var(--teal)' } })),
       h('span', { class: 'taux' }, Math.round(t * 100) + ' %'))))) : null,
     h('div', { class: 'grille-resultats-qcm' },
-      h('section', {}, h('h2', { class: 'titre-section' }, 'Par élève'),
-        h('div', { class: 'tableau-defile' }, h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Élève', 'Note / 20', 'Points', 'Rendu le'].map((t) => h('th', {}, t)))),
+      h('section', { class: acces !== null ? 'pleine-largeur' : null }, h('h2', { class: 'titre-section' }, acces !== null ? 'Par élève · accès et tentatives' : 'Par élève'),
+        h('div', { class: 'tableau-defile' }, h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Élève', 'Note / 20', 'Points', 'Rendu le', ...(acces !== null ? ['Accès', 'Tentatives'] : [])].map((t) => h('th', {}, t)))),
           h('tbody', {}, eleves.filter((e) => !e.arret).map((e) => { const r = meilleure.get(e.id); return h('tr', { class: r ? '' : 'gris' },
             h('td', {}, h('b', {}, e.nom), ' ', e.prenom), h('td', { class: 'num' }, r ? h('b', {}, virgule(r.total ? r.points / r.total * 20 : null)) : '—'),
-            h('td', { class: 'num' }, r ? `${virgule(Number(r.points), 0)} / ${r.total}` : 'non rendu'), h('td', { class: 'petit' }, r ? dateHeure(r.rendu_le) + (r.tentative > 1 ? ` (${r.tentative}e)` : '') : '')); }))))),
+            h('td', { class: 'num' }, r ? `${virgule(Number(r.points), 0)} / ${r.total}` : 'non rendu'), h('td', { class: 'petit' }, r ? dateHeure(r.rendu_le) + (r.tentative > 1 ? ` (${r.tentative}e)` : '') : ''),
+            acces !== null ? celluleAcces(e) : null, acces !== null ? celluleTentatives(e) : null); }))))),
       h('section', {}, h('h2', { class: 'titre-section' }, 'Par question (les plus ratées en premier)'),
         rendus.length ? h('ul', { class: 'barres-questions' }, parQ.map(({ x, i, taux }) => h('li', {},
           h('div', { class: 'lib' }, h('b', {}, `Q${i + 1}`), ' ', x.texte, x.savoir ? h('small', { class: 'gris' }, ' · ' + x.savoir) : null),
@@ -554,12 +593,14 @@ async function reporter(ctx, s, q, zone) {
 // partage avec la classe = QCM en libre accès dans l'espace élèves (entraînement, tentatives illimitées) jusqu'à la fin de l'année scolaire
 const LIBRE = 20;
 const finAnnee = () => { const d = new Date(), a = d.getMonth() >= 8 ? d.getFullYear() + 1 : d.getFullYear(); return new Date(a, 7, 31, 23, 0); };
-const enLibreAcces = (s) => s.tentatives === LIBRE && new Date(s.fermeture) > new Date();
+const enLibreAcces = (s) => (s.libre ?? s.tentatives === LIBRE) && new Date(s.fermeture) > new Date();
+// accès des élèves (script 47) : bloqué par défaut, débloqué par l'enseignant
+const accesOuvert = (s) => s.acces_ouvert ?? true;
 const completQ = (questions) => (questions || []).length && questions.every((x) => x.texte && x.choix?.some((c) => c.bon) && x.choix.every((c) => String(c.texte || '').trim()));
 function sectionClasse(ctx, qs, sessions, dossier = false) {
   const promos = [...ctx.promotions].sort((a, b) => b.annee_debut - a.annee_debut);
   const coches = promos.filter((p) => qs.length && qs.every((q) => sessions.some((s) => s.qcm_id === q.id && s.promotion_id === p.id && enLibreAcces(s)))).map((p) => p.id);
-  return { promos, coches, texte: `Les élèves des promotions cochées trouvent ${dossier ? 'les QCM de ce dossier' : 'ce QCM'} dans « Mes QCM » de leur espace, en libre accès (entraînement, tentatives illimitées, correction après chaque essai) jusqu’au ${finAnnee().toLocaleDateString('fr-FR')}.${dossier ? ' Un QCM rangé plus tard dans le dossier : partagez le dossier à nouveau.' : ''} Pour une évaluation à dates fixes, utilisez plutôt « 🌐 Ouvrir en ligne ».` };
+  return { promos, coches, texte: `Les élèves des promotions cochées trouvent ${dossier ? 'les QCM de ce dossier' : 'ce QCM'} dans « Mes QCM » de leur espace, en libre accès pour s’entraîner (une tentative par élève, correction après l’essai ; accès bloqué tant que vous ne le débloquez pas dans « Passations ») jusqu’au ${finAnnee().toLocaleDateString('fr-FR')}.${dossier ? ' Un QCM rangé plus tard dans le dossier : partagez le dossier à nouveau.' : ''} Pour une évaluation à dates fixes, utilisez plutôt « 🌐 Ouvrir en ligne ».` };
 }
 async function enregistrerClasse(qs, sessions, avant, voulues) {
   let ouverts = 0, incomplets = 0;
@@ -567,7 +608,8 @@ async function enregistrerClasse(qs, sessions, avant, voulues) {
   for (const pid of voulues) for (const q of qs) {
     if (sessions.some((s) => s.qcm_id === q.id && s.promotion_id === pid && enLibreAcces(s))) continue;
     if (!completQ(q.questions)) { incomplets++; continue; }
-    const s = await db.ajouter('qcm_sessions', { qcm_id: q.id, promotion_id: pid, ouverture: maintenant.toISOString(), fermeture: finAnnee().toISOString(), tentatives: LIBRE, melanger: true });
+    const v = { qcm_id: q.id, promotion_id: pid, ouverture: maintenant.toISOString(), fermeture: finAnnee().toISOString(), tentatives: 1, libre: true, acces_ouvert: false, melanger: true };
+    const s = await db.ajouter('qcm_sessions', v).catch((e) => { if (!/libre|acces_ouvert/.test(e.message)) throw e; return db.ajouter('qcm_sessions', { ...v, tentatives: LIBRE, libre: undefined, acces_ouvert: undefined }); });
     sessions.push(s); ouverts++;
   }
   for (const pid of avant) if (!voulues.includes(pid)) for (const s of sessions.filter((x) => x.promotion_id === pid && qs.some((q) => q.id === x.qcm_id) && enLibreAcces(x))) {

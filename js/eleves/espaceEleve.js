@@ -352,7 +352,7 @@ function blocNouveautes() {
   if (apercu) return null;
   const el = h('div', {});
   (async () => {
-    try { qcmOuverts = (await rpcEleve('eleve_qcm_liste')).filter((x) => new Date(x.ouverture) <= new Date() && new Date(x.fermeture) > new Date()); } catch { qcmOuverts = []; }
+    try { qcmOuverts = (await rpcEleve('eleve_qcm_liste')).filter((x) => x.acces !== false && new Date(x.ouverture) <= new Date() && new Date(x.fermeture) > new Date()); } catch { qcmOuverts = []; }
     const actuel = { docs: [...D.docs.keys()], qcm: qcmOuverts.map((x) => x.session), travaux: travauxAFaire(60).map(({ x, cle }) => x.id + cle) };
     const vu = lireVu();
     if (!vu) { ecrireVu(actuel); return; }             // première visite sur cet appareil : rien à signaler
@@ -696,22 +696,24 @@ async function pageQcmEleve(zone, arg) {
   const now = Date.now();
   const etat = (x) => (now < new Date(x.ouverture) ? 'avenir' : now > new Date(x.fermeture) ? 'ferme' : 'ouvert');
   const carte = (x) => {
-    const e = etat(x), reste = x.tentatives - x.faites, m = D.mats.get(x.matiere_id);
+    const e = etat(x), reste = x.tentatives - x.faites, m = D.mats.get(x.matiere_id), bloque = x.acces === false;
     return h('div', { class: 'carte-qcm-eleve', style: { '--couleur': m?.couleur || 'var(--teal)' } },
       h('div', {}, h('b', {}, x.titre), h('div', { class: 'gris petit' }, [m?.nom, `${x.nb_questions} questions`,
-        e === 'avenir' ? 'ouvre le ' + dateHeureE(x.ouverture) : e === 'ouvert' ? 'jusqu’au ' + dateHeureE(x.fermeture) : 'fermé le ' + dateHeureE(x.fermeture)].filter(Boolean).join(' · '))),
+        e === 'avenir' ? 'ouvre le ' + dateHeureE(x.ouverture) : e === 'ouvert' ? (x.libre ? 'entraînement' : 'jusqu’au ' + dateHeureE(x.fermeture)) : 'fermé le ' + dateHeureE(x.fermeture)].filter(Boolean).join(' · '))),
       h('div', { class: 'actions-qcm-eleve' },
         x.faites ? h('span', { class: 'note-qcm' }, virgule(Number(x.meilleur)), ' / 20') : null,
-        apercu ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, 'Tester') : e === 'ouvert' && reste > 0 ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, x.faites ? 'Recommencer' : 'Commencer') : null,
+        apercu ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, bloque ? 'Tester (🔒 bloqué pour les élèves)' : 'Tester')
+          : e === 'ouvert' && bloque && reste > 0 ? h('span', { class: 'etat-compte rouge', title: 'Votre enseignant débloquera l’accès au moment voulu' }, '🔒 Pas encore débloqué')
+          : e === 'ouvert' && reste > 0 ? h('a', { class: 'btn principal', href: '#/qcm/' + x.session }, x.faites ? 'Nouvelle tentative' : 'Commencer') : null,
         x.faites ? h('a', { class: 'btn', href: '#/qcm/c-' + x.session }, 'Voir la correction') : null,
-        e === 'ouvert' && !x.faites && reste <= 0 ? h('span', { class: 'gris' }, 'déjà fait') : null));
+        e === 'ouvert' && x.faites && reste <= 0 && !apercu ? h('small', { class: 'gris' }, 'Une seule tentative : pour refaire ce QCM, demandez une nouvelle tentative à votre enseignant.') : null));
   };
   // onglets par matière (comme « Ma formation »)
   const cleDe = (x) => (D.mats.has(x.matiere_id) ? String(x.matiere_id) : 'autres');
   const groupes = [...D.mats.values()].sort((a, b) => a.ordre - b.ordre).map((m) => ({ cle: String(m.id), nom: m.nom, couleur: m.couleur }))
     .concat(l.some((x) => cleDe(x) === 'autres') ? [{ cle: 'autres', nom: 'Autres QCM', couleur: null }] : []);   // toutes les matières, même vides
   if (groupes.length === 1 && groupes[0].cle === 'autres') groupes[0].nom = 'Tous les QCM';
-  const aFaire = (g) => l.filter((x) => cleDe(x) === g.cle && etat(x) === 'ouvert' && x.tentatives - x.faites > 0).length;
+  const aFaire = (g) => l.filter((x) => cleDe(x) === g.cle && etat(x) === 'ouvert' && x.acces !== false && x.tentatives - x.faites > 0).length;
   const voulu = a.startsWith('m-') ? a.slice(2) : null;
   const g = groupes.find((x) => x.cle === voulu) || groupes.find((x) => aFaire(x) > 0) || groupes[0];
   const lg = g ? l.filter((x) => cleDe(x) === g.cle) : [];
