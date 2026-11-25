@@ -116,7 +116,12 @@ export async function lireH5P(fichier) {
   try { meta = JSON.parse(await zip.file('h5p.json').async('string')); } catch { /* sans description */ }
   const texte = (html) => (new DOMParser().parseFromString(String(html ?? ''), 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim();
   const out = []; let ignorees = 0;
-  const ajouter = (q) => { if (q.texte && q.choix.length >= 2 && q.choix.some((c) => c.bon) && out.length < 200) out.push(q); };
+  // repère « [K3] » en tête de question : critère n° 3 de la fiche contrat couplée (prompt « QCM couplé »)
+  const ajouter = (q) => {
+    const m = /^\s*\[\s*K\s*(\d{1,2})\s*\]\s*/i.exec(q.texte || '');
+    if (m) { q.k = Number(m[1]); q.texte = q.texte.slice(m[0].length); }
+    if (q.texte && q.choix.length >= 2 && q.choix.some((c) => c.bon) && out.length < 200) out.push(q);
+  };
   const visiter = (lib, params) => {
     if (!params || typeof params !== 'object') return;
     const nom = String(lib || '').split(' ')[0];
@@ -150,6 +155,12 @@ export async function lireH5P(fichier) {
   visiter(meta.mainLibrary, contenu);
   // les réponses mélangées par le QCM en ligne et les versions papier : ordre d'origine gardé ici
   return { titre: texte(meta.title) || fichier.name.replace(/\.h5p$/i, ''), questions: out, ignorees };
+}
+// questions importées : repère [Kn] → n-ième critère de la fiche contrat (dans l'ordre de la fiche)
+function rattacherCriteres(questions, criteres) {
+  let n = 0;
+  for (const x of questions) { if (x.k && criteres[x.k - 1]) { x.critere = criteres[x.k - 1].id; n++; } delete x.k; }
+  return n;
 }
 function boutonH5P(apres) {
   const entree = h('input', { type: 'file', accept: '.h5p', hidden: true, onchange: async () => {
@@ -213,8 +224,9 @@ async function creer(ctx, { livre_id = null, contrat_id = null, h5p = false }, l
       livre_id: v.startsWith('l-') ? Number(v.slice(2)) : null, seance_id: v.startsWith('s-') ? Number(v.slice(2)) : null, questions: importe?.questions || [] };
     if (dossier.value.trim()) x.dossier = dossier.value.trim().slice(0, 200);
     if (contrat.value) x.contrat_id = Number(contrat.value);
+    const rat = rattacherCriteres(x.questions, x.contrat_id ? await criteresDe(x.contrat_id).catch(() => []) : []);
     const q = await db.ajouter('qcm', x);
-    if (importe) toast(`${pluriel(importe.questions.length, 'question importée', 'questions importées')}`);
+    if (importe) toast(`${pluriel(importe.questions.length, 'question importée', 'questions importées')}${rat ? ` · ${pluriel(rat, 'rattachée', 'rattachées')} à un critère de la fiche contrat` : ''}`);
     location.hash = '#/qcm/' + q.id;
   } catch (e) { erreur(e); }
 }
@@ -251,13 +263,48 @@ async function editeur(zone, ctx, q, sessions, partages, ref, tous = []) {
     const rempl = questions.length ? await fenetre('Importer un fichier H5P', h('p', {}, `${pluriel(r.questions.length, 'question reconnue', 'questions reconnues')}${r.ignorees ? ` (${r.ignorees} activité(s) d’un autre type ignorée(s))` : ''}. Les ajouter aux ${questions.length} questions actuelles, ou les remplacer ?`),
       [{ texte: 'Annuler', valeur: null }, { texte: 'Remplacer', valeur: 'r' }, { texte: 'Ajouter', classe: 'principal', valeur: 'a' }]) : 'a';
     if (!rempl) return;
-    questions = rempl === 'r' ? r.questions : questions.concat(r.questions); dessinerQuestions(); await enregistrer(true);
-    toast(pluriel(r.questions.length, 'question importée', 'questions importées'));
+    const rat = rattacherCriteres(r.questions, criteres);
+    questions = rempl === 'r' ? r.questions : questions.concat(r.questions); dessinerQuestions(); dessinerSeries(); await enregistrer(true);
+    toast(pluriel(r.questions.length, 'question importée', 'questions importées') + (rat ? ` · ${pluriel(rat, 'rattachée', 'rattachées')} à un critère` : ''));
   });
   const niveauIA = h('select', { class: 'champ', 'aria-label': 'Niveau' }, ['BTS 1re année', 'BTS 2e année', 'révision rapide (facile)', 'approfondissement (difficile)'].map((n) => h('option', {}, n)));
   const zoneQ = h('div', { class: 'questions-qcm' });
 
   const zoneSeries = h('div', {});
+  // bloc d'informations pour le prompt « QCM couplé » (aucune donnée d'élève)
+  async function copierInfosPrompt() {
+    try {
+      const k = (await db.lire('contrats', `id=eq.${q.contrat_id}`))[0];
+      let seances = [];
+      if (k?.seance_id) seances = await db.lire('seances', `id=eq.${k.seance_id}`);
+      else if (k?.sequence_id) seances = await db.lire('seances', `sequence_id=eq.${k.sequence_id}&order=numero`);
+      const sq = seances[0] ? (await db.lire('sequences', `id=eq.${seances[0].sequence_id}`))[0] : null;
+      const m = ctx.matieres.find((x) => x.id === (sq?.matiere_id || k?.matiere_id));
+      const ids = [...new Set(seances.flatMap((x) => (x.cours_lies || []).map((c) => c.id)))];
+      const docs = ids.length ? await db.lire('biblio_livres', `id=in.(${ids.join(',')})&select=id,titre,chemin`).catch(() => []) : [];
+      const n = Math.max(1, Math.min(5, Math.floor(50 / criteres.length)));
+      const L = [];
+      L.push('=== INFORMATIONS DU SITE (à coller dans le prompt) ===');
+      L.push(`Matière : ${m?.nom || ''}`);
+      L.push(`Fiche contrat : ${contratLib?.lib || ''}`);
+      for (const x of seances) {
+        L.push('', `Séance ${ctx.codeMat(m) ? ctx.codeMat(m) + ' ' : ''}${sq ? sq.numero + '.' : ''}${x.numero} : ${x.titre || ''}${sq?.intitule ? ` (séquence ${sq.numero} · ${sq.intitule})` : ''}`);
+        if (x.objectif_inter) L.push(`Objectif de la séance : ${x.objectif_inter}`);
+        const ops = String(x.objectifs_ops || '').split('\n').map((t) => t.trim()).filter(Boolean);
+        if (ops.length) L.push('Objectifs opérationnels :', ...ops.map((t) => '  - ' + t));
+        if ((x.savoirs || []).length) L.push('Savoirs associés :', ...x.savoirs.map((c) => `  - ${c} ${libSavoir(c)}`));
+        if (x.ressources) L.push(`Ressources : ${x.ressources}`);
+      }
+      L.push('', `Critères d'évaluation (${criteres.length}) — commencer chaque question par le repère du critère :`);
+      criteres.forEach((c, i) => L.push(`  [K${i + 1}] ${libCritere(c)}`));
+      L.push('', `Nombre de questions par critère : ${n} (${criteres.length} critère(s), ${n * criteres.length} questions au total, maximum 50).`);
+      L.push('', 'Cours ressources mobilisés (fichiers joints à la conversation) :', ...(docs.length ? docs.map((d) => '  - ' + d.titre + (d.chemin ? ` (${d.chemin.split('/').pop()})` : '')) : ['  - (aucun cours mobilisé dans le séquençage : joindre le cours utilisé)']));
+      L.push('=== FIN DES INFORMATIONS ===');
+      const texte = L.join('\n');
+      try { await navigator.clipboard.writeText(texte); toast('Infos copiées : collez-les dans le prompt, et joignez les cours listés'); }
+      catch { await fenetre('Infos pour le prompt', h('textarea', { class: 'champ', rows: 18, readonly: true, onfocus: (e) => e.target.select() }, texte), [{ texte: 'Fermer', valeur: true }], { large: true }); }
+    } catch (e) { erreur(e); }
+  }
   function dessinerSeries() {
     if (!q.contrat_id) { vider(zoneSeries); return; }
     const K = new Set(criteres.map((k) => k.id));
@@ -268,10 +315,11 @@ async function editeur(zone, ctx, q, sessions, partages, ref, tous = []) {
         mien && criteres.length ? h('button', { class: 'btn petit', type: 'button', title: 'Ranger les questions dans l’ordre des critères', onclick: () => {
           const rang = (x) => { const i = criteres.findIndex((k) => k.id === Number(x.critere)); return i < 0 ? 9999 : i; };
           questions = questions.map((x, i) => [x, i]).sort((a, b) => rang(a[0]) - rang(b[0]) || a[1] - b[1]).map(([x]) => x); dessinerQuestions(); enregistrer();
-        } }, '⇅ Ranger par critère') : null),
+        } }, '⇅ Ranger par critère') : null,
+        criteres.length ? h('button', { class: 'btn petit', type: 'button', title: 'Copier la séance, ses objectifs, les critères numérotés K1, K2… et les cours mobilisés, à coller dans le prompt « QCM couplé à une fiche contrat »', onclick: () => copierInfosPrompt() }, '📋 Infos pour le prompt') : null),
       h('p', { class: 'aide' }, `Fiche couplée : ${contratLib?.lib || ''}. Pour chaque critère, la note de l’élève (0 à 5) est la part de bonnes réponses de sa série (ex. 3 justes sur 4 → 4/5). Les critères sans question ne sont pas notés.`),
       criteres.length ? h('ul', { class: 'liste-series' }, criteres.map((k) => { const n = questions.filter((x) => Number(x.critere) === k.id).length; return h('li', { class: n ? '' : 'vide-serie' },
-        h('span', { class: 'lib' }, libCritere(k)), h('span', { class: 'etat-compte' + (n ? ' vert' : ' orange') }, pluriel(n, 'question', 'questions')),
+        h('span', { class: 'lib' }, h('b', { class: 'num-k' }, `K${criteres.indexOf(k) + 1} `), libCritere(k)), h('span', { class: 'etat-compte' + (n ? ' vert' : ' orange') }, pluriel(n, 'question', 'questions')),
         mien ? h('button', { class: 'lien petit', type: 'button', onclick: () => { const x = nouvelleQuestion('unique'); x.critere = k.id; questions.push(x); dessinerQuestions(); enregistrer(); setTimeout(() => zoneQ.querySelector('.question-qcm:last-of-type textarea')?.focus(), 50); } }, '＋ question') : null); })) : h('p', { class: 'vide' }, 'Cette fiche contrat n’a pas encore de critère.'),
       sans ? h('p', { class: 'aide' }, `${pluriel(sans, 'question n’est rattachée', 'questions ne sont rattachées')} à aucun critère (comptée(s) dans la note sur 20, pas dans la fiche contrat).`) : null));
   }
@@ -474,6 +522,7 @@ async function ouvrirEnLigne(ctx, lot) {
   if (bons.length === 1 && derniere) location.hash = '#/qcm/s-' + derniere.id; else ctx.recharger?.();
 }
 
+const dureeQcm = (sec) => { const m = Math.max(1, Math.round(sec / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 // résultats d'une passation : par élève, par question, par savoir ; report dans les résultats intermédiaires
 async function pageSession(zone, ctx, sid, liste, sessions, ref) {
   const s = sessions.find((x) => x.id === sid);
@@ -533,7 +582,7 @@ async function pageSession(zone, ctx, sid, liste, sessions, ref) {
         mien ? h('button', { class: 'btn', onclick: () => prolonger(s, zone, ctx) }, '🕑  Modifier les dates') : null,
         mien && rendus.length ? h('button', { class: 'btn principal', onclick: () => reporter(ctx, s, q, zone) }, s.evaluation_id ? '↻  Mettre à jour le report' : '➜  Reporter dans les résultats') : null,
         q.contrat_id && rendus.length ? h('button', { class: 'btn', title: 'Écrire dans la fiche contrat couplée la note de chaque élève pour chaque critère (0 à 5)', onclick: async () => {
-          if (!await confirmer('Remplir la fiche contrat', 'Écrire dans la fiche contrat couplée la note (0 à 5) de chaque élève pour chaque critère qui a une série de questions ? Les notes déjà saisies pour ces critères sont remplacées.', 'Remplir')) return;
+          if (!await confirmer('Remplir la fiche contrat', 'Écrire dans la fiche contrat couplée la note (0 à 5) de chaque élève pour chaque critère qui a une série de questions, ainsi que la date (1er élève) et la durée moyenne ? Les notes déjà saisies pour ces critères sont remplacées.', 'Remplir')) return;
           try { const n = await db.rpc('qcm_remplir_contrat', { session: s.id }); toast(`${n} note(s) écrite(s) dans la fiche contrat`); } catch (e) { erreur(e); }
         } }, '✅  Remplir la fiche contrat') : null,
         mien ? h('button', { class: 'btn danger', onclick: async () => { if (await confirmer('Supprimer la passation', 'Supprimer cette passation et les réponses des élèves ?', 'Supprimer')) { try { await db.supprimer('qcm_sessions', s.id); location.hash = '#/qcm/' + q.id; } catch (e) { erreur(e); } } } }, '✖') : null)),
@@ -549,7 +598,7 @@ async function pageSession(zone, ctx, sid, liste, sessions, ref) {
             + ' Une tentative par élève ; dans le tableau, vous pouvez bloquer ou débloquer un élève et lui accorder une tentative de plus.')),
       peutRegler ? h('button', { class: 'btn ' + (accesOuvert(s) ? '' : 'principal'), type: 'button', onclick: basculerClasse }, accesOuvert(s) ? '🔒 Bloquer pour la classe' : '🔓 Débloquer pour la classe') : null),
     s.evaluation_id ? h('p', { class: 'info-partage' }, '➜ Reporté dans les résultats intermédiaires (« Résultats et moyennes »).') : null,
-    s.vers_contrat ? h('p', { class: 'info-partage' }, '✅ Chaque copie rendue remplit automatiquement la fiche contrat couplée (note de 0 à 5 par critère).') : null,
+    s.vers_contrat ? h('p', { class: 'info-partage' }, '✅ Chaque copie rendue remplit automatiquement la fiche contrat couplée : note de 0 à 5 par critère, date (jour du 1er élève) et durée (moyenne des élèves).') : null,
     parCritere.length ? h('section', {}, h('h2', { class: 'titre-section' }, 'Par critère de la fiche contrat'), h('ul', { class: 'barres-questions' }, parCritere.map(({ k, t, n }) => h('li', {},
       h('div', { class: 'lib' }, libCritere(k), h('small', { class: 'gris' }, ` · ${pluriel(n, 'question', 'questions')}`)), h('div', { class: 'barre' }, h('span', { style: { width: Math.round(t * 100) + '%', background: t < 0.4 ? 'var(--g-na, #C0392B)' : t < 0.8 ? '#D4A017' : 'var(--teal)' } })),
       h('span', { class: 'taux' }, Math.round(t * 100) + ' %'))))) : null,
@@ -558,7 +607,7 @@ async function pageSession(zone, ctx, sid, liste, sessions, ref) {
         h('div', { class: 'tableau-defile' }, h('table', { class: 'liste' }, h('thead', {}, h('tr', {}, ['Élève', 'Note / 20', 'Points', 'Rendu le', ...(acces !== null ? ['Accès', 'Tentatives'] : [])].map((t) => h('th', {}, t)))),
           h('tbody', {}, eleves.filter((e) => !e.arret).map((e) => { const r = meilleure.get(e.id); return h('tr', { class: r ? '' : 'gris' },
             h('td', {}, h('b', {}, e.nom), ' ', e.prenom), h('td', { class: 'num' }, r ? h('b', {}, virgule(r.total ? r.points / r.total * 20 : null)) : '—'),
-            h('td', { class: 'num' }, r ? `${virgule(Number(r.points), 0)} / ${r.total}` : 'non rendu'), h('td', { class: 'petit' }, r ? dateHeure(r.rendu_le) + (r.tentative > 1 ? ` (${r.tentative}e)` : '') : ''),
+            h('td', { class: 'num' }, r ? `${virgule(Number(r.points), 0)} / ${r.total}` : 'non rendu'), h('td', { class: 'petit' }, r ? dateHeure(r.rendu_le) + (r.tentative > 1 ? ` (${r.tentative}e)` : '') + (r.duree_s ? ` · ${dureeQcm(r.duree_s)}` : '') : ''),
             acces !== null ? celluleAcces(e) : null, acces !== null ? celluleTentatives(e) : null); }))))),
       h('section', {}, h('h2', { class: 'titre-section' }, 'Par question (les plus ratées en premier)'),
         rendus.length ? h('ul', { class: 'barres-questions' }, parQ.map(({ x, i, taux }) => h('li', {},
