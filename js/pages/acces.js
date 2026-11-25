@@ -6,6 +6,7 @@ import { h, vider, toast, erreur, fenetre, confirmer } from '../ui.js';
 import { envoyerPDF } from './fiches.js';
 import { nomFichier } from '../echange.js';
 import { apercuEleve } from '../app.js';
+import { colonnes, barresH, carteGraph } from '../graphiques.js';
 
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 function codeProvisoire() {
@@ -23,8 +24,9 @@ export async function pageAcces(zone, ctx) {
   if (!ctx.peutEcrire()) { vider(zone, h('p', { class: 'vide' }, 'Page réservée aux enseignants.')); return; }
   let eleves, comptes, consult;
   try {
-    [eleves, comptes, consult] = await Promise.all([db.lire('eleves', `promotion_id=eq.${P.id}&order=nom,prenom`), db.lire('comptes_eleves_info'),
-      db.lire('consultations_eleves', 'order=quand.desc&limit=3000')]);
+    [eleves, comptes] = await Promise.all([db.lire('eleves', `promotion_id=eq.${P.id}&order=nom,prenom`), db.lire('comptes_eleves_info')]);
+    const ids = [...new Set(eleves.flatMap((e) => [e.id, e.origine_eleve_id]).filter(Boolean))];
+    consult = ids.length ? await db.lire('consultations_eleves', `eleve_id=in.(${ids.join(',')})&order=quand.desc&limit=20000`) : [];
   } catch (e) {
     vider(zone, h('div', { class: 'erreur-page' }, h('h2', {}, 'Espace élèves pas encore installé'),
       h('p', {}, admin ? 'Exécutez le script « 27_espace_eleves.sql » dans Supabase (SQL Editor → New query → Run), puis rechargez la page.' : 'L’administrateur doit d’abord installer l’espace élèves.'), h('p', { class: 'aide' }, e.message)));
@@ -32,7 +34,7 @@ export async function pageAcces(zone, ctx) {
   }
   const C = new Map(comptes.map((c) => [c.eleve_id, c]));
   const compteDe = (e) => C.get(e.id) || (e.origine_eleve_id ? C.get(e.origine_eleve_id) : null);
-  const consultDe = (e) => consult.filter((x) => x.eleve_id === e.id);
+  const consultDe = (e) => consult.filter((x) => x.eleve_id === e.id || (e.origine_eleve_id && x.eleve_id === e.origine_eleve_id));
   const actifs = eleves.filter((e) => !e.arret);
   const coches = new Set();
   const finAcces = `${P.annee_debut + 2}-07-31`;
@@ -40,7 +42,12 @@ export async function pageAcces(zone, ctx) {
   const etat = (c) => !c ? ['aucun', 'Pas de compte', 'gris'] : !c.actif ? ['off', 'Désactivé', 'rouge'] : c.bloque_jusqua && new Date(c.bloque_jusqua) > new Date() ? ['bloque', 'Bloqué 15 min (codes faux)', 'orange']
     : c.doit_changer ? ['provisoire', 'Code provisoire (jamais connecté)', 'orange'] : ['ok', 'Actif', 'vert'];
 
+  let vue = location.hash.endsWith('/stats') ? 'stats' : 'comptes', periode = '30';
+  const onglets = () => h('nav', { class: 'onglets' },
+    [['comptes', '👥 Comptes et consultations'], ['stats', '📊 Statistiques de connexion']].map(([k, t]) => h('a', { class: vue === k ? 'actif' : '',
+      href: '#/eleves/' + (k === 'stats' ? 'stats' : 'acces') }, t)));
   function dessiner() {
+    if (vue === 'stats') return statistiques();
     const n = { aucun: 0, provisoire: 0, ok: 0 };
     actifs.forEach((e) => { const k = etat(compteDe(e))[0]; if (k in n) n[k]++; });
     vider(zone,
@@ -49,6 +56,7 @@ export async function pageAcces(zone, ctx) {
         h('div', { class: 'actions-page' }, h('a', { class: 'btn', href: '#/eleves' }, '← Liste des élèves'),
           h('button', { class: 'btn', title: 'Voir l’espace élève de cette promotion comme un élève fictif (rien n’est enregistré)', onclick: () => apercuEleve(P.id) }, '👁  Voir comme un élève'),
           admin ? h('button', { class: 'btn principal', onclick: creerLot }, `🔑  Créer les comptes et les fiches${coches.size ? ` (${coches.size})` : ''}`) : null)),
+      onglets(),
       h('section', { class: 'chiffres-cles' },
         h('div', { class: 'tuile' }, h('strong', {}, n.ok), h('span', {}, 'comptes actifs')),
         h('div', { class: 'tuile' }, h('strong', {}, n.provisoire), h('span', {}, 'en attente de 1re connexion')),
@@ -72,6 +80,63 @@ export async function pageAcces(zone, ctx) {
               c ? h('button', { class: 'btn petit', type: 'button', onclick: () => activer(c, !c.actif) }, c.actif ? 'Désactiver' : 'Réactiver') : null,
               c ? h('button', { class: 'btn petit danger', type: 'button', title: 'Supprimer le compte', onclick: () => supprimer(e, c) }, '✖') : null]) : null);
         })))));
+  }
+
+  // statistiques de connexion des élèves de la promotion, sur une période (visibles par tous les enseignants)
+  function statistiques() {
+    const d = new Date();
+    if (periode === 'rentree') { d.setFullYear(d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1, 7, 25); d.setHours(0, 0, 0, 0); }
+    else if (periode === 'tout') d.setFullYear(2000);
+    else { d.setDate(d.getDate() - Number(periode)); d.setHours(0, 0, 0, 0); }
+    const dIso = d.toISOString();
+    const lignes = actifs.map((e) => {
+      const cs = consultDe(e).filter((x) => x.quand >= dIso);
+      return { e, c: compteDe(e), cs, nb: cs.filter((x) => x.quoi === 'connexion').length, docs: cs.filter((x) => x.quoi === 'document').length,
+        qcm: cs.filter((x) => x.quoi === 'qcm').length, jours: new Set(cs.map((x) => new Date(x.quand).toDateString())).size };
+    }).sort((a, b) => b.nb - a.nb || b.docs - a.docs || a.e.nom.localeCompare(b.e.nom));
+    const toutes = lignes.flatMap((l) => l.cs);
+    const actifsP = lignes.filter((l) => l.nb || l.docs || l.qcm).length;
+    // connexions par jour (ou par semaine au-delà de 45 jours) : nombre d'élèves différents connectés
+    const debut = toutes.length ? new Date(Math.max(d.getTime(), Math.min(...toutes.map((x) => new Date(x.quand).getTime())))) : d;
+    const parSemaine = (Date.now() - debut) / 86400000 > 45;
+    const cle = (t) => { const x = new Date(t); x.setHours(0, 0, 0, 0); if (parSemaine) x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); };
+    const cases = []; for (let t = cle(debut); t <= Date.now(); t = cle(t + (parSemaine ? 7 : 1) * 86400000 + 3600000)) cases.push(t);
+    const qui = new Map(cases.map((t) => [t, new Set()]));
+    for (const l of lignes) for (const x of l.cs) qui.get(cle(x.quand))?.add(l.e.id);
+    const lib = (t) => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' });
+    // documents les plus ouverts
+    const parDoc = new Map();
+    for (const l of lignes) for (const x of l.cs) if (x.quoi === 'document') { const k = x.titre || 'document'; const v = parDoc.get(k) || { n: 0, el: new Set() }; v.n++; v.el.add(l.e.id); parDoc.set(k, v); }
+    const docs = [...parDoc].sort((a, b) => b[1].el.size - a[1].el.size || b[1].n - a[1].n).slice(0, 12);
+    const jamais = lignes.filter((l) => !l.c?.derniere_connexion);
+    vider(zone,
+      h('header', { class: 'entete-page' }, h('div', {}, h('h1', {}, '🎓  Espace élèves · statistiques'),
+        h('p', { class: 'sous-titre' }, `Promotion ${P.libelle} · connexions et consultations des élèves`)),
+        h('div', { class: 'actions-page' }, h('a', { class: 'btn', href: '#/eleves' }, '← Liste des élèves'),
+          h('select', { class: 'champ choix-mat', 'aria-label': 'Période', onchange: (ev) => { periode = ev.target.value; dessiner(); } },
+            [['7', '7 derniers jours'], ['30', '30 derniers jours'], ['rentree', 'Depuis la rentrée'], ['tout', 'Depuis le début']]
+              .map(([v, t]) => h('option', { value: v, selected: v === periode }, t))))),
+      onglets(),
+      h('section', { class: 'chiffres-cles' },
+        h('div', { class: 'tuile' }, h('strong', {}, `${actifsP} / ${actifs.length}`), h('span', {}, 'élèves venus sur la période')),
+        h('div', { class: 'tuile' }, h('strong', {}, toutes.filter((x) => x.quoi === 'connexion').length), h('span', {}, 'connexions')),
+        h('div', { class: 'tuile' }, h('strong', {}, toutes.filter((x) => x.quoi === 'document').length), h('span', {}, 'documents ouverts')),
+        h('div', { class: 'tuile' }, h('strong', {}, toutes.filter((x) => x.quoi === 'qcm').length), h('span', {}, 'QCM faits')),
+        jamais.length ? h('div', { class: 'tuile redoublants', title: jamais.map((l) => `${l.e.nom} ${l.e.prenom}`).join('\n') }, h('strong', {}, jamais.length), h('span', {}, 'jamais connecté(s)')) : null),
+      h('p', { class: 'aide' }, 'Une connexion est comptée à chaque fois que l’élève saisit son identifiant et son code (il reste ensuite connecté sur son appareil). Visible par tous les enseignants ; rien n’est montré aux élèves.'),
+      h('section', { class: 'graphiques' },
+        carteGraph(parSemaine ? 'Élèves venus par semaine' : 'Élèves venus par jour', 'connexion, document ou QCM', colonnes(cases.slice(-40).map((t) => ({
+          label: lib(t), valeur: qui.get(t).size,
+          info: `${parSemaine ? 'Semaine du ' : ''}${new Date(t).toLocaleDateString('fr-FR', { weekday: parSemaine ? undefined : 'long', day: 'numeric', month: 'long' })} : ${qui.get(t).size} élève(s)` })), { largeur: 640 })),
+        docs.length ? carteGraph('Documents les plus consultés', 'nombre d’élèves qui l’ont ouvert', barresH(docs.map(([t, v]) => ({
+          label: t.length > 38 ? t.slice(0, 37) + '…' : t, valeur: v.el.size, info: `${t} : ${v.el.size} élève(s), ${v.n} ouverture(s)` })), { format: (v) => String(v) })) : null),
+      h('div', { class: 'tableau-defile' }, h('table', { class: 'liste auto' },
+        h('thead', {}, h('tr', {}, ['Élève', 'Connexions', 'Jours de présence', 'Documents ouverts', 'QCM', 'Dernière connexion'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, lignes.map((l) => h('tr', { class: 'cliquable', title: 'Voir le détail', onclick: () => voirConsultations(l.e, consultDe(l.e)) },
+          h('td', {}, h('b', {}, l.e.nom), ' ', l.e.prenom),
+          h('td', { class: 'centre' }, l.nb || '—'), h('td', { class: 'centre' }, l.jours || '—'),
+          h('td', { class: 'centre' }, l.docs || '—'), h('td', { class: 'centre' }, l.qcm || '—'),
+          h('td', { class: 'petit' }, l.c ? quand(l.c.derniere_connexion) : 'pas de compte')))))));
   }
 
   // identifiant : prenom.nom (sans accents), suivi d'un numéro en cas d'homonyme

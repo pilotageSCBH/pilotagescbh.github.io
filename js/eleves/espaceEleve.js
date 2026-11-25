@@ -56,7 +56,21 @@ async function donnees(force = false) {
   const mats = new Map((r.matieres || []).map((m) => [m.id, m]));
   const seqs = new Map((r.sequences || []).map((s) => [s.id, s]));
   const seances = new Map((r.seances || []).map((x) => [x.id, { ...x, seq: seqs.get(x.sequence_id), mat: mats.get(seqs.get(x.sequence_id)?.matiere_id) }]));
-  D = { ...r, P: (r.promotions || [])[0], mats, seqs, seances, docs: new Map((r.documents || []).map((d) => [d.id, d])),
+  // séances à venir : seulement la prochaine de chaque matière (les suivantes restent cachées, même placées dans la progression)
+  const P0 = (r.promotions || [])[0];
+  if (P0) {
+    const wc = semaineActuelle(P0.annee_debut), cases = r.progression_cases || [];
+    const prochaine = new Map();
+    for (const c of cases) if ((c.seance_id || c.seance2_id) && c.semaine > wc && !(prochaine.get(c.matiere_id) <= c.semaine)) prochaine.set(c.matiere_id, c.semaine);
+    const ok = new Set(), places = new Set();
+    for (const c of cases) for (const id of [c.seance_id, c.seance2_id]) if (id) {
+      places.add(id);
+      if (c.semaine <= wc || c.semaine === prochaine.get(c.matiere_id)) ok.add(id);
+    }
+    for (const id of places) if (!ok.has(id)) seances.delete(id);
+    r.progression_cases = cases.map((c) => ({ ...c, seance_id: seances.has(c.seance_id) ? c.seance_id : null, seance2_id: seances.has(c.seance2_id) ? c.seance2_id : null }));
+  }
+  D = { ...r, P: P0, mats, seqs, seances, docs: new Map((r.documents || []).map((d) => [d.id, d])),
     dossiers: new Map((r.dossiers || []).map((t) => [t.id, t])) };
   D.matDoc = matieresDocuments(D, new Map((matDocs || []).map((x) => [x.id, x.matieres || []])));
   charge = Date.now();

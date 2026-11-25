@@ -280,7 +280,8 @@ function menu(route) {
   const S = [
     { cle: 'promotion', titre: 'Promotion', icone: '🎓', items: [
       { href: '#/equipe', icone: '👥', texte: 'Matières et équipe', actif: page === 'equipe' },
-      { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' },
+      { href: '#/eleves', icone: '🧑‍🎓', texte: 'Élèves', actif: page === 'eleves' && arg !== 'stats' },
+      ...(ctx.peutEcrire() ? [{ href: '#/eleves/stats', icone: '📊', texte: 'Connexions des élèves', actif: page === 'eleves' && arg === 'stats' }] : []),
       { href: '#/annonces', icone: '📣', texte: 'Annonces aux élèves', actif: page === 'annonces' }] },
     { cle: 'sequencages', titre: 'Séquençages', icone: '🧱', items: ctx.matieres.map((m) => ({ href: '#/sequencage/' + m.id, texte: m.nom, pastille: m.couleur,
       actif: page === 'sequencage' && String(arg) === String(m.id), marque: ctx.enseigne(m.id) ? '✎' : null })).concat(

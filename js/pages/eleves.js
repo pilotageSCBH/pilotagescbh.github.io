@@ -25,7 +25,7 @@ let avecPap = false;   // colonnes du PAP présentes (script SQL 38)
 let avecTuteur = false;   // tuteur et suivi (script SQL 40)
 
 export async function pageEleves(zone, _arg, ctx) {
-  if (_arg === 'acces') return pageAcces(zone, ctx);
+  if (_arg === 'acces' || _arg === 'stats') return pageAcces(zone, ctx);
   const admin = ctx.estAdmin();
 
   async function dessiner() {
