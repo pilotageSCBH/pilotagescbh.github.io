@@ -863,13 +863,19 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const ajouterD = (d) => { const p = nfc(d).split('/'); for (let k = 1; k <= p.length; k++) presentsD.add(p.slice(0, k).join('/')); };
     fichiers.forEach((x) => { const d = dirDe(x.c); if (d) ajouterD(d); });
     (lus.dossiers || []).forEach(ajouterD);
-    const dossiers = [...new Set([...nouveaux.map((x) => x.c), ...deplaces.map((d) => d.x.c)].map(dirDe).filter(Boolean))];
+    // fiches déjà connues dont le dossier sur le site ne correspond pas à leur dossier sur Nuage : elles y seront rangées
+    // (le site reproduit l'arborescence de Nuage ; un fichier à la racine du dossier partagé reste « Non classé »)
+    const dossierAttendu = (l) => { const d = dirDe(l.chemin); return d === 'Livres' ? '' : d; };
+    const aRanger = mesFichesTout().filter((l) => l.chemin && presents.has(nfc(l.chemin)) && !deplaces.some((x) => x.l === l)
+      && (dossierAttendu(l) ? (parDossier.get(dossierAttendu(l))?.id ?? 'à créer') : null) !== (l.theme_id ?? null));
+    const dossiers = [...new Set([...nouveaux.map((x) => x.c), ...deplaces.map((d) => d.x.c), ...aRanger.map((l) => l.chemin)].map(dirDe).filter(Boolean))];
     const aCreer = [...new Set(dossiers.flatMap((d) => d.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))].filter((d) => d !== 'Livres' && !parDossier.has(d)).sort();
     // dossiers qui ne correspondent plus à rien sur Nuage : leur chemin (ou, s'ils n'ont pas de chemin enregistré,
     // celui formé par leurs noms) n'existe pas dans le dossier lu, et ils ne contiendront plus aucun fichier présent sur Nuage
     const cheminEff = (t) => nfc(t.dossier) || chemin(t).map((x) => x.nom).join('/');
     const themeFinal = new Map(mesFichesTout().map((l) => [l, l.theme_id ?? null]));
     for (const { l, x } of deplaces) themeFinal.set(l, parDossier.get(dirDe(x.c))?.id ?? -1);   // -1 : dossier qui va être créé
+    for (const l of aRanger) themeFinal.set(l, dossierAttendu(l) ? (parDossier.get(dossierAttendu(l))?.id ?? -1) : null);
     const contientPresent = (t) => { const ids = new Set([t.id, ...descendants(t.id).map((x) => x.id)]);
       return mesFichesTout().some((l) => ids.has(themeFinal.get(l)) && presents.has(nfc(l.chemin)) && !disparus.includes(l)); };
     const sansNumero = (c) => c.split('/').map((x) => x.replace(/^\d+\s*-\s*/, '').toLowerCase()).join('/');
@@ -882,7 +888,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
     const suspect = !fichiers.length;   // dossier lu vide : sans doute une lecture ratée de Nuage, rien n'est supprimé
     const lire = h('input', { type: 'checkbox', checked: true });
     const retirer = h('input', { type: 'checkbox', checked: !suspect }), retirerD = h('input', { type: 'checkbox', checked: !suspect });
-    if (auto && (suspect || !(nouveaux.length || deplaces.length || aCreer.length || illus.length || disparus.length || dossiersPartis.length))) return false;
+    if (auto && (suspect || !(nouveaux.length || deplaces.length || aRanger.length || aCreer.length || illus.length || disparus.length || dossiersPartis.length))) return false;
     if (auto) lire.checked = false;   // ajout rapide : titre et dossier (le sommaire se complète avec « Mettre à jour » ou depuis la fiche)
     const liste = (l, f) => (l.length ? ' : ' + l.slice(0, 8).map(f).join(', ') + (l.length > 8 ? '…' : '') : '');
     const ok = auto || await fenetre('Mettre à jour depuis mon dossier', h('div', {},
@@ -892,6 +898,7 @@ async function afficher(E, C, zone, arg, ctx, moi) {
       h('ul', { class: 'conseils-cours' },
         h('li', {}, h('b', {}, pluriel(nouveaux.length, 'nouveau fichier', 'nouveaux fichiers')), liste(nouveaux, (x) => x.c.split('/').pop())),
         deplaces.length ? h('li', {}, h('b', {}, pluriel(deplaces.length, 'fichier déplacé', 'fichiers déplacés')), ' (la fiche suit le fichier, rien n’est perdu)', liste(deplaces, (d) => d.l.titre)) : null,
+        aRanger.length ? h('li', {}, h('b', {}, pluriel(aRanger.length, 'fiche à ranger', 'fiches à ranger')), ' dans leur dossier, comme sur Nuage', liste(aRanger, (l) => l.titre)) : null,
         h('li', {}, h('b', {}, pluriel(aCreer.length, 'nouveau ' + E.theme, 'nouveaux ' + E.themes)), liste(aCreer, (d) => d.split('/').pop())),
         illus.length ? h('li', {}, h('b', {}, pluriel(illus.length, 'image de tuile', 'images de tuiles')), ' (illustration)', liste(illus, (t) => t.nom)) : null,
         h('li', {}, h('b', {}, pluriel(disparus.length, 'fiche dont le fichier n’est plus sur Nuage', 'fiches dont le fichier n’est plus sur Nuage')), liste(disparus, (l) => l.titre)),
@@ -919,6 +926,12 @@ async function afficher(E, C, zone, arg, ctx, moi) {
         await db.modifier('biblio_livres', l.id, v); Object.assign(l, v);
       }
       if (deplaces.length) bilan.push(pluriel(deplaces.length, 'fiche déplacée', 'fiches déplacées'));
+      for (const l of aRanger) {
+        const v = { theme_id: dossierAttendu(l) ? (parDossier.get(dossierAttendu(l))?.id ?? null) : null };
+        if ((v.theme_id ?? null) === (l.theme_id ?? null)) continue;
+        await db.modifier('biblio_livres', l.id, v); Object.assign(l, v);
+      }
+      if (aRanger.length) bilan.push(pluriel(aRanger.length, 'fiche rangée dans son dossier', 'fiches rangées dans leur dossier'));
       if (retirer.checked && disparus.length && fichiers.length) { for (const l of disparus) { await db.supprimer('biblio_livres', l.id); L.delete(l.id); } bilan.push(pluriel(disparus.length, 'fiche supprimée', 'fiches supprimées')); }
       if (retirerD.checked && dossiersPartis.length) {
         // les plus profonds d'abord ; un dossier dont le parent est déjà supprimé l'est avec lui
